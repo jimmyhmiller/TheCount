@@ -1,0 +1,66 @@
+(module thecount.simd)
+
+;; 16-byte-at-a-time byte classification, simdjson-style.
+;;
+;; The scalar scan in count-bytes costs one byte-class table load per byte, and
+;; that load is the whole cost of counting: on a 4.2 MB C++ corpus only 1.24% of
+;; bytes are delimiters, so 98.8% of the work is "is this byte interesting, and
+;; is it whitespace" — one byte at a time, as a serial dependency chain.
+;;
+;; The answer to both questions is a BITMASK. Load 16 bytes, compare against a
+;; delimiter, extract one bit per lane, and the whole chunk is answered in a
+;; couple of instructions; the scan then jumps straight to the next set bit
+;; instead of walking to it. This is the core trick behind simdjson's structural
+;; character scan.
+;;
+;; Everything here is a thin (primitive/llvm-ir …) wrapper — no compiler
+;; support, same approach as coil.simd. Two notes on the IR:
+;;
+;;   * the load is `align 1`: these pointers are arbitrary offsets into a file
+;;     buffer, never 16-byte aligned;
+;;   * mask extraction is `bitcast <16 x i1> to i16`. x86 has movemask for this;
+;;     arm64 has no such instruction, but LLVM knows the NEON sequence, so
+;;     writing it at the IR level gets the right code on both.
+;;
+;; The byte operands are compile-time literals at every call site
+;; (thecount.specialize generates them), so -O3 inlines these bodies and folds
+;; the splat to a constant vector.
+
+(import "coil.primitive" :as primitive)
+
+;; Bit i is set iff the byte at p[i] equals b, for i in 0..15.
+(defn v16-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [p b]
+                     "%bt = trunc $t1 $1 to i8
+%s0 = insertelement <16 x i8> undef, i8 %bt, i32 0
+%sv = shufflevector <16 x i8> %s0, <16 x i8> undef, <16 x i32> zeroinitializer
+%v = load <16 x i8>, ptr $0, align 1
+%c = icmp eq <16 x i8> %v, %sv
+%m = bitcast <16 x i1> %c to i16
+%r = zext i16 %m to i64
+ret i64 %r"))
+
+;; Bit i is set iff p[i] is a space, tab or carriage return — the three bytes
+;; count-bytes classifies as CLS-WS. One load, three compares, two ors.
+(defn v16-ws-mask [(p (ptr u8))] (-> i64)
+  (primitive/llvm-ir i64
+                     [p]
+                     "%v = load <16 x i8>, ptr $0, align 1
+%c1 = icmp eq <16 x i8> %v, <i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32>
+%c2 = icmp eq <16 x i8> %v, <i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9>
+%c3 = icmp eq <16 x i8> %v, <i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13>
+%o1 = or <16 x i1> %c1, %c2
+%o2 = or <16 x i1> %o1, %c3
+%m = bitcast <16 x i1> %o2 to i16
+%r = zext i16 %m to i64
+ret i64 %r"))
+
+;; Index of the lowest set bit. Only called on a non-zero mask, so the
+;; is_zero_poison flag is safe and saves a branch.
+(defn ctz [(x i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [x]
+                     "declare i64 @llvm.cttz.i64(i64, i1)
+%r = call i64 @llvm.cttz.i64(i64 $0, i1 true)
+ret i64 %r"))

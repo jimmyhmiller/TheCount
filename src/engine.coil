@@ -307,7 +307,7 @@
                                  idx
                                  (if (= last-slash -1) "" (subslice path 0 last-slash))
                                  (subslice path (+ last-slash 1) dn)
-                                 (count-bytes (reg-spec r idx) data))))))))))
+                                 (reg-count-bytes r idx data))))))))))
 
 ;; True iff path contains any of the exclude substrings.
 (defn excluded? [(excludes (ptr (ArrayList (slice u8)))) (path (slice u8))] (-> bool)
@@ -828,7 +828,7 @@
                                (load (field (mut msg) spec-idx))
                                (load (field (mut msg) dir))
                                (load (field (mut msg) name))
-                               (count-bytes (reg-spec r (load (field (mut msg) spec-idx))) data))
+                               (reg-count-bytes r (load (field (mut msg) spec-idx)) data))
                     0)
                   (al-push! (mut freed) bid))
                 (store! (mut j) (+ j 1)))

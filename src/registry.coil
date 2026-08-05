@@ -5,11 +5,20 @@
 (import "coil.arraylist" :use *)
 (import "coil.hashmap" :use *)
 (import "coil.str" :use *)
+(import "coil.primitive" :as primitive)
 (import "thecount.lang" :use *)
+(import "thecount.counter" :use *)
+(import "thecount.specialize" :use *)
 
+;; `counters` runs parallel to `specs`: the scanner to use for spec i. Every
+;; entry starts out as the interpreter, count-bytes; add-specialized! swaps in a
+;; compile-time-generated scanner for the languages thecount.specialize knows.
+;; Keeping it here rather than in LangSpec means thecount.lang stays free of any
+;; dependency on the counter.
 (defstruct Registry
   [(arena (ptr Allocator))
    (specs (ptr (ArrayList LangSpec)))
+   (counters (ptr (ArrayList (fnptr c [(ptr LangSpec) (slice u8)] Counts))))
    (by-ext (ptr (HashMap (slice u8) i64)))
    (by-name (ptr (HashMap (slice u8) i64)))
    (by-file (ptr (HashMap (slice u8) i64)))])
@@ -29,15 +38,20 @@
 (defn reg-new [(a (ptr Allocator))] (-> (ptr Registry))
   (let [r (unwrap-ptr [Registry] (create [Registry] a))
         specs (unwrap-ptr [(ArrayList LangSpec)] (create [(ArrayList LangSpec)] a))
+        counters
+          (unwrap-ptr [(ArrayList (fnptr c [(ptr LangSpec) (slice u8)] Counts))]
+                      (create [(ArrayList (fnptr c [(ptr LangSpec) (slice u8)] Counts))] a))
         by-ext (unwrap-ptr [(HashMap (slice u8) i64)] (create [(HashMap (slice u8) i64)] a))
         by-name (unwrap-ptr [(HashMap (slice u8) i64)] (create [(HashMap (slice u8) i64)] a))
         by-file (unwrap-ptr [(HashMap (slice u8) i64)] (create [(HashMap (slice u8) i64)] a))]
     (store! specs (al-new [LangSpec] a))
+    (store! counters (al-new [(fnptr c [(ptr LangSpec) (slice u8)] Counts)] a))
     (store! by-ext (hm-new [(slice u8) i64] a (str-keyops)))
     (store! by-name (hm-new [(slice u8) i64] a (str-keyops)))
     (store! by-file (hm-new [(slice u8) i64] a (str-keyops)))
     (store! (field r arena) a)
     (store! (field r specs) specs)
+    (store! (field r counters) counters)
     (store! (field r by-ext) by-ext)
     (store! (field r by-name) by-name)
     (store! (field r by-file) by-file)
@@ -51,6 +65,7 @@
         specs (load (field r specs))
         idx (al-len specs)]
     (al-push! specs spec)
+    (al-push! (load (field r counters)) (primitive/fnptr-of count-bytes))
     (hm-put! (load (field r by-name)) (lower a (load (field spec name))) idx)
     (let [toks (split-tokens a exts)
           n (slice-len toks)
@@ -84,6 +99,19 @@
 
 (defn reg-spec [(r (ptr Registry)) (idx i64)] (-> (ptr LangSpec))
   (index (slice-data (al-slice (load (load (field r specs))))) idx))
+
+;; Install a compile-time-generated scanner for spec idx.
+(defn reg-set-counter! [(r (ptr Registry))
+                        (idx i64)
+                        (f (fnptr c [(ptr LangSpec) (slice u8)] Counts))] (-> i64)
+  (store! (index (slice-data (al-slice (load (load (field r counters))))) idx) f)
+  0)
+
+;; Count `bytes` as language idx. The one entry point the engine uses — it picks
+;; the generated scanner when there is one and count-bytes otherwise, so adding
+;; a language to thecount.specialize's table is invisible to every caller.
+(defn reg-count-bytes [(r (ptr Registry)) (idx i64) (bytes (slice u8))] (-> Counts)
+  (primitive/call-ptr (al-get (load (field r counters)) idx) (reg-spec r idx) bytes))
 
 (defn reg-count [(r (ptr Registry))] (-> i64)
   (al-len (load (field r specs))))
@@ -137,27 +165,34 @@
                     (mqs (slice u8))] (-> i64)
   (reg-add! r (lang-from-strings (load (field r arena)) name lcs blocks nested quotes mqs) exts))
 
+;; Register every row of thecount.specialize's table and attach the scanner that
+;; was generated for it. The tokens come straight from that table, so a language
+;; cannot be registered with one set of delimiters and counted with another.
+(defn add-specialized! [(r (ptr Registry))] (-> i64)
+  (let [n (spec-row-count)
+        (mut k) 0]
+    (while (< k n)
+      (let [idx
+              (add-builtin! r
+                            (spec-row-name k)
+                            (spec-row-exts k)
+                            (spec-row-lcs k)
+                            (spec-row-blocks k)
+                            (spec-row-nested k)
+                            (spec-row-quotes k)
+                            (spec-row-mqs k))]
+        (reg-set-counter! r idx (spec-row-counter k)))
+      (store! (mut k) (+ k 1)))
+    0))
+
 (defn add-builtins! [(r (ptr Registry))] (-> i64)
-  (add-builtin! r "C" "c" "//" "/* */" false "\"'" "")
-  (add-builtin! r "C Header" "h" "//" "/* */" false "\"'" "")
-  (add-builtin! r "C++" "cc cpp cxx c++" "//" "/* */" false "\"'" "")
-  (add-builtin! r "C++ Header" "hh hpp hxx inl ipp" "//" "/* */" false "\"'" "")
-  (add-builtin! r "C#" "cs" "//" "/* */" false "\"'" "")
+  ;; First: the languages thecount.specialize generated a scanner for. Their
+  ;; token strings live in that table, not here, so the two can never drift.
+  (add-specialized! r)
   (add-builtin! r "Objective-C" "m" "//" "/* */" false "\"'" "")
   (add-builtin! r "Objective-C++" "mm" "//" "/* */" false "\"'" "")
-  (add-builtin! r "Java" "java" "//" "/* */" false "\"'" "")
-  (add-builtin! r "Kotlin" "kt kts" "//" "/* */" true "\"'" "\"\"\"")
   (add-builtin! r "Scala" "scala sc" "//" "/* */" true "\"'" "\"\"\"")
   (add-builtin! r "Groovy" "groovy gradle" "//" "/* */" false "\"'" "")
-  (add-builtin! r "JavaScript" "js mjs cjs" "//" "/* */" false "\"'`" "")
-  (add-builtin! r "JSX" "jsx" "//" "/* */" false "\"'`" "")
-  (add-builtin! r "TypeScript" "ts mts cts" "//" "/* */" false "\"'`" "")
-  (add-builtin! r "TSX" "tsx" "//" "/* */" false "\"'`" "")
-  (add-builtin! r "Python" "py pyw pyi" "#" "" false "\"'" "\"\"\" '''")
-  (add-builtin! r "Ruby" "rb rake gemspec ru" "#" "=begin =end" false "\"'" "")
-  (add-builtin! r "Rust" "rs" "// //! ///" "/* */" true "\"" "")
-  (add-builtin! r "Go" "go" "//" "/* */" false "\"'`" "")
-  (add-builtin! r "Swift" "swift" "//" "/* */" true "\"" "\"\"\"")
   (add-builtin! r "Zig" "zig" "//" "" false "\"'" "")
   (add-builtin! r "Nim" "nim" "#" "#[ ]#" true "\"'" "\"\"\"")
   (add-builtin! r "D" "d" "//" "/* */" false "\"'`" "")
@@ -170,13 +205,10 @@
   (add-builtin! r "Standard ML" "sml sig" "" "(* *)" true "\"" "")
   (add-builtin! r "Erlang" "erl hrl" "%" "" false "\"" "")
   (add-builtin! r "Elixir" "ex exs" "#" "" false "\"'" "\"\"\" '''")
-  (add-builtin! r "Clojure" "clj cljs cljc edn bb" ";" "" false "\"" "")
   (add-builtin! r "Common Lisp" "lisp lsp asd" ";" "#| |#" true "\"" "")
   (add-builtin! r "Scheme" "scm ss sld" ";" "#| |#" true "\"" "")
   (add-builtin! r "Racket" "rkt" ";" "#| |#" true "\"" "")
-  (add-builtin! r "Coil" "coil" ";" "" false "\"" "")
   (add-builtin! r "Beagle" "bg" "//" "" false "\"" "")
-  (add-builtin! r "Lua" "lua" "--" "--[[ ]]" false "\"'" "")
   (add-builtin! r "Perl" "pl pm t" "#" "=pod =cut" false "\"'" "")
   (add-builtin! r "PHP" "php" "// #" "/* */" false "\"'" "")
   (add-builtin! r "R" "r" "#" "" false "\"'" "")
@@ -186,7 +218,6 @@
   (add-builtin! r "Fish" "fish" "#" "" false "\"'" "")
   (add-builtin! r "PowerShell" "ps1 psm1 psd1" "#" "<# #>" false "\"'" "")
   (add-builtin! r "Batch" "bat cmd" "rem REM ::" "" false "" "")
-  (add-builtin! r "SQL" "sql" "--" "/* */" false "'" "")
   (add-builtin! r "Assembly" "s asm" "; #" "/* */" false "\"" "")
   (add-builtin! r "Vim Script" "vim" "\"" "" false "'" "")
   (add-builtin! r "Tcl" "tcl" "#" "" false "\"" "")
@@ -196,26 +227,20 @@
   (add-builtin! r "Solidity" "sol" "//" "/* */" false "\"'" "")
   (add-builtin! r "Verilog" "v sv svh" "//" "/* */" false "\"" "")
   (add-builtin! r "VHDL" "vhd vhdl" "--" "" false "\"" "")
-  (add-builtin! r "HTML" "html htm" "" "<!-- -->" false "" "")
   (add-builtin! r "XML" "xml xsl xsd svg plist" "" "<!-- -->" false "" "")
   (add-builtin! r "Vue" "vue" "//" "<!-- --> /* */" false "\"'`" "")
   (add-builtin! r "Svelte" "svelte" "//" "<!-- --> /* */" false "\"'`" "")
-  (add-builtin! r "CSS" "css" "" "/* */" false "\"'" "")
   (add-builtin! r "SCSS" "scss" "//" "/* */" false "\"'" "")
   (add-builtin! r "Sass" "sass" "//" "/* */" false "\"'" "")
   (add-builtin! r "Less" "less" "//" "/* */" false "\"'" "")
-  (add-builtin! r "JSON" "json" "" "" false "\"" "")
   (add-builtin! r "JSON5" "json5 jsonc" "//" "/* */" false "\"'" "")
   (let [yml (add-builtin! r "YAML" "yaml yml" "#" "" false "\"'" "")]
     (reg-add-files! r yml ".clang-format .clang-tidy"))
-  (add-builtin! r "TOML" "toml" "#" "" false "\"'" "\"\"\" '''")
   (add-builtin! r "INI" "ini cfg conf" "; #" "" false "" "")
-  (add-builtin! r "Markdown" "md markdown" "" "" false "" "")
   (add-builtin! r "reStructuredText" "rst" "" "" false "" "")
   (add-builtin! r "Org" "org" "" "" false "" "")
   (add-builtin! r "LaTeX" "tex sty cls" "%" "" false "" "")
   (add-builtin! r "BibTeX" "bib" "%" "" false "" "")
-  (add-builtin! r "Plain Text" "txt text" "" "" false "" "")
   (add-builtin! r "Protocol Buffers" "proto" "//" "/* */" false "\"'" "")
   (add-builtin! r "GraphQL" "graphql gql" "#" "" false "\"" "\"\"\"")
   (add-builtin! r "Thrift" "thrift" "// #" "/* */" false "\"'" "")

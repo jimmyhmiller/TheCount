@@ -1,0 +1,583 @@
+(module thecount.specialize)
+
+;; Compile-time specialization of the line counter.
+;;
+;; thecount.counter/count-bytes is an INTERPRETER: it walks a LangSpec's token
+;; slices at runtime, so every candidate delimiter costs a loop over
+;; `line-comments`, a loop over `blocks`, a `match-at` that compares byte by
+;; byte, and a `quote-byte?` scan — for every language, on every hot byte.
+;;
+;; For the languages whose token sets are known when thecount itself is
+;; compiled, none of that has to happen at runtime. The table below is walked at
+;; COMPILE time by `gen-specialized` and turned into one scanner per language,
+;; in which:
+;;
+;;   * dead states are deleted outright — a language with no block comments has
+;;     no ST-BLOCK arm at all, Python has no ST-STRING-vs-ST-BLOCK dispatch,
+;;     and Markdown (no comments, no strings) collapses to a blank/code scan
+;;     that stops at the line's first non-space byte;
+;;   * every delimiter comparison is a literal byte compare — `match-at` over
+;;     "/*" becomes `data[pos] == '/' && data[pos+1] == '*'`, with the loop, the
+;;     slice indirection, and the length lookup all gone;
+;;   * state that a language cannot vary is not stored — a single-quote-char
+;;     language keeps no `quote-ch`, a non-nesting one keeps no `block-depth`,
+;;     a one-multiline-string language keeps no `mq-idx`.
+;;
+;; The generated scanners are byte-for-byte equivalent to the interpreter, and
+;; tests/specialize_test.coil holds them to that on a corpus: same order of
+;; checks (block start, then multiline quote, then line comment, then quote),
+;; same buffer-length bounds, same escape handling. Anything not in the table —
+;; every user-registered language from ~/.config/thecount/languages — keeps
+;; running through count-bytes, which is why the table is an optimization and
+;; never a source of truth about what thecount can count.
+;;
+;; Read the generated code with:  coil expand src/specialize.coil
+
+(import "coil.primitive" :as primitive)
+(import "coil.slice" :use *)
+(import "thecount.lang" :use *)
+(import "thecount.counter" :use *)
+(import "thecount.simd" :use *)
+
+;; ---------------------------------------------------------------------------
+;; The table. Same seven token strings `add-builtin!` takes, so a row here reads
+;; exactly like a row in thecount.registry — plus a leading identifier used to
+;; name the generated function. thecount.registry registers these rows itself
+;; (see add-specialized!), so they must NOT also appear in add-builtins!.
+;;
+;; Restrictions the generator enforces below: at most one block-comment pair and
+;; at most two multiline-string delimiters per row. A language that needs more
+;; simply stays out of the table and keeps using the interpreter.
+;;
+;;        ident   name              extensions             line comments  blocks        nested quotes  multiline
+(defn spec-table [] (-> Code)
+  `((c "C" "c" "//" "/* */" false "\"'" "") (h "C Header" "h" "//" "/* */" false "\"'" "")
+      (cpp "C++" "cc cpp cxx c++" "//" "/* */" false "\"'" "")
+      (hpp "C++ Header" "hh hpp hxx inl ipp" "//" "/* */" false "\"'" "")
+      (cs "C#" "cs" "//" "/* */" false "\"'" "")
+      (java "Java" "java" "//" "/* */" false "\"'" "")
+      (js "JavaScript" "js mjs cjs" "//" "/* */" false "\"'`" "")
+      (jsx "JSX" "jsx" "//" "/* */" false "\"'`" "")
+      (ts "TypeScript" "ts mts cts" "//" "/* */" false "\"'`" "")
+      (tsx "TSX" "tsx" "//" "/* */" false "\"'`" "")
+      (go "Go" "go" "//" "/* */" false "\"'`" "")
+      (rs "Rust" "rs" "// //! ///" "/* */" true "\"" "")
+      (swift "Swift" "swift" "//" "/* */" true "\"" "\"\"\"")
+      (kt "Kotlin" "kt kts" "//" "/* */" true "\"'" "\"\"\"")
+      (py "Python" "py pyw pyi" "#" "" false "\"'" "\"\"\" '''")
+      (rb "Ruby" "rb rake gemspec ru" "#" "=begin =end" false "\"'" "")
+      (clj "Clojure" "clj cljs cljc edn bb" ";" "" false "\"" "")
+      (coil "Coil" "coil" ";" "" false "\"" "")
+      (sql "SQL" "sql" "--" "/* */" false "'" "")
+      (lua "Lua" "lua" "--" "--[[ ]]" false "\"'" "")
+      (css "CSS" "css" "" "/* */" false "\"'" "")
+      (html "HTML" "html htm" "" "<!-- -->" false "" "")
+      (json "JSON" "json" "" "" false "\"" "")
+      (toml "TOML" "toml" "#" "" false "\"'" "\"\"\" '''")
+      (md "Markdown" "md markdown" "" "" false "" "")
+      (txt "Plain Text" "txt text" "" "" false "" "")))
+
+;; ---------------------------------------------------------------------------
+;; Comptime helpers over the token strings. These run in the compiler, on the
+;; bytes of a string literal handed over by `code-str`, and only ever produce
+;; integers — which is all the generated code needs, since every token becomes a
+;; sequence of literal byte compares. (Splicing a comptime-built slice back as a
+;; string literal is not an option: it segfaults the compiler as of 2026-08.)
+
+;; How many space-separated tokens are in s.
+(defn ct-tok-count [(s (slice u8))] (-> i64)
+  (let [n (slice-len s)
+        (mut i) 0
+        (mut c) 0]
+    (while (< i n)
+      (while (and (< i n) (= (cast i64 (slice-get s i)) \space))
+        (store! (mut i) (+ i 1)))
+      (when (< i n)
+        (store! (mut c) (+ c 1))
+        (while (and (< i n) (!= (cast i64 (slice-get s i)) \space))
+          (store! (mut i) (+ i 1)))
+        0))
+    (load c)))
+
+;; Byte offset where token k starts, or -1.
+(defn ct-tok-start [(s (slice u8)) (k i64)] (-> i64)
+  (let [n (slice-len s)
+        (mut i) 0
+        (mut seen) 0
+        (mut res) -1]
+    (while (and (< i n) (= res -1))
+      (while (and (< i n) (= (cast i64 (slice-get s i)) \space))
+        (store! (mut i) (+ i 1)))
+      (when (< i n)
+        (when (= seen k) (store! (mut res) (load i)) 0)
+        (store! (mut seen) (+ seen 1))
+        (while (and (< i n) (!= (cast i64 (slice-get s i)) \space))
+          (store! (mut i) (+ i 1)))
+        0))
+    (load res)))
+
+;; Length of token k.
+(defn ct-tok-len [(s (slice u8)) (k i64)] (-> i64)
+  (let [st (ct-tok-start s k)
+        n (slice-len s)]
+    (if (< st 0)
+        0
+        (let [(mut j) st]
+          (while (and (< j n) (!= (cast i64 (slice-get s j)) \space))
+            (store! (mut j) (+ j 1)))
+          (- (load j) st)))))
+
+;; ---------------------------------------------------------------------------
+;; Code emitters. `data`, `len`, `pos` etc. are the names bound in the generated
+;; function; these fragments are only ever spliced into it.
+
+;; data[posc + j] == b
+(defn ct-cmp [(b i64) (posc Code) (j i64)] (-> Code)
+  (if (= j 0)
+      `(= (cast i64 (load (index data ~posc))) ~b)
+      `(= (cast i64 (load (index data (+ ~posc ~j)))) ~b)))
+
+(defn ct-cmps [(s (slice u8)) (st i64) (j i64) (n i64) (posc Code)] (-> Code)
+  (if (>= j n)
+      `()
+      `(~(ct-cmp (cast i64 (slice-get s (+ st j))) posc j) ~@(ct-cmps s st (+ j 1) n posc))))
+
+;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`len`),
+;; exactly as the interpreter's match-at does — not against the line end.
+(defn ct-match [(s (slice u8)) (k i64) (posc Code)] (-> Code)
+  (let [st (ct-tok-start s k)
+        n (ct-tok-len s k)]
+    `(all (<= (+ ~posc ~n) len) ~@(ct-cmps s st 0 n posc))))
+
+(defn ct-matches [(s (slice u8)) (k i64) (n i64) (posc Code)] (-> Code)
+  (if (>= k n)
+      `()
+      `(~(ct-match s k posc) ~@(ct-matches s (+ k 1) n posc))))
+
+;; bc is one of the language's single-char quote delimiters.
+(defn ct-quote-tests [(q (slice u8)) (k i64) (n i64) (bc Code)] (-> Code)
+  (if (>= k n)
+      `()
+      `((= ~bc ~(cast i64 (slice-get q k))) ~@(ct-quote-tests q (+ k 1) n bc))))
+
+;; ---------------------------------------------------------------------------
+;; The scanner body, assembled per language.
+
+;; Hot-byte dispatch, built inside out so that an absent category collapses its
+;; whole level away. Order matches count-bytes exactly: block start, multiline
+;; quote, line comment, quote, plain byte.
+(defn gen-dispatch [(lcs (slice u8)) (blocks (slice u8)) (nested bool) (quotes (slice u8)) (mqs (slice u8))] (-> Code)
+  (let [n-lc (ct-tok-count lcs)
+        n-bl (/ (ct-tok-count blocks) 2)
+        n-q (slice-len quotes)
+        n-mq (ct-tok-count mqs)
+        plain
+          `(do
+             (store! (mut saw-code) true)
+             (store! (mut pos) (+ pos 1))
+             0)
+        at-quote
+          (if (> n-q 0)
+              `(if (any ~@(ct-quote-tests quotes 0 n-q `(cast i64 (load (index data pos)))))
+                   (do
+                     (store! (mut saw-code) true)
+                     (store! (mut state) ST-STRING)
+                     ~@(if (> n-q 1)
+                           `((store! (mut qch) (cast i64 (load (index data pos)))))
+                           `())
+                     (store! (mut pos) (+ pos 1))
+                     0)
+                   ~plain)
+              plain)
+        at-lc
+          (if (> n-lc 0)
+              `(if (any ~@(ct-matches lcs 0 n-lc `pos))
+                   (do
+                     (store! (mut saw-comment) true)
+                     (store! (mut pos) le)
+                     0)
+                   ~at-quote)
+              at-quote)
+        at-mq
+          (if (> n-mq 0)
+              `(let [mq
+                       ~(if (= n-mq 1)
+                            `(if ~(ct-match mqs 0 `pos) 0 -1)
+                            `(if ~(ct-match mqs 0 `pos) 0 (if ~(ct-match mqs 1 `pos) 1 -1)))]
+                 (if (>= mq 0)
+                     (do
+                       (if (= saw-code false)
+                           (do
+                             (store! (mut mqdoc) true)
+                             (store! (mut saw-comment) true)
+                             0)
+                           (do
+                             (store! (mut mqdoc) false)
+                             (store! (mut saw-code) true)
+                             0))
+                       (store! (mut state) ST-MSTRING)
+                       ~@(if (> n-mq 1) `((store! (mut mqi) mq)) `())
+                       (store! (mut pos)
+                               (+ pos
+                                  ~(if (= n-mq 1)
+                                       `~(ct-tok-len mqs 0)
+                                       `(if (= mq 0) ~(ct-tok-len mqs 0) ~(ct-tok-len mqs 1)))))
+                       0)
+                     ~at-lc))
+              at-lc)]
+    (if (> n-bl 0)
+        `(if ~(ct-match blocks 0 `pos)
+             (do
+               (store! (mut saw-comment) true)
+               (store! (mut state) ST-BLOCK)
+               ~@(if nested `((store! (mut bdepth) 1)) `())
+               (store! (mut pos) (+ pos ~(ct-tok-len blocks 0)))
+               0)
+             ~at-mq)
+        at-mq)))
+
+;; The ST-BLOCK arm: jump between candidate delimiters with memchr. Nesting
+;; brings in the depth counter and the second memchr for the opener; without it
+;; the first closer always returns to ST-NORMAL, so neither is emitted.
+(defn gen-block-arm [(blocks (slice u8)) (nested bool)] (-> Code)
+  (let [len-end (ct-tok-len blocks 1)
+        len-start (ct-tok-len blocks 0)
+        e0 (cast i64 (slice-get blocks (ct-tok-start blocks 1)))
+        s0 (cast i64 (slice-get blocks (ct-tok-start blocks 0)))]
+    `(do
+       (store! (mut saw-comment) true)
+       (let [(mut scanning) true]
+         (while (= scanning true)
+           (let [he (find-byte bytes pos le ~e0)
+                 hs ~(if nested `(find-byte bytes pos le ~s0) `le)
+                 h (if (< hs he) hs he)]
+             (cond (>= h le) (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                   ~(ct-match blocks 1 `h)
+                     (do
+                       ~@(if nested
+                             `((store! (mut bdepth) (- bdepth 1)) (when (= bdepth 0) (store! (mut state) ST-NORMAL) 0))
+                             `((store! (mut state) ST-NORMAL)))
+                       (store! (mut pos) (+ h ~len-end))
+                       (store! (mut scanning) false)
+                       0)
+                   ~@(if nested
+                         `(~(ct-match blocks 0 `h) (do
+                                                     (store! (mut bdepth) (+ bdepth 1))
+                                                     (store! (mut pos) (+ h ~len-start))
+                                                     0))
+                         `())
+                     true
+                   (do (store! (mut pos) (+ h 1)) 0))))
+         0))))
+
+;; The ST-STRING arm. One quote character means the closer is a literal and no
+;; `qch` is carried.
+(defn gen-string-arm [(quotes (slice u8))] (-> Code)
+  (let [n-q (slice-len quotes)
+        closer (if (= n-q 1) `~(cast i64 (slice-get quotes 0)) `(load qch))]
+    `(do
+       (store! (mut saw-code) true)
+       (let [(mut scanning) true]
+         (while (= scanning true)
+           (let [q (find-byte bytes pos le ~closer)]
+             (if (>= q le)
+                 (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                 (if (= (% (backslashes-before bytes pos q) 2) 1)
+                     (do (store! (mut pos) (+ q 1)) 0)
+                     (do
+                       (store! (mut state) ST-NORMAL)
+                       (store! (mut pos) (+ q 1))
+                       (store! (mut scanning) false)
+                       0)))))
+         0))))
+
+;; The ST-MSTRING arm.
+(defn gen-mstring-arm [(mqs (slice u8))] (-> Code)
+  (let [n-mq (ct-tok-count mqs)
+        t0
+          (if (= n-mq 1)
+              `~(cast i64 (slice-get mqs (ct-tok-start mqs 0)))
+              `(if (= mqi 0)
+                   ~(cast i64 (slice-get mqs (ct-tok-start mqs 0)))
+                   ~(cast i64 (slice-get mqs (ct-tok-start mqs 1)))))
+        hit
+          (if (= n-mq 1)
+              (ct-match mqs 0 `h)
+              `(if (= mqi 0) ~(ct-match mqs 0 `h) ~(ct-match mqs 1 `h)))
+        adv
+          (if (= n-mq 1)
+              `~(ct-tok-len mqs 0)
+              `(if (= mqi 0) ~(ct-tok-len mqs 0) ~(ct-tok-len mqs 1)))]
+    `(do
+       (if (= mqdoc true)
+           (store! (mut saw-comment) true)
+           (store! (mut saw-code) true))
+       (let [(mut scanning) true]
+         (while (= scanning true)
+           (let [h (find-byte bytes pos le ~t0)]
+             (if (>= h le)
+                 (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                 (if (all ~hit (!= (% (backslashes-before bytes pos h) 2) 1))
+                     (do
+                       (store! (mut state) ST-NORMAL)
+                       (store! (mut pos) (+ h ~adv))
+                       (store! (mut scanning) false)
+                       0)
+                     (do (store! (mut pos) (+ h 1)) 0)))))
+         0))))
+
+;; True iff byte b can begin a comment or string token in this language —
+;; the same set rebuild-classes! marks CLS-HOT, computed at compile time.
+(defn ct-hot-byte? [(lcs (slice u8))
+                    (blocks (slice u8))
+                    (quotes (slice u8))
+                    (mqs (slice u8))
+                    (b i64)] (-> bool)
+  (let [(mut hit) false]
+    (let [n (ct-tok-count lcs)
+          (mut k) 0]
+      (while (< k n)
+        (when (= (cast i64 (slice-get lcs (ct-tok-start lcs k))) b)
+          (store! (mut hit) true)
+          0)
+        (store! (mut k) (+ k 1))))
+    (when (> (ct-tok-count blocks) 0)
+      (when (= (cast i64 (slice-get blocks (ct-tok-start blocks 0))) b)
+        (store! (mut hit) true)
+        0)
+      0)
+    (let [n (ct-tok-count mqs)
+          (mut k) 0]
+      (while (< k n)
+        (when (= (cast i64 (slice-get mqs (ct-tok-start mqs k))) b)
+          (store! (mut hit) true)
+          0)
+        (store! (mut k) (+ k 1))))
+    (let [n (slice-len quotes)
+          (mut k) 0]
+      (while (< k n)
+        (when (= (cast i64 (slice-get quotes k)) b)
+          (store! (mut hit) true)
+          0)
+        (store! (mut k) (+ k 1))))
+    (load hit)))
+
+;; One `(v16-eq-mask P b)` per distinct hot byte, to be or'd together.
+(defn ct-hot-mask-calls [(lcs (slice u8))
+                         (blocks (slice u8))
+                         (quotes (slice u8))
+                         (mqs (slice u8))
+                         (b i64)
+                         (pexpr Code)] (-> Code)
+  (if (>= b 256)
+      `()
+      (if (ct-hot-byte? lcs blocks quotes mqs b)
+          `((v16-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs blocks quotes mqs (+ b 1) pexpr))
+          (ct-hot-mask-calls lcs blocks quotes mqs (+ b 1) pexpr))))
+
+;; Fold a list of mask expressions into `(| a (| b …))`, or 0 when empty.
+(defn ct-or-fold [(xs Code) (i i64)] (-> Code)
+  (if (>= i (primitive/code-count xs))
+      `0
+      (if (= i (- (primitive/code-count xs) 1))
+          (primitive/code-nth xs i)
+          `(| ~(primitive/code-nth xs i) ~(ct-or-fold xs (+ i 1))))))
+
+;; The ST-NORMAL arm — where 98.8% of the bytes go, so the only loop whose cost
+;; really matters.
+;;
+;; Both variants scan 16 bytes at a time via thecount.simd: one bitmask of the
+;; language's delimiter bytes and one of whitespace, from which "is there a
+;; delimiter in this chunk" and "is any byte before it non-blank" are answered
+;; with bit arithmetic instead of a table load per byte. The scan then jumps
+;; straight to the delimiter with a count-trailing-zeros. A chunk that would
+;; cross the line end falls through to the original byte-at-a-time loop, which
+;; also keeps the two paths trivially comparable in the differential tests.
+;;
+;; With no delimiters at all there is nothing to leave the fast path for, so the
+;; whole delimiter half drops out and the scan stops at the line's first
+;; non-space byte instead of walking the line.
+(defn gen-normal-arm [(has-hot bool)
+                      (lcs (slice u8))
+                      (blocks (slice u8))
+                      (quotes (slice u8))
+                      (mqs (slice u8))
+                      (dispatch Code)] (-> Code)
+  (if has-hot
+      `(do
+         (let [(mut hot) false
+               (mut acc) 0]
+           ;; --- 16 bytes per iteration while a whole chunk fits in the line ---
+           (while (all (= hot false) (<= (+ pos 16) le))
+             (let [hm ~(ct-or-fold (ct-hot-mask-calls lcs blocks quotes mqs 0 `(index data pos)) 0)
+                   nonws (^ (v16-ws-mask (index data pos)) 65535)]
+               (if (= hm 0)
+                   (do
+                     (when (!= nonws 0) (store! (mut acc) 1) 0)
+                     (store! (mut pos) (+ pos 16))
+                     0)
+                   (let [fh (ctz hm)]
+                     ;; only the bytes BEFORE the delimiter count toward the
+                     ;; line being non-blank, exactly as the scalar loop does
+                     (when (!= (& nonws (- (<< 1 fh) 1)) 0) (store! (mut acc) 1) 0)
+                     (store! (mut pos) (+ pos fh))
+                     (store! (mut hot) true)
+                     0))))
+           ;; --- byte-at-a-time remainder ---
+           (while (all (< pos le) (= hot false))
+             (let [cls (cast i64 (load (index cls-tab (cast i64 (load (index data pos))))))]
+               (if (!= cls CLS-HOT)
+                   (do
+                     (store! (mut acc) (| acc (- 1 (>> cls 1))))
+                     (store! (mut pos) (+ pos 1))
+                     0)
+                   (store! (mut hot) true))))
+           (when (!= acc 0) (store! (mut saw-code) true) 0)
+           0)
+         (when (< pos le) ~dispatch 0)
+         0)
+      `(do
+         (let [(mut acc) 0]
+           (while (all (= acc 0) (<= (+ pos 16) le))
+             (if (= (^ (v16-ws-mask (index data pos)) 65535) 0)
+                 (store! (mut pos) (+ pos 16))
+                 (store! (mut acc) 1)))
+           (while (all (< pos le) (= acc 0))
+             (let [b (cast i64 (load (index data pos)))]
+               (if (any (= b \space) (= b \tab) (= b \return))
+                   (store! (mut pos) (+ pos 1))
+                   (store! (mut acc) 1))))
+           (when (!= acc 0) (store! (mut saw-code) true) 0)
+           0)
+         (store! (mut pos) le)
+         0)))
+
+;; ---------------------------------------------------------------------------
+;; One whole scanner.
+
+(defn gen-counter [(row Code)] (-> Code)
+  (let [ident (primitive/code-nth row 0)
+        lcs (primitive/code-str (primitive/code-nth row 3))
+        blocks (primitive/code-str (primitive/code-nth row 4))
+        nested (primitive/code-eq (primitive/code-nth row 5) `true)
+        quotes (primitive/code-str (primitive/code-nth row 6))
+        mqs (primitive/code-str (primitive/code-nth row 7))
+        n-lc (ct-tok-count lcs)
+        n-bl (/ (ct-tok-count blocks) 2)
+        n-q (slice-len quotes)
+        n-mq (ct-tok-count mqs)
+        has-bl (> n-bl 0)
+        has-q (> n-q 0)
+        has-mq (> n-mq 0)
+        has-hot (> (+ (+ n-lc n-bl) (+ n-q n-mq)) 0)
+        has-state (or has-bl (or has-q has-mq))]
+    (when (> n-bl 1)
+      (primitive/error "specialize: a table row may declare at most one block-comment pair"))
+    (when (> n-mq 2)
+      (primitive/error "specialize: a table row may declare at most two multiline-string delimiters"))
+    (when (!= (% (ct-tok-count blocks) 2) 0)
+      (primitive/error "specialize: block tokens must come in start/end pairs"))
+    `(defn ~(primitive/code-symbol "count$" ident) [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
+       (let [len (slice-len bytes)
+             data (slice-data bytes)
+             ~@(if has-hot `(cls-tab (load (field spec classes))) `()) (mut i)
+             0 ~@(if has-state `((mut state) ST-NORMAL) `())
+             ~@(if (and has-bl nested) `((mut bdepth) 0) `()) ~@(if (> n-q 1) `((mut qch) 0) `())
+             ~@(if (> n-mq 1) `((mut mqi) 0) `()) ~@(if has-mq `((mut mqdoc) false) `())
+             (mut n-lines) 0
+             (mut n-blank) 0
+             (mut n-comments) 0
+             (mut n-code) 0]
+         (while (< i len)
+           (let [le (find-byte bytes i len \newline)
+                 (mut pos) (load i)
+                 (mut saw-code) false
+                 (mut saw-comment) false]
+             (while (< pos le)
+               ~(if has-state
+                    `(cond ~@(if has-bl
+                                 `((= state ST-BLOCK) ~(gen-block-arm blocks nested))
+                                 `())
+                             ~@(if has-q
+                                   `((= state ST-STRING) ~(gen-string-arm quotes))
+                                   `())
+                           ~@(if has-mq
+                                 `((= state ST-MSTRING) ~(gen-mstring-arm mqs))
+                                 `())
+                             true
+                           ~(gen-normal-arm has-hot lcs blocks quotes mqs (gen-dispatch lcs blocks nested quotes mqs)))
+                    (gen-normal-arm has-hot lcs blocks quotes mqs `0)))
+             (store! (mut n-lines) (+ n-lines 1))
+             (cond (= saw-code true) (store! (mut n-code) (+ n-code 1))
+                   (= saw-comment true) (store! (mut n-comments) (+ n-comments 1))
+                   ~@(if has-bl
+                         `((= state ST-BLOCK) (store! (mut n-comments) (+ n-comments 1)))
+                         `())
+                     ~@(if has-mq
+                           `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments) (+ n-comments 1))
+                               (= state ST-MSTRING)
+                               (store! (mut n-code) (+ n-code 1)))
+                           `())
+                   true (store! (mut n-blank) (+ n-blank 1)))
+             ~@(if has-q
+                   `((when (= state ST-STRING) (store! (mut state) ST-NORMAL) 0))
+                   `())
+             (store! (mut i) (+ le 1))))
+         (let [(mut c) (zeroed Counts)]
+           (store! (field (mut c) lines) n-lines)
+           (store! (field (mut c) blank) n-blank)
+           (store! (field (mut c) comments) n-comments)
+           (store! (field (mut c) code) n-code)
+           c)))))
+
+;; ---------------------------------------------------------------------------
+;; Table accessors, so thecount.registry can register these rows without
+;; restating their tokens. The table stays the single source of truth.
+
+(defn gen-counters [(tbl Code) (k i64) (n i64)] (-> Code)
+  (if (>= k n)
+      `()
+      `(~(gen-counter (primitive/code-nth tbl k)) ~@(gen-counters tbl (+ k 1) n))))
+
+;; Nested ifs over the row index; the last row doubles as the fallback.
+(defn gen-field-arms [(tbl Code) (k i64) (n i64) (fidx i64)] (-> Code)
+  (if (= k (- n 1))
+      (primitive/code-nth (primitive/code-nth tbl k) fidx)
+      `(if (= i ~k)
+           ~(primitive/code-nth (primitive/code-nth tbl k) fidx)
+           ~(gen-field-arms tbl (+ k 1) n fidx))))
+
+(defn gen-field-accessor [(nm Code) (rty Code) (tbl Code) (fidx i64)] (-> Code)
+  `(defn ~nm [(i i64)] (-> ~rty)
+     ~(gen-field-arms tbl 0 (primitive/code-count tbl) fidx)))
+
+(defn gen-counter-arms [(tbl Code) (k i64) (n i64)] (-> Code)
+  (let [f `(primitive/fnptr-of ~(primitive/code-symbol "count$" (primitive/code-nth (primitive/code-nth tbl k) 0)))]
+    (if (= k (- n 1))
+        f
+        `(if (= i ~k) ~f ~(gen-counter-arms tbl (+ k 1) n)))))
+
+;; Invoked as a MACRO rather than through `(meta …)`: meta-generated forms are
+;; spliced after macro expansion has already run, so they may not call `while`,
+;; `cond`, `when` or any other macro. A macro's output is expanded normally,
+;; which is what lets the generated scanners below be written in ordinary Coil.
+(defn define-specialized-counters [& (_ Code)] (-> Code)
+  (let [tbl (spec-table)
+        n (primitive/code-count tbl)]
+    `(do
+       ~@(gen-counters tbl 0 n)
+       ;; How many languages have a generated scanner.
+       (defn spec-row-count [] (-> i64)
+         ~n)
+       ~(gen-field-accessor `spec-row-name `(slice u8) tbl 1)
+       ~(gen-field-accessor `spec-row-exts `(slice u8) tbl 2)
+       ~(gen-field-accessor `spec-row-lcs `(slice u8) tbl 3)
+       ~(gen-field-accessor `spec-row-blocks `(slice u8) tbl 4)
+       ~(gen-field-accessor `spec-row-nested `bool tbl 5)
+       ~(gen-field-accessor `spec-row-quotes `(slice u8) tbl 6)
+       ~(gen-field-accessor `spec-row-mqs `(slice u8) tbl 7)
+       ;; The generated scanner for row i.
+       (defn spec-row-counter [(i i64)] (-> (fnptr c [(ptr LangSpec) (slice u8)] Counts))
+         ~(gen-counter-arms tbl 0 n)))))
+
+(define-specialized-counters)

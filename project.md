@@ -66,8 +66,68 @@ an extension a builtin already claims overrides it.
   skipped by NUL-sniff on the first 8000 bytes.
 - `src/walk.coil` — dirent externs (darwin arm64 layout) + path helpers.
 - `src/output.coil` — the three tables (language / file / directory).
+- `src/specialize.coil` — compile-time specialization of the counter (below).
+- `src/simd.coil` — 16-byte byte-class bitmasks over `(primitive/llvm-ir …)`.
 
-`coil verify` runs fmt + lint + check + build + tests (29 tests across 4 suites).
+`coil verify` runs fmt + lint + check + build + tests (72 tests across 5 suites).
+
+### Compile-time specialized scanners
+
+`count-bytes` is an interpreter over a `LangSpec`: every hot byte costs a loop
+over the line-comment tokens, a loop over the block pairs, a byte-by-byte
+`match-at`, and a `quote-byte?` scan. For the languages whose delimiters are
+known when thecount is compiled, none of that has to happen at runtime.
+
+`src/specialize.coil` holds a table of 26 such languages and a MACRO that walks
+it at compile time, emitting one scanner per row (~6,000 lines of generated
+Coil) in which dead states are deleted, every delimiter comparison is folded to
+a literal byte compare, and state a language cannot vary is not stored. The
+registry keeps a `counters` array parallel to `specs`; entries default to
+`count-bytes` and `add-specialized!` swaps in the generated scanner. Everything
+else — every user-registered language from the config file — keeps running
+through the interpreter, so the table is purely an optimization.
+
+The table is also the *only* place those 26 languages' tokens are written: the
+registry registers them from it, so the scanner and the registration cannot
+drift apart. `tests/specialize_test.coil` holds each generated scanner to
+byte-for-byte agreement with `count-bytes` on delimiter-at-EOF, unterminated
+strings and blocks, nesting, and docstrings.
+
+Two notes for anyone extending it:
+
+- It is a macro, not `(meta …)`. Meta-generated forms are spliced *after* macro
+  expansion, so they cannot call `while`/`cond`/`when`; a macro's output is
+  expanded normally.
+- Macro hygiene renames template locals, including where a bare symbol is used
+  as a struct field name. The generated locals are therefore `n-lines`,
+  `n-code`, `cls-tab` and so on, never `lines`/`code`/`classes`.
+
+Read the generated code with `coil expand` (needs a copy of the file with the
+`thecount.*` imports stripped — `coil expand` does not read `Coil.toml`).
+
+### The scan: bitmasks instead of a byte-class load
+
+Specializing the *dispatch* turned out to be worth ~1% (see Speed), because only
+1.24% of bytes in real C++ are delimiters — the other 98.8% were spending one
+byte-class table load each in the ST-NORMAL loop, and that load was the whole
+cost of counting.
+
+`src/simd.coil` replaces it with the simdjson approach: load 16 bytes, compare
+against the language's delimiter bytes and against whitespace, and extract one
+bit per lane. "Is there a delimiter in this chunk" and "is any byte before it
+non-blank" then fall out of bit arithmetic, and the scan jumps straight to the
+delimiter with a count-trailing-zeros instead of walking to it. A chunk that
+would cross the line end falls through to the original byte-at-a-time loop.
+
+This is where the two halves meet: the delimiter set is a compile-time constant
+*because* of the specialization table, so the generator emits one
+`v16-eq-mask` call per hot byte with a literal operand, and -O3 folds each to a
+constant vector compare. A runtime-configurable scanner could not do this.
+
+It is all `(primitive/llvm-ir …)` — no compiler support, same technique as
+`coil.simd`. Two details: the loads are `align 1` (arbitrary offsets into a file
+buffer), and mask extraction is `bitcast <16 x i1> to i16`, which arm64 has no
+single instruction for but LLVM lowers correctly.
 
 ## Speed
 
@@ -82,7 +142,46 @@ Faster than scc on every benchmarked repo (hyperfine, warm cache, arm64 mac):
 | cpython | 4.8k | 108 ms | 111-123 ms | ~par |
 
 thecount uses ~2.5x less CPU than scc for the same work and roughly half
-the kernel time. The architecture (informed by scc/ripgrep/dumac writeups):
+the kernel time.
+
+### What compile-time specialization actually bought
+
+Measured with `src/countbench.coil`, which runs both scanners over the same
+buffer (40 passes, arm64 mac). This is the counter alone — end-to-end timings
+are dominated by the reader's syscalls.
+
+| corpus | interpreter | + specialized dispatch | + SIMD scan | total |
+|---|---|---|---|---|
+| 4.2 MB C++ | 303 MB/s | 302 MB/s | 935 MB/s | **3.1x** |
+| 535 KB Python | 363 MB/s | 370 MB/s | 869 MB/s | **2.4x** |
+| 362 KB Markdown | 282 MB/s | 2600 MB/s | 3250 MB/s | **11.5x** |
+
+The middle column is the lesson. Folding delimiters to literal compares bought
+essentially nothing on code-heavy languages: only **1.24% of bytes in the C++
+corpus are `/`, `"` or `'`** — one per 80 bytes — so 98.8% of iterations never
+reached the code that was specialized. The byte-class table was already keeping
+token matching off the hot path; what remained was one table load per byte, and
+constant-folding does not remove a load.
+
+Both real wins are algorithmic. Markdown jumped first because with no delimiters
+the class table has no purpose, so it drops out and the scan can stop at the
+line's first non-space byte. Everything else jumped once the per-byte load
+became a per-16-byte bitmask.
+
+End-to-end on ladybird (1.8M lines, 20 runs): 285 ms → 280 ms wall, but **user
+CPU 329 ms → 164 ms**. Wall time barely moves because counting is no longer the
+bottleneck — ~1.1 s of system time across the reader threads is, and that is
+unchanged. Any further work on throughput belongs in the reader, not the
+counter.
+
+Not done, and probably where the next counter win is: the scan still restarts
+per line, so a 38-byte average C++ line gets two vector chunks and a ~6-byte
+scalar tail. simdjson computes masks over the whole buffer once and derives line
+boundaries from the newline mask; that would put the tail work at ~0 and let the
+escaped-quote and inside-string masks be computed branchlessly with a
+carry-less-multiply prefix XOR, replacing `backslashes-before` and the ST-STRING
+arm outright. Nested block comments still need a real counter, so those
+languages keep a sequential pass over the candidate positions. The architecture (informed by scc/ripgrep/dumac writeups):
 
 - **Split pools.** Syscalls and counting want opposite thread counts on
   macOS — VFS contention grows superlinearly with concurrent open/read
