@@ -1,0 +1,113 @@
+(module thecount.counter-test)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "thecount.lang" :use *)
+(import "thecount.counter" :use *)
+
+(defn c-spec [] (-> LangSpec)
+  (lang-from-strings (malloc-allocator) "C" "//" "/* */" false "\"'" ""))
+
+(defn py-spec [] (-> LangSpec)
+  (lang-from-strings (malloc-allocator)
+                     "Python"
+                     "#"
+                     ""
+                     false
+                     "\"'"
+                     "\"\"\" '''"))
+
+(defn c-spec-ptr [] (-> (ptr LangSpec))
+  (let [p (unwrap-ptr [LangSpec] (create [LangSpec] (malloc-allocator)))]
+    (store! p (c-spec))
+    p))
+
+(defn py-spec-ptr [] (-> (ptr LangSpec))
+  (let [p (unwrap-ptr [LangSpec] (create [LangSpec] (malloc-allocator)))]
+    (store! p (py-spec))
+    p))
+
+(deftest simple-c
+         (let [spec-p (c-spec-ptr)
+               src "int main() {\n  // a comment\n  return 0; // trailing\n\n  /* block\n     more block */\n}\n"
+               c (count-bytes spec-p src)]
+           ;; lines: int main {, //comment, return, blank, /*block, more block*/, }
+           (assert-eq (load (field c lines)) 7)
+           (assert-eq (load (field c comments)) 3)
+           (assert-eq (load (field c blank)) 1)
+           (assert-eq (load (field c code)) 3)))
+
+(deftest comment-token-inside-string
+         (let [spec-p (c-spec-ptr)
+               src "char *s = \"http://x\";\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c code)) 1)
+           (assert-eq (load (field c comments)) 0)))
+
+(deftest block-comment-inside-string
+         (let [spec-p (c-spec-ptr)
+               src "char *s = \"/* not a comment */\";\nint x;\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c code)) 2)
+           (assert-eq (load (field c comments)) 0)))
+
+(deftest code-then-block-is-code
+         (let [spec-p (c-spec-ptr)
+               src "int x; /* c1\n c2 */\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c code)) 1)
+           (assert-eq (load (field c comments)) 1)))
+
+(deftest no-trailing-newline
+         (let [spec-p (c-spec-ptr)
+               src "int x;"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 1)
+           (assert-eq (load (field c code)) 1)))
+
+(deftest escaped-quote-in-string
+         (let [spec-p (c-spec-ptr)
+               src "char *s = \"a\\\"b // no\";\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c code)) 1)
+           (assert-eq (load (field c comments)) 0)))
+
+(deftest python-hash-and-docstring
+         ;; a triple-quote opening a line is a docstring -> comment lines,
+         ;; and comment tokens inside it do not double-count
+         (let [spec-p (py-spec-ptr)
+               src "# comment\nx = 1\n\"\"\"doc\n# not a comment\ndoc end\"\"\"\ny = 2\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 6)
+           (assert-eq (load (field c comments)) 4)
+           (assert-eq (load (field c code)) 2)))
+
+(deftest python-string-value-is-code
+         ;; a triple-quote preceded by code on its line is a plain string
+         (let [spec-p (py-spec-ptr)
+               src "x = \"\"\"not a docstring\n\nstill string\"\"\"\ny = 2\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 4)
+           (assert-eq (load (field c comments)) 0)
+           (assert-eq (load (field c code)) 4)))
+
+(deftest python-docstring-with-inner-quotes
+         ;; embedded quotes must not break docstring tracking (scc gets this wrong)
+         (let [spec-p (py-spec-ptr)
+               src "def f():\n    \"\"\"Doc with \"quotes\" inside.\"\"\"\n    return 1\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c comments)) 1)
+           (assert-eq (load (field c code)) 2)))
+
+(deftest empty-file
+         (let [spec-p (c-spec-ptr)
+               src ""
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 0)))
+
+(deftest blank-lines-only
+         (let [spec-p (c-spec-ptr)
+               src "\n  \n\t\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 3)
+           (assert-eq (load (field c blank)) 3)))

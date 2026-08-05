@@ -1,0 +1,56 @@
+(module thecount.walk)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.str" :use *)
+(import "coil.fs" :use [os-pick])
+
+(extern strlen :cc c [(ptr i8)] (-> i64))
+(extern opendir :cc c [(ptr i8)] (-> (ptr i8)))
+(extern readdir :cc c [(ptr i8)] (-> (ptr i8)))
+(extern closedir :cc c [(ptr i8)] (-> i32))
+
+;; struct dirent layout, selected at compile time for the target OS.
+;; darwin (64-bit inode; plain readdir IS the 64-bit variant on arm64):
+;;   d_ino u64 @0, d_seekoff u64 @8, d_reclen u16 @16,
+;;   d_namlen u16 @18, d_type u8 @20, d_name char[] @21
+;; linux (LP64 glibc): d_ino @0, d_off @8, d_reclen u16 @16,
+;;   d_type u8 @18, d_name @19 — and no d_namlen field at all.
+(const DIRENT-TYPE-OFF (os-pick 18 20))
+(const DIRENT-NAME-OFF (os-pick 19 21))
+(const DT-DIR 4)
+(const DT-REG 8)
+
+;; Name length of a dirent: the d_namlen field on darwin, strlen on linux.
+(defn dirent-name-len [(ent (ptr i8))] (-> i64)
+  (os-pick (strlen (cast (ptr i8) (index ent DIRENT-NAME-OFF)))
+           (cast i64 (load (cast (ptr u16) (index ent 18))))))
+
+;; Copy s into allocator-owned storage (dirent name buffers are reused).
+(defn copy-str [(a (ptr Allocator)) (s (slice u8))] (-> (slice u8))
+  (let [n (slice-len s)
+        p (unwrap-ptr [u8] (alloc-slice [u8] a n))
+        (mut k) 0]
+    (while (< k n)
+      (store! (index p k) (slice-get s k))
+      (store! (mut k) (+ k 1)))
+    (slice-new p n)))
+
+;; dir + "/" + name, allocator-owned. A dir of "" yields just name.
+(defn join-path [(a (ptr Allocator)) (dir (slice u8)) (name (slice u8))] (-> (slice u8))
+  (let [dn (slice-len dir)]
+    (if (= dn 0)
+        (copy-str a name)
+        (let [nn (slice-len name)
+              p (unwrap-ptr [u8] (alloc-slice [u8] a (+ (+ dn nn) 1)))
+              (mut k) 0]
+          (while (< k dn)
+            (store! (index p k) (slice-get dir k))
+            (store! (mut k) (+ k 1)))
+          (store! (index p dn) (cast u8 \/))
+          (let [(mut j) 0]
+            (while (< j nn)
+              (store! (index p (+ (+ dn 1) j)) (slice-get name j))
+              (store! (mut j) (+ j 1))))
+          (slice-new p (+ (+ dn nn) 1))))))

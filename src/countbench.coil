@@ -1,0 +1,28 @@
+(module countbench)
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.fs" :use *)
+(import "coil.time" :as time)
+(import "thecount.lang" :use *)
+(import "thecount.counter" :use *)
+
+(defn main [(argc i32) (argv (ptr (ptr i8)))] (-> i64)
+  (let [a (malloc-allocator)
+        spec-p (unwrap-ptr [LangSpec] (create [LangSpec] a))]
+    (store! spec-p (lang-from-strings a "C++" "//" "/* */" false "\"'" ""))
+    (match (read-file a
+                      "/private/tmp/claude-501/-Users-jimmyhmiller-Documents-Code-projects-TheCount/f8e3a958-252f-41bc-aed1-172bef3d1ae3/scratchpad/big.cpp")
+      (Err [_] (do (println "read failed") 1))
+      (Ok [data]
+          (let [t0 (match (time/monotonic-now-ms) (Ok [v] v) (Err [_] 0))
+                c (count-bytes spec-p data)
+                t1 (match (time/monotonic-now-ms) (Ok [v] v) (Err [_] 0))
+                ms (- t1 t0)
+                mb (/ (slice-len data) 1048576)]
+            (println "bytes={d} ms={d} MB/s={d}" (slice-len data) ms (/ (* mb 1000) (if (= ms 0) 1 ms)))
+            (println "lines={d} code={d} comments={d} blank={d}"
+                     (load (field c lines))
+                     (load (field c code))
+                     (load (field c comments))
+                     (load (field c blank)))
+            0)))))

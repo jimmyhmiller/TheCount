@@ -1,0 +1,260 @@
+(module thecount.config)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.str" :use *)
+(import "coil.fs" :use *)
+(import "coil.os" :as os)
+(import "thecount.lang" :use *)
+(import "thecount.registry" :use *)
+
+(extern mkdir :cc c [(ptr i8) i32] (-> i32))
+
+(defn cat [(a (ptr Allocator)) (x (slice u8)) (y (slice u8))] (-> (slice u8))
+  (match (str-concat a x y)
+    (Some [s] s)
+    (None [] "")))
+
+;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
+(defn config-path [(a (ptr Allocator))] (-> (slice u8))
+  (let [(mut out) ""]
+    (match (os/env-get a "THECOUNT_LANGS")
+      (Ok [opt]
+          (match opt
+            (Some [s] (do (store! (mut out) (os/owned-string-slice s)) 0))
+            (None [] 0)))
+      (Err [_] 0))
+    (if (> (slice-len out) 0)
+        out
+        (match (os/env-get a "HOME")
+          (Ok [opt]
+              (match opt
+                (Some [h]
+                      (cat a (os/owned-string-slice h) "/.config/thecount/languages"))
+                (None [] "")))
+          (Err [_] "")))))
+
+;; Read the whole config file; "" when it does not exist.
+(defn config-read [(a (ptr Allocator))] (-> (slice u8))
+  (let [path (config-path a)]
+    (if (= (slice-len path) 0)
+        ""
+        (match (read-file a path)
+          (Ok [data] data)
+          (Err [_] "")))))
+
+;; Overwrite the config file with data, creating parent directories.
+(defn config-write [(a (ptr Allocator)) (data (slice u8))] (-> i64)
+  (let [path (config-path a)]
+    (when (= (slice-len path) 0)
+      (println "thecount: cannot locate config (no HOME)")
+      (os/_exit 2)
+      0)
+    ;; best-effort mkdir -p of the two parents
+    (match (os/env-get a "HOME")
+      (Ok [opt]
+          (match opt
+            (Some [h]
+                  (let [home (os/owned-string-slice h)]
+                    (mkdir (str->cstr a (cat a home "/.config")) 493)
+                    (mkdir (str->cstr a (cat a home "/.config/thecount")) 493)
+                    0))
+            (None [] 0)))
+      (Err [_] 0))
+    (match (write-file a path data)
+      (Ok [_] 0)
+      (Err [_]
+           (do
+             (println "thecount: failed to write config file")
+             (os/_exit 2)
+             0)))))
+
+(defn strip-cr [(line (slice u8))] (-> (slice u8))
+  (let [n (slice-len line)]
+    (if (and (> n 0) (= (cast i64 (slice-get line (- n 1))) \return))
+        (subslice line 0 (- n 1))
+        line)))
+
+;; Rest of the line after the first token (trimmed), e.g. the name in "lang Foo Bar".
+(defn rest-of-line [(line (slice u8))] (-> (slice u8))
+  (let [n (slice-len line)
+        (mut k) 0]
+    (while (and (< k n) (!= (cast i64 (slice-get line k)) \space))
+      (store! (mut k) (+ k 1)))
+    (str-trim (subslice line k n))))
+
+;; Pending user-language stanza being accumulated during parsing.
+(defstruct Pending
+  [(active bool)
+   (name (slice u8))
+   (like (slice u8))
+   (exts (slice u8))
+   (files (slice u8))
+   (lcs (slice u8))
+   (has-lcs bool)
+   (blocks (slice u8))
+   (has-blocks bool)
+   (nested bool)
+   (has-nested bool)
+   (quotes (slice u8))
+   (has-quotes bool)
+   (mqs (slice u8))
+   (has-mqs bool)])
+
+(defn flush-pending! [(r (ptr Registry)) (p (ptr Pending))] (-> i64)
+  (if (= (load (field p active)) false)
+      0
+      (let [a (load (field r arena))
+            like (load (field p like))
+            (mut base) -1]
+        (when (> (slice-len like) 0)
+          (store! (mut base) (reg-lookup-name r like))
+          (when (= base -1)
+            (println "thecount: config references unknown base language: {s}" like)
+            0))
+        (let [(mut spec) (zeroed LangSpec)]
+          (if (>= base 0)
+              (store! (mut spec) (load (reg-spec r base)))
+              (store! (mut spec) (lang-from-strings a "" "" "" false "" "")))
+          (store! (field (mut spec) name) (load (field p name)))
+          (when (= (load (field p has-lcs)) true)
+            (store! (field (mut spec) line-comments) (split-tokens a (load (field p lcs)))))
+          (when (= (load (field p has-blocks)) true)
+            (store! (field (mut spec) blocks) (parse-blocks a (load (field p blocks)))))
+          (when (= (load (field p has-nested)) true)
+            (store! (field (mut spec) nested) (load (field p nested))))
+          (when (= (load (field p has-quotes)) true)
+            (store! (field (mut spec) quotes) (load (field p quotes))))
+          (when (= (load (field p has-mqs)) true)
+            (store! (field (mut spec) multi-quotes) (split-tokens a (load (field p mqs)))))
+          (rebuild-classes! a (mut spec))
+          (let [idx (reg-add! r spec (load (field p exts)))]
+            (when (> (slice-len (load (field p files))) 0)
+              (reg-add-files! r idx (load (field p files))))
+            idx)))))
+
+;; Parse the user config format and register every language in it.
+;; Format, one directive per line ('#' comments, blank lines ignored):
+;;   lang My Language      start a stanza; rest of line is the display name
+;;   like c                inherit every field from an existing language
+;;   ext foo bar           file extensions (without dots)
+;;   file Foofile          exact filenames for this language
+;;   line // #             line comment starters
+;;   block /* */ (* *)     block comment start/end pairs
+;;   nested                block comments nest
+;;   quotes " '            single-char string delimiters
+;;   multi """ '''         multiline string delimiters
+(defn load-config! [(r (ptr Registry)) (src (slice u8))] (-> i64)
+  (let [a (load (field r arena))
+        lines (str-split a src "\n")
+        n (al-len lines)
+        pend (unwrap-ptr [Pending] (create [Pending] a))
+        (mut k) 0]
+    (store! pend (zeroed Pending))
+    (while (< k n)
+      (let [line (str-trim (strip-cr (al-get lines k)))]
+        (when (and (> (slice-len line) 0)
+                   (!= (cast i64 (slice-get line 0)) \u23))  ; '#'
+          (let [toks (split-tokens a line)
+                d (slice-get toks 0)
+                rest (rest-of-line line)]
+            (cond (str-eq d "lang")
+                    (do
+                      (flush-pending! r pend)
+                      (store! pend (zeroed Pending))
+                      (store! (field pend active) true)
+                      (store! (field pend name) rest)
+                      (when (= (slice-len rest) 0)
+                        (println "thecount: config 'lang' needs a name")
+                        0)
+                      0)
+                  (= (load (field pend active)) false)
+                    (do (println "thecount: config directive before any 'lang': {s}" line) 0)
+                  (str-eq d "like") (do (store! (field pend like) rest) 0)
+                  (str-eq d "ext") (do (store! (field pend exts) rest) 0)
+                  (str-eq d "file") (do (store! (field pend files) rest) 0)
+                  (str-eq d "line")
+                    (do
+                      (store! (field pend lcs) rest)
+                      (store! (field pend has-lcs) true)
+                      0)
+                  (str-eq d "block")
+                    (do
+                      (store! (field pend blocks) rest)
+                      (store! (field pend has-blocks) true)
+                      0)
+                  (str-eq d "nested")
+                    (do
+                      (store! (field pend nested) true)
+                      (store! (field pend has-nested) true)
+                      0)
+                  (str-eq d "quotes")
+                    (do
+                      (store! (field pend quotes) (strip-spaces a rest))
+                      (store! (field pend has-quotes) true)
+                      0)
+                  (str-eq d "multi")
+                    (do
+                      (store! (field pend mqs) rest)
+                      (store! (field pend has-mqs) true)
+                      0)
+                  :else (do (println "thecount: unknown config directive: {s}" d) 0)))))
+      (store! (mut k) (+ k 1)))
+    (flush-pending! r pend)
+    0))
+
+;; "\" '" -> "\"'" — quotes are single chars, spacing is only for readability.
+(defn strip-spaces [(a (ptr Allocator)) (s (slice u8))] (-> (slice u8))
+  (let [n (slice-len s)
+        p (unwrap-ptr [u8] (alloc-slice [u8] a n))
+        (mut w) 0
+        (mut k) 0]
+    (while (< k n)
+      (when (!= (cast i64 (slice-get s k)) \space)
+        (store! (index p w) (slice-get s k))
+        (store! (mut w) (+ w 1)))
+      (store! (mut k) (+ k 1)))
+    (slice-new p w)))
+
+;; Remove the stanza for `name` (case-insensitive) from config text.
+;; (Some new-text) on success, (None) when no stanza matched.
+(defn remove-stanza [(a (ptr Allocator)) (src (slice u8)) (name (slice u8))] (-> (Option (slice u8)))
+  (let [lines (str-split a src "\n")
+        n (al-len lines)
+        want (lower a name)
+        (mut b) (sb-new a)
+        (mut skipping) false
+        (mut found) false
+        (mut k) 0]
+    (while (< k n)
+      (let [line (strip-cr (al-get lines k))
+            trimmed (str-trim line)
+            toks (split-tokens a trimmed)]
+        (if (and (> (slice-len toks) 0) (str-eq (slice-get toks 0) "lang"))
+            (if (str-eq (lower a (rest-of-line trimmed)) want)
+                (do
+                  (store! (mut skipping) true)
+                  (store! (mut found) true)
+                  0)
+                (do
+                  (store! (mut skipping) false)
+                  (sb-push-str! (mut b) line)
+                  (sb-push-str! (mut b) "\n")
+                  0))
+            (when (= skipping false)
+              ;; keep the line unless it is the trailing empty piece of the split
+              (when (or (< k (- n 1)) (> (slice-len line) 0))
+                (sb-push-str! (mut b) line)
+                (sb-push-str! (mut b) "\n")
+                0)
+              0)))
+      (store! (mut k) (+ k 1)))
+    (if (= found true) (Some (sb-str b)) (None))))
+
+;; Load user languages from the config file on top of the builtins.
+(defn load-user-langs! [(r (ptr Registry))] (-> i64)
+  (let [src (config-read (load (field r arena)))]
+    (if (> (slice-len src) 0)
+        (load-config! r src)
+        0)))

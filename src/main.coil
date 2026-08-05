@@ -1,0 +1,266 @@
+(module thecount.main)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.hashmap" :use *)
+(import "coil.str" :use *)
+(import "coil.primitive" :as primitive)
+(import "coil.fs" :use *)
+(import "coil.os" :as os)
+(import "thecount.lang" :use *)
+(import "thecount.registry" :use *)
+(import "thecount.config" :use *)
+(import "thecount.counter" :use *)
+(import "thecount.output" :use *)
+(import "thecount.engine" :use *)
+
+(defn strip-trailing-slashes [(s (slice u8))] (-> (slice u8))
+  (let [(mut n) (slice-len s)]
+    (while (and (> n 1) (= (cast i64 (slice-get s (- n 1))) \/))
+      (store! (mut n) (- n 1)))
+    (subslice s 0 n)))
+
+(defn usage [] (-> i64)
+  (println "thecount — count lines of code")
+  (println "")
+  (println "usage: thecount [paths...] [flags]")
+  (println "       thecount add-lang NAME [options]")
+  (println "       thecount remove-lang NAME")
+  (println "       thecount langs")
+  (println "")
+  (println "count flags:")
+  (println "  --files        break results up by file")
+  (println "  --dirs         break results up by folder")
+  (println "  --depth N      folder rollup depth (default 1, implies --dirs)")
+  (println "  --hidden       include hidden files and directories")
+  (println "  --no-ignore    do not honor .gitignore files")
+  (println "  --exclude S    skip paths containing S (repeatable)")
+  (println "")
+  (println "add-lang options (all tokens space-separated inside one quoted arg):")
+  (println "  --like BASE    inherit everything from an existing language")
+  (println "  --ext \"a b\"    file extensions, without dots")
+  (println "  --file \"F G\"   exact filenames for this language")
+  (println "  --line \"// #\"  line comment starters")
+  (println "  --block \"/* */\"  block comment start/end pairs")
+  (println "  --nested       block comments nest")
+  (println "  --quotes \"str\" string delimiter characters")
+  (println "  --multi \"tok\"  multiline string delimiters")
+  (println "")
+  (println "example: thecount add-lang Jai --like c --ext jai")
+  (println "languages live in ~/.config/thecount/languages — plain text, edit freely")
+  0)
+
+(defn run-count [(a (ptr Allocator))
+                 (r (ptr Registry))
+                 (roots (ptr (ArrayList (slice u8))))
+                 (want-files bool)
+                 (want-dirs bool)
+                 (depth i64)
+                 (hidden bool)
+                 (use-ignore bool)
+                 (excludes (ptr (ArrayList (slice u8))))] (-> i64)
+  (let [n-specs (reg-count r)
+        clean-roots (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))]
+    (store! clean-roots (al-new [(slice u8)] a))
+    (let [nr (al-len (load roots))
+          (mut i) 0]
+      (while (< i nr)
+        (al-push! clean-roots (strip-trailing-slashes (al-get (load roots) i)))
+        (store! (mut i) (+ i 1))))
+    (let [agg (count-all a r clean-roots want-files want-dirs depth hidden use-ignore excludes)]
+      ;; emit
+      (cond (= want-files true) (print-table a "File" (al-slice (load (load (field agg file-rows)))) false true)
+            (= want-dirs true) (print-table a "Directory" (al-slice (load (load (field agg dir-rows)))) true false)
+            :else
+              (let [rows (unwrap-ptr [(ArrayList Row)] (create [(ArrayList Row)] a))
+                    files-per (slice-data (load (field agg files-per)))
+                    counts-per (slice-data (load (field agg counts-per)))]
+                (store! rows (al-new [Row] a))
+                (let [(mut s) 0]
+                  (while (< s n-specs)
+                    (when (> (load (index files-per s)) 0)
+                      (al-push! rows
+                                (mk-row (load (field (reg-spec r s) name))
+                                        ""
+                                        (load (index files-per s))
+                                        (load (index counts-per s))))
+                      0)
+                    (store! (mut s) (+ s 1))))
+                (print-table a "Language" (al-slice (load rows)) true false))))))
+
+(defn run-langs [(a (ptr Allocator)) (r (ptr Registry))] (-> i64)
+  (let [n (reg-count r)
+        exts (unwrap-ptr [StrBuf] (alloc-slice [StrBuf] a n))
+        (mut k) 0]
+    (while (< k n)
+      (store! (index exts k) (sb-new a))
+      (store! (mut k) (+ k 1)))
+    (hm-for [ext idx (load (field r by-ext))]
+            (let [bp (index exts idx)]
+              (when (> (slice-len (sb-str (load bp))) 0)
+                (sb-push-str! bp " "))
+              (sb-push-str! bp ext)))
+    (let [(mut j) 0]
+      (while (< j n)
+        (let [nm (load (field (reg-spec r j) name))
+              es (sb-str (load (index exts j)))]
+          (println "{s}: {s}" nm es))
+        (store! (mut j) (+ j 1))))
+    0))
+
+(defn push-directive! [(b (mut StrBuf)) (d (slice u8)) (val (slice u8))] (-> i64)
+  (sb-push-str! (mut b) d)
+  (sb-push-str! (mut b) " ")
+  (sb-push-str! (mut b) val)
+  (sb-push-str! (mut b) "\n")
+  0)
+
+(defn run-add-lang [(a (ptr Allocator))
+                    (r (ptr Registry))
+                    (args (ptr (ArrayList (slice u8))))] (-> i64)
+  (let [n (al-len (load args))]
+    (when (= n 0)
+      (println "thecount add-lang: missing language name")
+      (os/_exit 2)
+      0)
+    (let [name (al-get (load args) 0)
+          (mut b) (sb-new a)
+          (mut k) 1]
+      (sb-push-str! (mut b) "\nlang ")
+      (sb-push-str! (mut b) name)
+      (sb-push-str! (mut b) "\n")
+      (while (< k n)
+        (let [arg (al-get (load args) k)
+              val (if (< (+ k 1) n) (al-get (load args) (+ k 1)) "")]
+          (cond (str-eq arg "--like")
+                  (do
+                    (when (= (reg-lookup-name r val) -1)
+                      (println "thecount add-lang: unknown base language: {s}" val)
+                      (os/_exit 2)
+                      0)
+                    (push-directive! (mut b) "like" val)
+                    (store! (mut k) (+ k 2)))
+                (str-eq arg "--ext") (do (push-directive! (mut b) "ext" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--file") (do (push-directive! (mut b) "file" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--line") (do (push-directive! (mut b) "line" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--block") (do (push-directive! (mut b) "block" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--quotes") (do (push-directive! (mut b) "quotes" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--multi") (do (push-directive! (mut b) "multi" val) (store! (mut k) (+ k 2)))
+                (str-eq arg "--nested") (do (sb-push-str! (mut b) "nested\n") (store! (mut k) (+ k 1)))
+                :else
+                  (do
+                    (println "thecount add-lang: unknown option: {s}" arg)
+                    (os/_exit 2)
+                    0))))
+      ;; validate the combined config before writing it
+      (let [old (config-read a)
+            (mut all) (sb-new a)]
+        (sb-push-str! (mut all) old)
+        (sb-push-str! (mut all) (sb-str b))
+        (let [check-reg (reg-new a)]
+          (add-builtins! check-reg)
+          (load-config! check-reg (sb-str all))
+          (when (= (reg-lookup-name check-reg name) -1)
+            (println "thecount add-lang: stanza did not register; not writing")
+            (os/_exit 2)
+            0)
+          0)
+        (config-write a (sb-str all))
+        (println "registered language: {s}" name)
+        (println "config: ~/.config/thecount/languages")
+        0))))
+
+(defn run-remove-lang [(a (ptr Allocator))
+                       (r (ptr Registry))
+                       (args (ptr (ArrayList (slice u8))))] (-> i64)
+  (let [n (al-len (load args))]
+    (when (= n 0)
+      (println "thecount remove-lang: missing language name")
+      (os/_exit 2)
+      0)
+    ;; join the args so multi-word names work unquoted
+    (let [(mut b) (sb-new a)
+          (mut k) 0]
+      (while (< k n)
+        (when (> k 0) (sb-push-str! (mut b) " ") 0)
+        (sb-push-str! (mut b) (al-get (load args) k))
+        (store! (mut k) (+ k 1)))
+      (let [name (sb-str b)
+            src (config-read a)]
+        (match (remove-stanza a src name)
+          (Some [out]
+                (do
+                  (config-write a out)
+                  (println "removed language: {s}" name)
+                  0))
+          (None []
+                (do
+                  (if (>= (reg-lookup-name r name) 0)
+                      (println "thecount remove-lang: '{s}' is a builtin, not in your config; override it with add-lang instead"
+                               name)
+                      (println "thecount remove-lang: no user language named '{s}'" name))
+                  (os/_exit 2)
+                  0)))))))
+
+(defn main [(argc i32) (argv (ptr (ptr i8)))] (-> i64)
+  (let [a (malloc-allocator)
+        nargs (cast i64 argc)
+        roots (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        rest (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        (mut want-files) false
+        (mut want-dirs) false
+        (mut depth) 1
+        (mut hidden) false
+        (mut use-ignore) true
+        excludes (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        (mut mode) 0  ; 0=count 1=add-lang 2=langs 3=help 4=remove-lang
+        (mut k) 1]
+    (store! roots (al-new [(slice u8)] a))
+    (store! rest (al-new [(slice u8)] a))
+    (store! excludes (al-new [(slice u8)] a))
+    (while (< k nargs)
+      (let [arg (cstr->str (load (index argv k)))]
+        (cond (and (= k 1) (str-eq arg "add-lang")) (do (store! (mut mode) 1) 0)
+              (and (= k 1) (str-eq arg "remove-lang")) (do (store! (mut mode) 4) 0)
+              (and (= k 1) (str-eq arg "langs")) (do (store! (mut mode) 2) 0)
+              (or (= mode 1) (= mode 4)) (do (al-push! rest arg) 0)
+              (str-eq arg "--exclude")
+                (do
+                  (when (< (+ k 1) nargs)
+                    (al-push! excludes (cstr->str (load (index argv (+ k 1)))))
+                    (store! (mut k) (+ k 1))
+                    0)
+                  0)
+              (or (str-eq arg "--help") (str-eq arg "-h") (str-eq arg "help")) (do (store! (mut mode) 3) 0)
+              (str-eq arg "--files") (do (store! (mut want-files) true) 0)
+              (str-eq arg "--dirs") (do (store! (mut want-dirs) true) 0)
+              (str-eq arg "--hidden") (do (store! (mut hidden) true) 0)
+              (str-eq arg "--no-ignore") (do (store! (mut use-ignore) false) 0)
+              (str-eq arg "--depth")
+                (do
+                  (when (< (+ k 1) nargs)
+                    (match (str-parse-int (cstr->str (load (index argv (+ k 1)))))
+                      (Some [d] (do (store! (mut depth) d) 0))
+                      (None [] 0))
+                    (store! (mut k) (+ k 1))
+                    0)
+                  (store! (mut want-dirs) true)
+                  (when (< depth 1) (store! (mut depth) 1) 0)
+                  0)
+              :else (do (al-push! roots arg) 0)))
+      (store! (mut k) (+ k 1)))
+    (if (= mode 3)
+        (usage)
+        (let [r (reg-new a)]
+          (add-builtins! r)
+          (load-user-langs! r)
+          (cond (= mode 1) (run-add-lang a r rest)
+                (= mode 4) (run-remove-lang a r rest)
+                (= mode 2) (run-langs a r)
+                :else
+                  (do
+                    (when (= (al-len (load roots)) 0)
+                      (al-push! roots ".")
+                      0)
+                    (run-count a r roots want-files want-dirs depth hidden use-ignore excludes)))))))

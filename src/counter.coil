@@ -1,0 +1,275 @@
+(module thecount.counter)
+
+(import "coil.slice" :use *)
+(import "thecount.lang" :use *)
+
+(extern memchr :cc c [(ptr u8) i32 i64] (-> (ptr u8)))
+
+(defstruct Counts [(lines i64) (blank i64) (comments i64) (code i64)])
+
+(defn counts-zero [] (-> Counts)
+  (zeroed Counts))
+
+(defn counts-add! [(dst (mut Counts)) (src Counts)] (-> i64)
+  (store! (field (mut dst) lines) (+ (load (field dst lines)) (load (field src lines))))
+  (store! (field (mut dst) blank) (+ (load (field dst blank)) (load (field src blank))))
+  (store! (field (mut dst) comments) (+ (load (field dst comments)) (load (field src comments))))
+  (store! (field (mut dst) code) (+ (load (field dst code)) (load (field src code))))
+  0)
+
+;; True iff tok occurs in s starting at byte i.
+(defn match-at [(s (slice u8)) (i i64) (tok (slice u8))] (-> bool)
+  (let [n (slice-len tok)]
+    (if (> (+ i n) (slice-len s))
+        false
+        (let [(mut j) 0
+              (mut ok) true]
+          (while (and (= ok true) (< j n))
+            (when (!= (slice-get s (+ i j)) (slice-get tok j))
+              (store! (mut ok) false))
+            (store! (mut j) (+ j 1)))
+          (= ok true)))))
+
+;; Index of the first token in toks matching at i, or -1.
+(defn match-any [(s (slice u8)) (i i64) (toks (slice (slice u8)))] (-> i64)
+  (let [n (slice-len toks)
+        (mut k) 0
+        (mut found) -1]
+    (while (and (= found -1) (< k n))
+      (when (match-at s i (slice-get toks k))
+        (store! (mut found) k))
+      (store! (mut k) (+ k 1)))
+    found))
+
+;; True iff byte b is one of the single-char quote delimiters.
+(defn quote-byte? [(b i64) (quotes (slice u8))] (-> bool)
+  (let [n (slice-len quotes)
+        (mut k) 0
+        (mut hit) false]
+    (while (and (= hit false) (< k n))
+      (when (= b (cast i64 (slice-get quotes k)))
+        (store! (mut hit) true))
+      (store! (mut k) (+ k 1)))
+    (= hit true)))
+
+(const ST-NORMAL 0)
+(const ST-BLOCK 1)
+(const ST-STRING 2)
+(const ST-MSTRING 3)
+
+;; Index of byte c within s[from..to), or `to` when absent (memchr, SIMD).
+(defn find-byte [(s (slice u8)) (from i64) (to i64) (c i64)] (-> i64)
+  (if (>= from to)
+      to
+      (let [p (memchr (index (slice-data s) from) (cast i32 c) (- to from))]
+        (if (= (cast i64 p) 0)
+            to
+            (+ from (- (cast i64 p) (cast i64 (index (slice-data s) from))))))))
+
+;; Number of consecutive backslashes immediately before position q (>= lo).
+(defn backslashes-before [(s (slice u8)) (lo i64) (q i64)] (-> i64)
+  (let [(mut j) (- q 1)
+        (mut n) 0]
+    (while (and (>= j lo) (= (cast i64 (slice-get s j)) \u5C))
+      (store! (mut n) (+ n 1))
+      (store! (mut j) (- j 1)))
+    n))
+
+;; Classify every line of bytes as code, comment, or blank, scc-style:
+;; a line with any code is code; else any comment content makes it a comment;
+;; else blank. Strings are tracked so comment tokens inside them don't count.
+;; Single-char strings reset at end of line; multi-quote strings and block
+;; comments carry across lines; docstrings (a multi-quote opening a line)
+;; count as comments.
+;;
+;; The scan is line-oriented: memchr finds each newline, then each state
+;; advances with memchr jumps (string closes, block ends) or a byte-class
+;; table (normal state), so plain code bytes never reach the token matcher.
+(defn count-bytes [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
+  (let [len (slice-len bytes)
+        lcs (load (field spec line-comments))
+        bls (load (field spec blocks))
+        nested (load (field spec nested))
+        quotes (load (field spec quotes))
+        mqs (load (field spec multi-quotes))
+        classes (load (field spec classes))
+        data (slice-data bytes)
+        (mut i) 0
+        (mut state) ST-NORMAL
+        (mut block-idx) 0
+        (mut block-depth) 0
+        (mut quote-ch) 0
+        (mut mq-idx) 0
+        (mut mq-doc) false
+        (mut lines) 0
+        (mut blank) 0
+        (mut comments) 0
+        (mut code) 0]
+    (while (< i len)
+      (let [le (find-byte bytes i len \newline)
+            (mut pos) (load i)
+            (mut saw-code) false
+            (mut saw-comment) false]
+        (while (< pos le)
+          (cond ;; --- inside a block comment: jump between candidate delimiters
+                (= state ST-BLOCK)
+                  (do
+                    (store! (mut saw-comment) true)
+                    (let [bp (index (slice-data bls) block-idx)
+                          e (load (field bp bend))
+                          st (load (field bp bstart))
+                          e0 (cast i64 (slice-get e 0))
+                          s0 (cast i64 (slice-get st 0))
+                          (mut scanning) true]
+                      (while (= scanning true)
+                        (let [he (find-byte bytes pos le e0)
+                              hs (if (= nested true) (find-byte bytes pos le s0) le)
+                              h (if (< hs he) hs he)]
+                          (cond (>= h le) (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                                (match-at bytes h e)
+                                  (do
+                                    (store! (mut block-depth) (- block-depth 1))
+                                    (store! (mut pos) (+ h (slice-len e)))
+                                    (when (= block-depth 0)
+                                      (store! (mut state) ST-NORMAL)
+                                      0)
+                                    (store! (mut scanning) false)
+                                    0)
+                                (and (= nested true) (match-at bytes h st))
+                                  (do
+                                    (store! (mut block-depth) (+ block-depth 1))
+                                    (store! (mut pos) (+ h (slice-len st)))
+                                    0)
+                                :else (do (store! (mut pos) (+ h 1)) 0))))
+                      0))
+                ;; --- inside a single-line string: jump to the closing quote
+                (= state ST-STRING)
+                  (do
+                    (store! (mut saw-code) true)
+                    (let [(mut scanning) true]
+                      (while (= scanning true)
+                        (let [q (find-byte bytes pos le quote-ch)]
+                          (if (>= q le)
+                              (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                              (if (= (% (backslashes-before bytes pos q) 2) 1)
+                                  (do (store! (mut pos) (+ q 1)) 0)  ; escaped quote
+                                  (do
+                                    (store! (mut state) ST-NORMAL)
+                                    (store! (mut pos) (+ q 1))
+                                    (store! (mut scanning) false)
+                                    0)))))
+                      0))
+                ;; --- inside a multiline string: jump to candidate closers
+                (= state ST-MSTRING)
+                  (do
+                    (if (= mq-doc true)
+                        (store! (mut saw-comment) true)
+                        (store! (mut saw-code) true))
+                    (let [tok (slice-get mqs mq-idx)
+                          t0 (cast i64 (slice-get tok 0))
+                          (mut scanning) true]
+                      (while (= scanning true)
+                        (let [h (find-byte bytes pos le t0)]
+                          (if (>= h le)
+                              (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                              (if (and (match-at bytes h tok)
+                                       (!= (% (backslashes-before bytes pos h) 2) 1))
+                                  (do
+                                    (store! (mut state) ST-NORMAL)
+                                    (store! (mut pos) (+ h (slice-len tok)))
+                                    (store! (mut scanning) false)
+                                    0)
+                                  (do (store! (mut pos) (+ h 1)) 0)))))
+                      0))
+                ;; --- normal state: byte-class fast path, token dispatch on hot bytes
+                :else
+                  (do
+                    ;; hot loop: one table load per byte, branchless code-seen bit
+                    (let [(mut hot) false
+                          (mut acc) 0]
+                      (while (and (< pos le) (= hot false))
+                        (let [cls (cast i64 (load (index classes (cast i64 (load (index data pos))))))]
+                          (if (!= cls CLS-HOT)
+                              (do
+                                (store! (mut acc)
+                                        (| acc (- 1 (>> cls 1))))
+                                (store! (mut pos) (+ pos 1))
+                                0)
+                              (store! (mut hot) true))))
+                      (when (!= acc 0) (store! (mut saw-code) true) 0)
+                      0)
+                    (when (< pos le)
+                      (let [bs (block-start-at bytes pos bls)]
+                        (if (>= bs 0)
+                            (do
+                              (store! (mut saw-comment) true)
+                              (store! (mut state) ST-BLOCK)
+                              (store! (mut block-idx) bs)
+                              (store! (mut block-depth) 1)
+                              (store! (mut pos)
+                                      (+ pos (slice-len (load (field (index (slice-data bls) bs) bstart)))))
+                              0)
+                            (let [mq (match-any bytes pos mqs)]
+                              (if (>= mq 0)
+                                  (do
+                                    (if (= saw-code false)
+                                        (do
+                                          (store! (mut mq-doc) true)
+                                          (store! (mut saw-comment) true)
+                                          0)
+                                        (do
+                                          (store! (mut mq-doc) false)
+                                          (store! (mut saw-code) true)
+                                          0))
+                                    (store! (mut state) ST-MSTRING)
+                                    (store! (mut mq-idx) mq)
+                                    (store! (mut pos) (+ pos (slice-len (slice-get mqs mq))))
+                                    0)
+                                  (let [lc (match-any bytes pos lcs)]
+                                    (if (>= lc 0)
+                                        (do
+                                          (store! (mut saw-comment) true)
+                                          (store! (mut pos) le)
+                                          0)
+                                        (if (quote-byte? (cast i64 (load (index data pos))) quotes)
+                                            (do
+                                              (store! (mut saw-code) true)
+                                              (store! (mut state) ST-STRING)
+                                              (store! (mut quote-ch) (cast i64 (load (index data pos))))
+                                              (store! (mut pos) (+ pos 1))
+                                              0)
+                                            (do
+                                              (store! (mut saw-code) true)
+                                              (store! (mut pos) (+ pos 1))
+                                              0))))))))
+                      0)
+                    0)))
+        ;; classify the line
+        (store! (mut lines) (+ lines 1))
+        (cond (= saw-code true) (store! (mut code) (+ code 1))
+              (= saw-comment true) (store! (mut comments) (+ comments 1))
+              (= state ST-BLOCK) (store! (mut comments) (+ comments 1))
+              (and (= state ST-MSTRING) (= mq-doc true)) (store! (mut comments) (+ comments 1))
+              (= state ST-MSTRING) (store! (mut code) (+ code 1))
+              :else (store! (mut blank) (+ blank 1)))
+        (when (= state ST-STRING)  ; unterminated single-line string
+          (store! (mut state) ST-NORMAL)
+          0)
+        (store! (mut i) (+ le 1))))
+    (let [(mut c) (zeroed Counts)]
+      (store! (field (mut c) lines) lines)
+      (store! (field (mut c) blank) blank)
+      (store! (field (mut c) comments) comments)
+      (store! (field (mut c) code) code)
+      c)))
+
+;; Index of the block pair whose start matches at i, or -1.
+(defn block-start-at [(s (slice u8)) (i i64) (bls (slice BlockPair))] (-> i64)
+  (let [n (slice-len bls)
+        (mut k) 0
+        (mut found) -1]
+    (while (and (= found -1) (< k n))
+      (when (match-at s i (load (field (index (slice-data bls) k) bstart)))
+        (store! (mut found) k))
+      (store! (mut k) (+ k 1)))
+    found))

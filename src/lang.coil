@@ -1,0 +1,124 @@
+(module thecount.lang)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.str" :use *)
+(import "coil.os" :as os)
+
+;; One block-comment delimiter pair, e.g. "/*" and "*/".
+(defstruct BlockPair [(bstart (slice u8)) (bend (slice u8))])
+
+;; Everything the counter needs to know about a language.
+;; quotes: each byte is a single-char string delimiter (' " `).
+;; multi-quotes: multi-char string delimiters that may span lines (Python """).
+(defstruct LangSpec
+  [(name (slice u8))
+   (line-comments (slice (slice u8)))
+   (blocks (slice BlockPair))
+   (nested bool)
+   (quotes (slice u8))
+   (multi-quotes (slice (slice u8)))
+   (classes (ptr u8))])  ; 256-entry byte-class table, see rebuild-classes!
+
+(const CLS-PLAIN 0)
+(const CLS-WS 2)
+(const CLS-HOT 3)  ; byte can start a comment/string token: leave the fast path
+
+;; Split s on runs of spaces into freshly allocated token slices (views into s).
+(defn split-tokens [(a (ptr Allocator)) (s (slice u8))] (-> (slice (slice u8)))
+  (let [pieces (str-split a s " ")
+        n (al-len pieces)
+        (mut count) 0
+        (mut k) 0]
+    (while (< k n)
+      (when (> (slice-len (al-get pieces k)) 0)
+        (store! (mut count) (+ count 1)))
+      (store! (mut k) (+ k 1)))
+    (let [out (unwrap-ptr [(slice u8)] (alloc-slice [(slice u8)] a count))
+          (mut w) 0
+          (mut j) 0]
+      (while (< j n)
+        (when (> (slice-len (al-get pieces j)) 0)
+          (store! (index out w) (al-get pieces j))
+          (store! (mut w) (+ w 1)))
+        (store! (mut j) (+ j 1)))
+      (slice-new out count))))
+
+;; Parse "START END START END ..." into block pairs. An odd trailing token is
+;; a configuration error and aborts with a message.
+(defn parse-blocks [(a (ptr Allocator)) (s (slice u8))] (-> (slice BlockPair))
+  (let [toks (split-tokens a s)
+        n (slice-len toks)]
+    (when (!= (% n 2) 0)
+      (println "thecount: block comment tokens must come in start/end pairs: {s}" s)
+      (os/_exit 2)
+      0)
+    (let [np (/ n 2)
+          out (unwrap-ptr [BlockPair] (alloc-slice [BlockPair] a np))
+          (mut k) 0]
+      (while (< k np)
+        (let [(mut b) (zeroed BlockPair)]
+          (store! (field (mut b) bstart) (slice-get toks (* k 2)))
+          (store! (field (mut b) bend) (slice-get toks (+ (* k 2) 1)))
+          (store! (index out k) b))
+        (store! (mut k) (+ k 1)))
+      (slice-new out np))))
+
+;; Build a LangSpec from space-separated token strings — the exact same
+;; format the user config file and `thecount add-lang` use.
+;;   lcs:    "// #"        line comment starters
+;;   blocks: "/* */"       block pairs, start end start end
+;;   quotes: "\"'"         each BYTE is a single-char string delimiter
+;;   mqs:    "\"\"\" '''"  multiline string delimiters
+(defn lang-from-strings [(a (ptr Allocator))
+                         (name (slice u8))
+                         (lcs (slice u8))
+                         (blocks (slice u8))
+                         (nested bool)
+                         (quotes (slice u8))
+                         (mqs (slice u8))] (-> LangSpec)
+  (let [(mut l) (zeroed LangSpec)]
+    (store! (field (mut l) name) name)
+    (store! (field (mut l) line-comments) (split-tokens a lcs))
+    (store! (field (mut l) blocks) (parse-blocks a blocks))
+    (store! (field (mut l) nested) nested)
+    (store! (field (mut l) quotes) quotes)
+    (store! (field (mut l) multi-quotes) (split-tokens a mqs))
+    (rebuild-classes! a (mut l))
+    l))
+
+;; (Re)build the byte-class table from the token fields. Must be called
+;; whenever line-comments/blocks/quotes/multi-quotes change.
+(defn rebuild-classes! [(a (ptr Allocator)) (l (mut LangSpec))] (-> i64)
+  (let [t (unwrap-ptr [u8] (alloc-slice [u8] a 256))
+        (mut k) 0]
+    (while (< k 256)
+      (store! (index t k) (cast u8 CLS-PLAIN))
+      (store! (mut k) (+ k 1)))
+    (store! (index t \space) (cast u8 CLS-WS))
+    (store! (index t \tab) (cast u8 CLS-WS))
+    (store! (index t \return) (cast u8 CLS-WS))
+    (let [lcs (load (field (mut l) line-comments))
+          (mut i) 0]
+      (while (< i (slice-len lcs))
+        (store! (index t (cast i64 (slice-get (slice-get lcs i) 0))) (cast u8 CLS-HOT))
+        (store! (mut i) (+ i 1))))
+    (let [bls (load (field (mut l) blocks))
+          (mut i2) 0]
+      (while (< i2 (slice-len bls))
+        (store! (index t (cast i64 (slice-get (load (field (index (slice-data bls) i2) bstart)) 0)))
+                (cast u8 CLS-HOT))
+        (store! (mut i2) (+ i2 1))))
+    (let [mqs (load (field (mut l) multi-quotes))
+          (mut i3) 0]
+      (while (< i3 (slice-len mqs))
+        (store! (index t (cast i64 (slice-get (slice-get mqs i3) 0))) (cast u8 CLS-HOT))
+        (store! (mut i3) (+ i3 1))))
+    (let [qs (load (field (mut l) quotes))
+          (mut i4) 0]
+      (while (< i4 (slice-len qs))
+        (store! (index t (cast i64 (slice-get qs i4))) (cast u8 CLS-HOT))
+        (store! (mut i4) (+ i4 1))))
+    (store! (field (mut l) classes) t)
+    0))

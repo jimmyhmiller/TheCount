@@ -1,0 +1,73 @@
+(module thecount.registry-test)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.str" :use *)
+(import "thecount.lang" :use *)
+(import "thecount.registry" :use *)
+(import "thecount.counter" :use *)
+
+(defn fresh [] (-> (ptr Registry))
+  (let [r (reg-new (malloc-allocator))]
+    (add-builtins! r)
+    r))
+
+(deftest ext-lookup
+         (let [r (fresh)]
+           (assert (>= (reg-lookup-path r "src/main.rs") 0))
+           (assert (>= (reg-lookup-path r "a/b/c.tar.py") 0))
+           (assert-eq (reg-lookup-path r "noextension") -1)
+           (assert-eq (reg-lookup-path r "photo.jpg") -1)))
+
+(deftest ext-lookup-names
+         (let [r (fresh)]
+           (let [rs (reg-lookup-path r "main.rs")]
+             (assert (str-eq (load (field (reg-spec r rs) name)) "Rust")))
+           (let [up (reg-lookup-path r "MAIN.RS")]
+             (assert (str-eq (load (field (reg-spec r up) name)) "Rust")))))
+
+(deftest filename-lookup
+         (let [r (fresh)]
+           (let [mk (reg-lookup-path r "some/dir/Makefile")]
+             (assert (str-eq (load (field (reg-spec r mk) name)) "Makefile")))
+           (let [dk (reg-lookup-path r "Dockerfile")]
+             (assert (str-eq (load (field (reg-spec r dk) name)) "Dockerfile")))
+           (let [rk (reg-lookup-path r "proj/Rakefile")]
+             (assert (str-eq (load (field (reg-spec r rk) name)) "Ruby")))))
+
+(deftest name-lookup-case-insensitive
+         (let [r (fresh)]
+           (assert (>= (reg-lookup-name r "rust") 0))
+           (assert (>= (reg-lookup-name r "RUST") 0))
+           (assert (>= (reg-lookup-name r "c++ header") 0))
+           (assert-eq (reg-lookup-name r "nope-lang") -1)))
+
+(deftest override-shadows-builtin
+         (let [r (fresh)
+               a (malloc-allocator)
+               custom (lang-from-strings a "MyPython" "#" "" false "\"'" "")]
+           (reg-add! r custom "py")
+           (let [idx (reg-lookup-path r "x.py")]
+             (assert (str-eq (load (field (reg-spec r idx) name)) "MyPython")))))
+
+(deftest dotfile-is-not-extension
+         (let [r (fresh)]
+           ;; .gitignore should not match a "gitignore" extension nor crash
+           (assert-eq (reg-lookup-path r ".gitignore") -1)))
+
+(deftest nim-nested-block-vs-line
+         ;; #[ must win over # so nested block comments count as comments
+         (let [r (fresh)
+               idx (reg-lookup-name r "nim")
+               src "#[ outer\n#[ inner ]#\nstill comment ]#\nx = 1\n"
+               c (count-bytes (reg-spec r idx) src)]
+           (assert-eq (load (field c comments)) 3)
+           (assert-eq (load (field c code)) 1)))
+
+(deftest lua-block-vs-line
+         (let [r (fresh)
+               idx (reg-lookup-name r "lua")
+               src "--[[ block\nstill ]]\nx = 1 -- line\n-- whole line\n"
+               c (count-bytes (reg-spec r idx) src)]
+           (assert-eq (load (field c comments)) 3)
+           (assert-eq (load (field c code)) 1)))

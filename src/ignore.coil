@@ -1,0 +1,188 @@
+(module thecount.ignore)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.str" :use *)
+(import "coil.fs" :use *)
+
+;; One parsed .gitignore line.
+(defstruct IgnoreRule
+  [(pat (slice u8))
+   (negated bool)
+   (dir-only bool)
+   (anchored bool)  ; pattern contains '/', match against dir-relative path
+   (literal bool)])  ; no glob metacharacters: plain compare suffices
+
+;; The rules of one .gitignore, tied to the directory that holds it.
+(defstruct IgnoreCtx
+  [(base (slice u8))  ; dir prefix rules are relative to ("" = walk root)
+   (rules (ptr (ArrayList IgnoreRule)))])
+
+;; Glob match over bytes: * (within segment), ? (single non-/), ** (across /).
+(defn glob-rec [(pat (slice u8)) (s (slice u8)) (pi i64) (si i64)] (-> bool)
+  (let [pl (slice-len pat)
+        sl (slice-len s)]
+    (if (= pi pl)
+        (= si sl)
+        (let [pc (cast i64 (slice-get pat pi))]
+          (cond ;; ** — matches anything, including slashes
+                (and (= pc \*) (and (< (+ pi 1) pl) (= (cast i64 (slice-get pat (+ pi 1))) \*)))
+                  (let [pj (+ pi 2)
+                        ;; "a/**/b" — the zero-directories case skips the following '/'
+                        zero
+                          (if (and (< pj pl) (= (cast i64 (slice-get pat pj)) \/))
+                              (glob-rec pat s (+ pj 1) si)
+                              false)]
+                    (if (= zero true)
+                        true
+                        (let [(mut k) si
+                              (mut hit) false]
+                          (while (and (= hit false) (<= k sl))
+                            (when (glob-rec pat s pj k)
+                              (store! (mut hit) true))
+                            (store! (mut k) (+ k 1)))
+                          (= hit true))))
+                ;; * — any run of non-/ bytes
+                (= pc \*)
+                  (let [(mut k) si
+                        (mut hit) false
+                        (mut stop) false]
+                    (while (and (= hit false) (and (= stop false) (<= k sl)))
+                      (when (glob-rec pat s (+ pi 1) k)
+                        (store! (mut hit) true))
+                      (when (and (< k sl) (= (cast i64 (slice-get s k)) \/))
+                        (store! (mut stop) true))
+                      (store! (mut k) (+ k 1)))
+                    (= hit true))
+                ;; ? — one non-/ byte
+                (= pc \?)
+                  (if (and (< si sl) (!= (cast i64 (slice-get s si)) \/))
+                      (glob-rec pat s (+ pi 1) (+ si 1))
+                      false)
+                :else
+                  (if (and (< si sl) (= (cast i64 (slice-get s si)) pc))
+                      (glob-rec pat s (+ pi 1) (+ si 1))
+                      false))))))
+
+(defn glob-match [(pat (slice u8)) (s (slice u8))] (-> bool)
+  (glob-rec pat s 0 0))
+
+;; Parse one .gitignore's content into rules (in file order).
+(defn parse-ignore [(a (ptr Allocator)) (src (slice u8))] (-> (ptr (ArrayList IgnoreRule)))
+  (let [rules (unwrap-ptr [(ArrayList IgnoreRule)] (create [(ArrayList IgnoreRule)] a))
+        lines (str-split a src "\n")
+        n (al-len lines)
+        (mut k) 0]
+    (store! rules (al-new [IgnoreRule] a))
+    (while (< k n)
+      (let [raw (str-trim (al-get lines k))]
+        (when (and (> (slice-len raw) 0)
+                   (!= (cast i64 (slice-get raw 0)) \u23))  ; '#'
+          (let [(mut p) raw
+                (mut neg) false]
+            (when (= (cast i64 (slice-get p 0)) \u21)  ; '!'
+              (store! (mut neg) true)
+              (store! (mut p) (subslice p 1 (slice-len p)))
+              0)
+            (let [(mut dir-only) false]
+              (let [pn (slice-len p)]
+                (when (and (> pn 0) (= (cast i64 (slice-get p (- pn 1))) \/))
+                  (store! (mut dir-only) true)
+                  (store! (mut p) (subslice p 0 (- pn 1)))
+                  0))
+              ;; leading slash anchors; inner slash also anchors
+              (let [(mut anchored) false]
+                (when (and (> (slice-len p) 0) (= (cast i64 (slice-get p 0)) \/))
+                  (store! (mut anchored) true)
+                  (store! (mut p) (subslice p 1 (slice-len p)))
+                  0)
+                (let [pn2 (slice-len p)
+                      (mut j) 0]
+                  (while (< j pn2)
+                    (when (= (cast i64 (slice-get p j)) \/)
+                      (store! (mut anchored) true))
+                    (store! (mut j) (+ j 1))))
+                (when (> (slice-len p) 0)
+                  (let [(mut rule) (zeroed IgnoreRule)
+                        pn3 (slice-len p)
+                        (mut lit) true
+                        (mut q) 0]
+                    (while (< q pn3)
+                      (let [c (cast i64 (slice-get p q))]
+                        (when (or (= c \*) (or (= c \?) (= c \u5B)))
+                          (store! (mut lit) false)
+                          0))
+                      (store! (mut q) (+ q 1)))
+                    (store! (field (mut rule) pat) p)
+                    (store! (field (mut rule) negated) neg)
+                    (store! (field (mut rule) dir-only) dir-only)
+                    (store! (field (mut rule) anchored) anchored)
+                    (store! (field (mut rule) literal) lit)
+                    (al-push! rules rule))
+                  0))))))
+      (store! (mut k) (+ k 1)))
+    rules))
+
+;; Load dir/.gitignore into an IgnoreCtx; rules list is empty when absent.
+(defn load-ignore-ctx [(a (ptr Allocator)) (dir (slice u8))] (-> IgnoreCtx)
+  (let [path
+          (if (= (slice-len dir) 0)
+              ".gitignore"
+              (match (str-concat a dir "/.gitignore")
+                (Some [s] s)
+                (None [] ".gitignore")))
+        (mut ctx) (zeroed IgnoreCtx)]
+    (store! (field (mut ctx) base) dir)
+    (match (read-file a path)
+      (Ok [src] (store! (field (mut ctx) rules) (parse-ignore a src)))
+      (Err [_]
+           (let [empty (unwrap-ptr [(ArrayList IgnoreRule)] (create [(ArrayList IgnoreRule)] a))]
+             (store! empty (al-new [IgnoreRule] a))
+             (store! (field (mut ctx) rules) empty))))
+    ctx))
+
+(defn basename-of [(path (slice u8))] (-> (slice u8))
+  (let [n (slice-len path)
+        (mut last) -1
+        (mut k) 0]
+    (while (< k n)
+      (when (= (cast i64 (slice-get path k)) \/)
+        (store! (mut last) k))
+      (store! (mut k) (+ k 1)))
+    (subslice path (+ last 1) n)))
+
+;; Is `path` (with basename `name`) ignored by the ctx stack?
+;; Rules apply outermost-first, in file order; the LAST matching rule wins,
+;; which is exactly git's negation semantics for the subset we support.
+(defn ignored? [(ctxs (ptr (ArrayList IgnoreCtx)))
+                (path (slice u8))
+                (name (slice u8))
+                (is-dir bool)] (-> bool)
+  (let [nc (al-len (load ctxs))
+        (mut ign) false
+        (mut c) 0]
+    (while (< c nc)
+      (let [ctx (index (slice-data (al-slice (load ctxs))) c)
+            base (load (field ctx base))
+            bl (slice-len base)
+            rel (if (= bl 0) path (subslice path (+ bl 1) (slice-len path)))
+            rules (load (field ctx rules))
+            nr (al-len (load rules))
+            (mut ri) 0]
+        (while (< ri nr)
+          (let [rule (index (slice-data (al-slice (load rules))) ri)]
+            (when (or (= is-dir true) (= (load (field rule dir-only)) false))
+              (let [pat (load (field rule pat))
+                    target (if (= (load (field rule anchored)) true) rel name)
+                    hit
+                      (if (= (load (field rule literal)) true)
+                          (str-eq pat target)
+                          (glob-match pat target))]
+                (when (= hit true)
+                  (store! (mut ign) (= (load (field rule negated)) false))
+                  0))
+              0))
+          (store! (mut ri) (+ ri 1))))
+      (store! (mut c) (+ c 1)))
+    (= ign true)))

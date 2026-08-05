@@ -1,0 +1,71 @@
+(module thecount.config-test)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.str" :use *)
+(import "thecount.lang" :use *)
+(import "thecount.registry" :use *)
+(import "thecount.counter" :use *)
+(import "thecount.config" :use *)
+
+(defn fresh [] (-> (ptr Registry))
+  (let [r (reg-new (malloc-allocator))]
+    (add-builtins! r)
+    r))
+
+(deftest full-stanza
+         (let [r (fresh)
+               cfg "# my languages\nlang Foo Script\next foo fooz\nline ;;\nblock {- -}\nnested\nquotes \" '\n"]
+           (load-config! r cfg)
+           (let [idx (reg-lookup-path r "x.foo")]
+             (assert (>= idx 0))
+             (assert (str-eq (load (field (reg-spec r idx) name)) "Foo Script"))
+             (let [src ";; comment\n{- b1\n b2 -}\nx = ';; not comment'\n"
+                   c (count-bytes (reg-spec r idx) src)]
+               (assert-eq (load (field c comments)) 3)
+               (assert-eq (load (field c code)) 1)))
+           (assert (>= (reg-lookup-path r "y.FOOZ") 0))))
+
+(deftest like-inherits
+         (let [r (fresh)
+               cfg "lang Jai\nlike c\next jai\n"]
+           (load-config! r cfg)
+           (let [idx (reg-lookup-path r "m.jai")]
+             (assert (>= idx 0))
+             (assert (str-eq (load (field (reg-spec r idx) name)) "Jai"))
+             (let [src "// comment\nint x; /* b */\n"
+                   c (count-bytes (reg-spec r idx) src)]
+               (assert-eq (load (field c comments)) 1)
+               (assert-eq (load (field c code)) 1)))))
+
+(deftest like-with-override
+         (let [r (fresh)
+               cfg "lang Slashless\nlike c\next sfoo\nline #\n"]
+           (load-config! r cfg)
+           (let [idx (reg-lookup-path r "a.sfoo")
+                 src "# comment\n// no longer a comment\n/* still block */\n"
+                 c (count-bytes (reg-spec r idx) src)]
+             (assert-eq (load (field c comments)) 2)
+             (assert-eq (load (field c code)) 1))))
+
+(deftest user-lang-overrides-builtin-ext
+         (let [r (fresh)
+               cfg "lang NotRust\nlike python\next rs\n"]
+           (load-config! r cfg)
+           (let [idx (reg-lookup-path r "main.rs")]
+             (assert (str-eq (load (field (reg-spec r idx) name)) "NotRust")))))
+
+(deftest file-directive
+         (let [r (fresh)
+               cfg "lang Justfile\nlike makefile\nfile Justfile justfile\n"]
+           (load-config! r cfg)
+           (let [idx (reg-lookup-path r "proj/Justfile")]
+             (assert (>= idx 0))
+             (assert (str-eq (load (field (reg-spec r idx) name)) "Justfile")))))
+
+(deftest multiple-stanzas
+         (let [r (fresh)
+               cfg "lang A1\nlike c\next aone\n\nlang B2\nlike python\next btwo\n"]
+           (load-config! r cfg)
+           (assert (>= (reg-lookup-path r "x.aone") 0))
+           (assert (>= (reg-lookup-path r "x.btwo") 0))))

@@ -1,0 +1,143 @@
+(module thecount.output)
+
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.arraylist" :use *)
+(import "coil.str" :use *)
+(import "thecount.counter" :use [Counts])
+
+(extern snprintf :cc c [(ptr i8) i64 (ptr i8) ...] (-> i32))
+(extern qsort :cc c [(ptr Row) i64 i64 (fnptr c [(ptr Row) (ptr Row)] i32)] (-> void))
+
+;; One output row for any of the three tables.
+(defstruct Row
+  [(label (slice u8))  ; language name, file path, or directory
+   (sub (slice u8))  ; language name on --files rows, else ""
+   (files i64)
+   (c Counts)])
+
+(defn mk-row [(label (slice u8)) (sub (slice u8)) (files i64) (c Counts)] (-> Row)
+  (let [(mut r) (zeroed Row)]
+    (store! (field (mut r) label) label)
+    (store! (field (mut r) sub) sub)
+    (store! (field (mut r) files) files)
+    (store! (field (mut r) c) c)
+    r))
+
+(defn i64->str [(a (ptr Allocator)) (v i64)] (-> (slice u8))
+  (let [buf (unwrap-ptr [u8] (alloc-slice [u8] a 32))
+        n (snprintf (cast (ptr i8) buf) 32 c"%lld" v)]
+    (slice-new buf (cast i64 n))))
+
+;; Append s right-aligned in a field of width w (always at least one leading space).
+(defn push-right! [(b (mut StrBuf)) (s (slice u8)) (w i64)] (-> i64)
+  (let [n (slice-len s)
+        (mut pad) (- w n)]
+    (when (< pad 1) (store! (mut pad) 1))
+    (let [(mut k) 0]
+      (while (< k pad)
+        (sb-push-byte! (mut b) (cast u8 \space))
+        (store! (mut k) (+ k 1))))
+    (sb-push-str! (mut b) s)
+    0))
+
+;; Append s left-aligned, padded to width w.
+(defn push-left! [(b (mut StrBuf)) (s (slice u8)) (w i64)] (-> i64)
+  (sb-push-str! (mut b) s)
+  (let [(mut pad) (- w (slice-len s))]
+    (let [(mut k) 0]
+      (while (< k pad)
+        (sb-push-byte! (mut b) (cast u8 \space))
+        (store! (mut k) (+ k 1))))
+    0))
+
+(defn push-repeat! [(b (mut StrBuf)) (ch i64) (n i64)] (-> i64)
+  (let [(mut k) 0]
+    (while (< k n)
+      (sb-push-byte! (mut b) (cast u8 ch))
+      (store! (mut k) (+ k 1))))
+  0)
+
+;; code desc, then label asc
+(defn row-cmp [(x (ptr Row)) (y (ptr Row))] (-> i32)
+  (let [a (load (field (field x c) code))
+        b (load (field (field y c) code))]
+    (cond (> a b) (cast i32 -1)
+          (< a b) (cast i32 1)
+          :else (cast i32 (str-cmp (load (field x label)) (load (field y label)))))))
+
+(const NUM-W 10)
+
+;; Print a full table. with-files / with-sub choose the optional columns.
+(defn print-table [(a (ptr Allocator))
+                   (title (slice u8))
+                   (rows (slice Row))
+                   (with-files bool)
+                   (with-sub bool)] (-> i64)
+  (qsort (slice-data rows) (slice-len rows) (sizeof Row) (fnptr-of row-cmp))
+  (let [n (slice-len rows)
+        (mut label-w) (slice-len title)
+        (mut sub-w) 9
+        (mut k) 0]
+    (while (< k n)
+      (let [r (index (slice-data rows) k)]
+        (when (> (slice-len (load (field r label))) label-w)
+          (store! (mut label-w) (slice-len (load (field r label)))))
+        (when (> (slice-len (load (field r sub))) sub-w)
+          (store! (mut sub-w) (slice-len (load (field r sub))))))
+      (store! (mut k) (+ k 1)))
+    (let [lw (+ label-w 1)
+          total-w
+            (+ (+ lw (* NUM-W 4))
+               (+ (if (= with-sub true) (+ sub-w 1) 0)
+                  (if (= with-files true) NUM-W 0)))]
+      (let [(mut b) (sb-new a)]
+        ;; header
+        (push-left! (mut b) title lw)
+        (when (= with-sub true) (push-left! (mut b) "Language" (+ sub-w 1)))
+        (when (= with-files true) (push-right! (mut b) "Files" NUM-W))
+        (push-right! (mut b) "Lines" NUM-W)
+        (push-right! (mut b) "Blanks" NUM-W)
+        (push-right! (mut b) "Comments" NUM-W)
+        (push-right! (mut b) "Code" NUM-W)
+        (sb-push-byte! (mut b) (cast u8 \newline))
+        (push-repeat! (mut b) \- total-w)
+        (sb-push-byte! (mut b) (cast u8 \newline))
+        ;; rows + running totals
+        (let [(mut t-files) 0
+              (mut t-lines) 0
+              (mut t-blank) 0
+              (mut t-comments) 0
+              (mut t-code) 0
+              (mut j) 0]
+          (while (< j n)
+            (let [r (index (slice-data rows) j)
+                  c (field r c)]
+              (push-left! (mut b) (load (field r label)) lw)
+              (when (= with-sub true) (push-left! (mut b) (load (field r sub)) (+ sub-w 1)))
+              (when (= with-files true)
+                (push-right! (mut b) (i64->str a (load (field r files))) NUM-W))
+              (push-right! (mut b) (i64->str a (load (field c lines))) NUM-W)
+              (push-right! (mut b) (i64->str a (load (field c blank))) NUM-W)
+              (push-right! (mut b) (i64->str a (load (field c comments))) NUM-W)
+              (push-right! (mut b) (i64->str a (load (field c code))) NUM-W)
+              (sb-push-byte! (mut b) (cast u8 \newline))
+              (store! (mut t-files) (+ t-files (load (field r files))))
+              (store! (mut t-lines) (+ t-lines (load (field c lines))))
+              (store! (mut t-blank) (+ t-blank (load (field c blank))))
+              (store! (mut t-comments) (+ t-comments (load (field c comments))))
+              (store! (mut t-code) (+ t-code (load (field c code)))))
+            (store! (mut j) (+ j 1)))
+          ;; total line
+          (push-repeat! (mut b) \- total-w)
+          (sb-push-byte! (mut b) (cast u8 \newline))
+          (push-left! (mut b) "Total" lw)
+          (when (= with-sub true) (push-left! (mut b) "" (+ sub-w 1)))
+          (when (= with-files true) (push-right! (mut b) (i64->str a t-files) NUM-W))
+          (push-right! (mut b) (i64->str a t-lines) NUM-W)
+          (push-right! (mut b) (i64->str a t-blank) NUM-W)
+          (push-right! (mut b) (i64->str a t-comments) NUM-W)
+          (push-right! (mut b) (i64->str a t-code) NUM-W)
+          (sb-push-byte! (mut b) (cast u8 \newline))
+          (print "{s}" (sb-str (mut b)))
+          0)))))
