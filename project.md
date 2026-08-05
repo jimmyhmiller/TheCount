@@ -20,7 +20,7 @@ None of scc's estimation extras (COCOMO, complexity scores) — just counting.
 
     thecount [paths...]          count by language (default: .)
     thecount --files             break up by file
-    thecount --dirs --depth 2    break up by folder
+    thecount --dirs --depth 2    break up by folder AND language
     thecount --hidden            include hidden files
     thecount --no-ignore         don't honor .gitignore
     thecount langs               list every known language + extensions
@@ -65,7 +65,10 @@ an extension a builtin already claims overrides it.
   inline into its own aggregate; aggregates merge at the end. Binary files are
   skipped by NUL-sniff on the first 8000 bytes.
 - `src/walk.coil` — dirent externs (darwin arm64 layout) + path helpers.
-- `src/output.coil` — the three tables (language / file / directory).
+- `src/output.coil` — the three tables (language / file / directory). `--files`
+  and `--dirs` both carry a Language column; `--dirs` holds one row per
+  (directory, language) and orders directories by total code, keeping a
+  directory's languages together (see `dir-row-cmp` / `agg-dir-groups!`).
 - `src/specialize.coil` — compile-time specialization of the counter (below).
 - `src/simd.coil` — 16-byte byte-class bitmasks over `(primitive/llvm-ir …)`.
 

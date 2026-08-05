@@ -247,6 +247,25 @@
             (store! (mut j) (+ j 1)))
           (subslice dir 0 cut)))))
 
+;; --dirs keeps one row per (directory, language), so the rollup map is keyed
+;; on both. \x01 is the separator: it cannot occur in a path or in a language
+;; name, so the two halves can never run together to form a colliding key.
+(defn dir-lang-key [(a (ptr Allocator)) (dir (slice u8)) (lang (slice u8))] (-> (slice u8))
+  (let [dn (slice-len dir)
+        ln (slice-len lang)
+        total (+ (+ dn 1) ln)
+        p (unwrap-ptr [u8] (alloc-slice [u8] a total))
+        (mut k) 0]
+    (while (< k dn)
+      (store! (index p k) (slice-get dir k))
+      (store! (mut k) (+ k 1)))
+    (store! (index p dn) (cast u8 1))
+    (let [(mut j) 0]
+      (while (< j ln)
+        (store! (index p (+ (+ dn 1) j)) (slice-get lang j))
+        (store! (mut j) (+ j 1))))
+    (slice-new p total)))
+
 ;; Record counted results for one file into agg.
 (defn agg-file! [(a (ptr Allocator))
                  (r (ptr Registry))
@@ -263,7 +282,9 @@
               (mk-row (join-path a dir name) (load (field (reg-spec r idx) name)) 1 c))
     0)
   (when (= (load (field agg want-dirs)) true)
-    (let [key (dir-rollup-key dir (load (field agg depth)))
+    (let [dkey (dir-rollup-key dir (load (field agg depth)))
+          lang (load (field (reg-spec r idx) name))
+          key (dir-lang-key a dkey lang)
           dmap (load (field agg dir-idx))
           drows (load (field agg dir-rows))]
       (match (hm-get (load dmap) key)
@@ -275,7 +296,7 @@
         (None []
               (do
                 (hm-put! dmap key (al-len (load drows)))
-                (al-push! drows (mk-row key "" 1 c))
+                (al-push! drows (mk-row dkey lang 1 c))
                 0)))))
   0)
 
@@ -839,8 +860,33 @@
               0))))
     (cast (ptr i8) 0)))
 
+;; Give every --dirs row its directory's total code, which dir-row-cmp uses to
+;; order directories by size while keeping each directory's languages together.
+;; Run once, after all counter aggregates have been merged.
+(defn agg-dir-groups! [(a (ptr Allocator)) (agg (ptr Agg))] (-> i64)
+  (when (= (load (field agg want-dirs)) true)
+    (let [drows (load (field agg dir-rows))
+          n (al-len (load drows))
+          tot (unwrap-ptr [(HashMap (slice u8) i64)] (create [(HashMap (slice u8) i64)] a))]
+      (store! tot (hm-new [(slice u8) i64] a (str-keyops)))
+      (let [(mut i) 0]
+        (while (< i n)
+          (let [rp (index (slice-data (al-slice (load drows))) i)
+                d (load (field rp label))
+                cur (match (hm-get (load tot) d) (Some [v] v) (None [] 0))]
+            (hm-put! tot d (+ cur (load (field (field rp c) code)))))
+          (store! (mut i) (+ i 1))))
+      (let [(mut i) 0]
+        (while (< i n)
+          (let [rp (index (slice-data (al-slice (load drows))) i)
+                d (load (field rp label))]
+            (store! (field rp group) (match (hm-get (load tot) d) (Some [v] v) (None [] 0))))
+          (store! (mut i) (+ i 1))))
+      0))
+  0)
+
 ;; Merge counter aggregate src into dst.
-(defn agg-merge! [(dst (ptr Agg)) (src (ptr Agg))] (-> i64)
+(defn agg-merge! [(a (ptr Allocator)) (dst (ptr Agg)) (src (ptr Agg))] (-> i64)
   (let [nf (slice-len (load (field dst files-per)))
         (mut k) 0]
     (while (< k nf)
@@ -863,7 +909,7 @@
         (mut i) 0]
     (while (< i nd)
       (let [srow (index (slice-data (al-slice (load sdirs))) i)
-            key (load (field srow label))]
+            key (dir-lang-key a (load (field srow label)) (load (field srow sub)))]
         (match (hm-get (load dmap) key)
           (Some [di]
                 (let [rowp (index (slice-data (al-slice (load drows))) di)]
@@ -987,6 +1033,6 @@
         (let [(mut t4) 0]
           (while (< t4 ncounters)
             (thread-join (index cthreads t4))
-            (agg-merge! agg (load (field (index cargs t4) agg)))
+            (agg-merge! a agg (load (field (index cargs t4) agg)))
             (store! (mut t4) (+ t4 1))))))
     agg))

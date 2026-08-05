@@ -12,9 +12,10 @@
 ;; One output row for any of the three tables.
 (defstruct Row
   [(label (slice u8))  ; language name, file path, or directory
-   (sub (slice u8))  ; language name on --files rows, else ""
+   (sub (slice u8))  ; language name on --files and --dirs rows, else ""
    (files i64)
-   (c Counts)])
+   (c Counts)
+   (group i64)])  ; --dirs: the directory's total code, see dir-row-cmp
 
 (defn mk-row [(label (slice u8)) (sub (slice u8)) (files i64) (c Counts)] (-> Row)
   (let [(mut r) (zeroed Row)]
@@ -22,6 +23,7 @@
     (store! (field (mut r) sub) sub)
     (store! (field (mut r) files) files)
     (store! (field (mut r) c) c)
+    (store! (field (mut r) group) 0)
     r))
 
 (defn i64->str [(a (ptr Allocator)) (v i64)] (-> (slice u8))
@@ -66,15 +68,38 @@
           (< a b) (cast i32 1)
           :else (cast i32 (str-cmp (load (field x label)) (load (field y label)))))))
 
+;; --dirs ordering: biggest directory first (by its total code), every row of a
+;; directory kept together, and within a directory the biggest language first.
+;; `group` carries the directory total so the comparison stays local to a row.
+(defn dir-row-cmp [(x (ptr Row)) (y (ptr Row))] (-> i32)
+  (let [gx (load (field x group))
+        gy (load (field y group))]
+    (cond (> gx gy) (cast i32 -1)
+          (< gx gy) (cast i32 1)
+          :else
+            (let [d (str-cmp (load (field x label)) (load (field y label)))]
+              (if (!= d 0)
+                  (cast i32 d)
+                  (let [a (load (field (field x c) code))
+                        b (load (field (field y c) code))]
+                    (cond (> a b) (cast i32 -1)
+                          (< a b) (cast i32 1)
+                          :else
+                            (cast i32
+                                  (str-cmp (load (field x sub))
+                                           (load (field y sub)))))))))))
+
 (const NUM-W 10)
 
-;; Print a full table. with-files / with-sub choose the optional columns.
+;; Print a full table. with-files / with-sub choose the optional columns, and
+;; `cmp` the row order (row-cmp for the flat tables, dir-row-cmp for --dirs).
 (defn print-table [(a (ptr Allocator))
                    (title (slice u8))
                    (rows (slice Row))
                    (with-files bool)
-                   (with-sub bool)] (-> i64)
-  (qsort (slice-data rows) (slice-len rows) (sizeof Row) (fnptr-of row-cmp))
+                   (with-sub bool)
+                   (cmp (fnptr c [(ptr Row) (ptr Row)] i32))] (-> i64)
+  (qsort (slice-data rows) (slice-len rows) (sizeof Row) cmp)
   (let [n (slice-len rows)
         (mut label-w) (slice-len title)
         (mut sub-w) 9

@@ -6,6 +6,7 @@
 (import "thecount.lang" :use *)
 (import "thecount.registry" :use *)
 (import "thecount.counter" :use *)
+(import "thecount.engine" :use [dir-lang-key dir-rollup-key])
 
 (defn fresh [] (-> (ptr Registry))
   (let [r (reg-new (malloc-allocator))]
@@ -71,3 +72,26 @@
                c (count-bytes (reg-spec r idx) src)]
            (assert-eq (load (field c comments)) 3)
            (assert-eq (load (field c code)) 1)))
+
+;; --- --dirs rollup keys -----------------------------------------------------
+;; --dirs keeps one row per (directory, language), so the rollup key has to
+;; separate the two halves unambiguously — otherwise a directory whose name
+;; ends where a language name begins would merge two different rows.
+
+(deftest dir-lang-key-separates-halves
+         (let [a (malloc-allocator)]
+           (assert (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "src" "C")))
+           (assert (= (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "src" "C++")) false))
+           (assert (= (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "srcC" "")) false))
+           (assert (= (str-eq (dir-lang-key a "a/b" "Go") (dir-lang-key a "a" "b/Go")) false))))
+
+(deftest dir-lang-key-handles-root-and-empty
+         (let [a (malloc-allocator)]
+           (assert (= (slice-len (dir-lang-key a "." "Markdown")) 10))
+           (assert (= (str-eq (dir-lang-key a "." "C") (dir-lang-key a "." "D")) false))))
+
+(deftest dir-rollup-key-depth
+         (assert (str-eq (dir-rollup-key "a/b/c" 1) "a"))
+         (assert (str-eq (dir-rollup-key "a/b/c" 2) "a/b"))
+         (assert (str-eq (dir-rollup-key "a/b/c" 9) "a/b/c"))
+         (assert (str-eq (dir-rollup-key "" 1) ".")))
