@@ -101,6 +101,11 @@ the kernel time. The architecture (informed by scc/ripgrep/dumac writeups):
   table drives the in-line hot loop. mmap deliberately not used (slower on
   macOS; ripgrep disables it there too).
 
+Tried and rejected: getattrlistbulk enumeration (darwin). It cut sys time
+35% but nearly doubled wall time on llvm — the bulk call is synchronously
+slower than readdir when you only need names and types; it only pays when
+it replaces per-file stat calls (which thecount never makes).
+
 `src/countbench.coil` is a dev tool: single-thread counting throughput on a
 50 MB corpus (`coil build src/countbench.coil -o /tmp/cb && /tmp/cb`).
 

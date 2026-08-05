@@ -448,6 +448,242 @@
 ;; Walk one directory: honor .gitignore, queue subdirectories, and either
 ;; read the files right here through the open dir fd (small dirs) or hand
 ;; batches of basenames to the walk queue for other readers.
+;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
+;; and gitignore/exclude checks, then queue directories and collect file
+;; basenames. Callers only pass regular files and directories.
+(defn classify-entry! [(a (ptr Allocator))
+                       (pool (ptr Pool))
+                       (chain (ptr CtxNode))
+                       (dir (slice u8))
+                       (hidden bool)
+                       (use-ignore bool)
+                       (names (mut (ArrayList (slice u8))))
+                       (name (slice u8))
+                       (is-dir bool)] (-> i64)
+  (let [namlen (slice-len name)]
+    (if (= namlen 0)
+        0
+        (let [first-b (cast i64 (slice-get name 0))]
+          (cond (str-eq name ".git") 0
+                (and (= first-b \.) (= hidden false)) 0
+                (and (= first-b \.)
+                     (or (= namlen 1)
+                         (and (= namlen 2) (= (cast i64 (slice-get name 1)) \.))))
+                  0
+                (= is-dir true)
+                  (let [full (join-path a dir name)]
+                    (if (or (excluded? (load (field pool excludes)) full)
+                            (and (= use-ignore true)
+                                 (entry-ignored? chain full name true)))
+                        0
+                        (let [(mut it) (zeroed DirItem)]
+                          (store! (field (mut it) path) full)
+                          (store! (field (mut it) chain) chain)
+                          (pool-push! pool it))))
+                :else
+                  (let [full (join-path a dir name)]
+                    (if (or (excluded? (load (field pool excludes)) full)
+                            (and (= use-ignore true)
+                                 (entry-ignored? chain full name false)))
+                        0
+                        (do (al-push! (mut names) (copy-str a name)) 0))))))))
+
+;; readdir enumerator (linux, and the portable fallback).
+(defn enum-readdir! [(a (ptr Allocator))
+                     (pool (ptr Pool))
+                     (dp (ptr i8))
+                     (chain (ptr CtxNode))
+                     (dir (slice u8))
+                     (hidden bool)
+                     (use-ignore bool)
+                     (names (mut (ArrayList (slice u8))))] (-> i64)
+  (let [(mut going) true]
+    (while (= going true)
+      (let [ent (readdir dp)]
+        (if (= (cast i64 ent) 0)
+            (do (store! (mut going) false) 0)
+            (let [namlen (dirent-name-len ent)
+                  dtype (cast i64 (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
+                  name (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF)) namlen)]
+              (if (or (= dtype DT-DIR) (= dtype DT-REG))
+                  (classify-entry! a
+                                   pool
+                                   chain
+                                   dir
+                                   hidden
+                                   use-ignore
+                                   (mut names)
+                                   name
+                                   (= dtype DT-DIR))
+                  0)))))
+    0))
+
+;; Walk one directory: honor .gitignore, queue subdirectories, and either
+;; read the files right here through the open dir fd (small dirs) or hand
+;; batches of basenames to the walk queue for other readers.
+;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
+;; and gitignore/exclude checks, then queue directories and collect file
+;; basenames. Callers only pass regular files and directories.
+(defn classify-entry! [(a (ptr Allocator))
+                       (pool (ptr Pool))
+                       (chain (ptr CtxNode))
+                       (dir (slice u8))
+                       (hidden bool)
+                       (use-ignore bool)
+                       (names (mut (ArrayList (slice u8))))
+                       (name (slice u8))
+                       (is-dir bool)] (-> i64)
+  (let [namlen (slice-len name)]
+    (if (= namlen 0)
+        0
+        (let [first-b (cast i64 (slice-get name 0))]
+          (cond (str-eq name ".git") 0
+                (and (= first-b \.) (= hidden false)) 0
+                (and (= first-b \.)
+                     (or (= namlen 1)
+                         (and (= namlen 2) (= (cast i64 (slice-get name 1)) \.))))
+                  0
+                (= is-dir true)
+                  (let [full (join-path a dir name)]
+                    (if (or (excluded? (load (field pool excludes)) full)
+                            (and (= use-ignore true)
+                                 (entry-ignored? chain full name true)))
+                        0
+                        (let [(mut it) (zeroed DirItem)]
+                          (store! (field (mut it) path) full)
+                          (store! (field (mut it) chain) chain)
+                          (pool-push! pool it))))
+                :else
+                  (let [full (join-path a dir name)]
+                    (if (or (excluded? (load (field pool excludes)) full)
+                            (and (= use-ignore true)
+                                 (entry-ignored? chain full name false)))
+                        0
+                        (do (al-push! (mut names) (copy-str a name)) 0))))))))
+
+;; readdir enumerator (linux, and the portable fallback).
+(defn enum-readdir! [(a (ptr Allocator))
+                     (pool (ptr Pool))
+                     (dp (ptr i8))
+                     (chain (ptr CtxNode))
+                     (dir (slice u8))
+                     (hidden bool)
+                     (use-ignore bool)
+                     (names (mut (ArrayList (slice u8))))] (-> i64)
+  (let [(mut going) true]
+    (while (= going true)
+      (let [ent (readdir dp)]
+        (if (= (cast i64 ent) 0)
+            (do (store! (mut going) false) 0)
+            (let [namlen (dirent-name-len ent)
+                  dtype (cast i64 (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
+                  name (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF)) namlen)]
+              (if (or (= dtype DT-DIR) (= dtype DT-REG))
+                  (classify-entry! a
+                                   pool
+                                   chain
+                                   dir
+                                   hidden
+                                   use-ignore
+                                   (mut names)
+                                   name
+                                   (= dtype DT-DIR))
+                  0)))))
+    0))
+
+;; getattrlistbulk enumerator (darwin): batches of entries with name and
+;; object type in one syscall per ~128KB, without creating child vnodes.
+;; Entry layout (4-byte aligned): u32 total length, attribute_set_t (20
+;; bytes, from ATTR_CMN_RETURNED_ATTRS), attrreference_t for ATTR_CMN_NAME
+;; (i32 offset relative to the reference itself, u32 length incl NUL),
+;; u32 ATTR_CMN_OBJTYPE.
+(defstruct AttrList
+  [(bitmapcount u16)
+   (reserved u16)
+   (commonattr u32)
+   (volattr u32)
+   (dirattr u32)
+   (fileattr u32)
+   (forkattr u32)])
+
+(extern getattrlistbulk :cc c [i32 (ptr AttrList) (ptr u8) i64 u64] (-> i32))
+
+(const ATTR-CMN-RETURNED-ATTRS 2147483648)  ; 0x80000000
+(const ATTR-CMN-NAME 1)
+(const ATTR-CMN-OBJTYPE 8)
+(const VREG 1)
+(const VDIR 2)
+(const BULK-BUF-SIZE 131072)
+
+(defn enum-bulk! [(a (ptr Allocator))
+                  (pool (ptr Pool))
+                  (fd i32)
+                  (chain (ptr CtxNode))
+                  (dir (slice u8))
+                  (hidden bool)
+                  (use-ignore bool)
+                  (names (mut (ArrayList (slice u8))))
+                  (buf (ptr u8))] (-> i64)
+  (os-pick
+           ;; linux: never called (readdir path is selected at compile time), and a
+           ;; body would fail to link — fail loudly if it is ever reached.
+           (do
+             (println "thecount: enum-bulk! is darwin-only")
+             (os/_exit 70)
+             0)
+           (let [al (unwrap-ptr [AttrList] (create [AttrList] a))]
+             (store! (field al bitmapcount) (cast u16 5))
+             (store! (field al reserved) (cast u16 0))
+             (store! (field al commonattr)
+                     (cast u32 (+ ATTR-CMN-RETURNED-ATTRS (+ ATTR-CMN-NAME ATTR-CMN-OBJTYPE))))
+             (store! (field al volattr) (cast u32 0))
+             (store! (field al dirattr) (cast u32 0))
+             (store! (field al fileattr) (cast u32 0))
+             (store! (field al forkattr) (cast u32 0))
+             (let [(mut going) true]
+               (while (= going true)
+                 (let [n (cast i64 (getattrlistbulk fd al buf BULK-BUF-SIZE 0))]
+                   (if (<= n 0)
+                       (do (store! (mut going) false) 0)
+                       (let [(mut off) 0
+                             (mut e) 0]
+                         (while (< e n)
+                           (let [entlen (cast i64 (load (cast (ptr u32) (index buf off))))
+                                 q (+ off 24)  ; skip length u32 + attribute_set_t
+                                 nameoff (cast i64 (load (cast (ptr i32) (index buf q))))
+                                 rawlen (cast i64 (load (cast (ptr u32) (index buf (+ q 4)))))
+                                 objtype (cast i64 (load (cast (ptr u32) (index buf (+ q 8)))))]
+                             (when (> rawlen 0)
+                               (let [(mut nl) (- rawlen 1)
+                                     base (index buf (+ q nameoff))]
+                                 ;; some filesystems pad the name; trim trailing NULs
+                                 (while (and (> nl 0) (= (cast i64 (load (index base (- nl 1)))) 0))
+                                   (store! (mut nl) (- nl 1)))
+                                 (when (or (= objtype VREG) (= objtype VDIR))
+                                   (classify-entry! a
+                                                    pool
+                                                    chain
+                                                    dir
+                                                    hidden
+                                                    use-ignore
+                                                    (mut names)
+                                                    (slice-new base nl)
+                                                    (= objtype VDIR))
+                                   0)
+                                 0)
+                               0)
+                             (store! (mut off) (+ off entlen)))
+                           (store! (mut e) (+ e 1)))
+                         0)))))
+             0)))
+
+;; Walk one directory: honor .gitignore, queue subdirectories, and either
+;; read the files right here through the open dir fd (small dirs) or hand
+;; batches of basenames to the walk queue for other readers.
+;; Enumeration is plain readdir on every platform: getattrlistbulk was tried
+;; (2026-08-04) and cut sys time 35% but nearly DOUBLED wall time on llvm —
+;; the bulk call is synchronously slower than readdir when only names and
+;; types are needed; it only pays when it replaces per-file stat calls.
 (defn process-dir! [(a (ptr Allocator))
                     (pool (ptr Pool))
                     (item DirItem)] (-> i64)
@@ -455,8 +691,9 @@
         (mut chain) (load (field item chain))
         hidden (load (field pool hidden))
         use-ignore (load (field pool use-ignore))
-        dp (opendir (str->cstr a (if (= (slice-len dir) 0) "." dir)))]
-    (if (= (cast i64 dp) 0)
+        cdir (str->cstr a (if (= (slice-len dir) 0) "." dir))
+        handle (cast i64 (opendir cdir))]
+    (if (= handle 0)
         0
         (let [(mut names) (al-new [(slice u8)] a)]
           (when (= use-ignore true)
@@ -471,49 +708,13 @@
                   0)
                 0)
               0))
-          (let [(mut going) true]
-            (while (= going true)
-              (let [ent (readdir dp)]
-                (if (= (cast i64 ent) 0)
-                    (do (store! (mut going) false) 0)
-                    (let [namlen (dirent-name-len ent)
-                          dtype (cast i64 (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
-                          name (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF)) namlen)]
-                      (if (= namlen 0)
-                          0
-                          (let [first-b (cast i64 (slice-get name 0))]
-                            (cond (str-eq name ".git") 0
-                                  (and (= first-b \.) (= hidden false)) 0
-                                  (and (= first-b \.)
-                                       (or (= namlen 1)
-                                           (and (= namlen 2)
-                                                (= (cast i64 (slice-get name 1)) \.))))
-                                    0
-                                  (= dtype DT-DIR)
-                                    (let [full (join-path a dir name)]
-                                      (if (or (excluded? (load (field pool excludes)) full)
-                                              (and (= use-ignore true)
-                                                   (entry-ignored? chain full name true)))
-                                          0
-                                          (let [(mut it) (zeroed DirItem)]
-                                            (store! (field (mut it) path) full)
-                                            (store! (field (mut it) chain) chain)
-                                            (pool-push! pool it))))
-                                  (= dtype DT-REG)
-                                    (let [full (join-path a dir name)]
-                                      (if (or (excluded? (load (field pool excludes)) full)
-                                              (and (= use-ignore true)
-                                                   (entry-ignored? chain full name false)))
-                                          0
-                                          (do (al-push! (mut names) (copy-str a name)) 0)))
-                                  :else 0)))))))
-            0)
+          (enum-readdir! a pool (cast (ptr i8) handle) chain dir hidden use-ignore (mut names))
           ;; small dirs: read inline through the already-open fd.
           ;; big dirs: share batches of basenames with the walk queue.
-          (let [nfl (al-len names)]
+          (let [nfl (al-len names)
+                dfd (dirfd (cast (ptr i8) handle))]
             (if (<= nfl FILE-BATCH)
-                (let [dfd (dirfd dp)
-                      (mut j) 0]
+                (let [(mut j) 0]
                   (while (< j nfl)
                     (reader-file! a pool dfd dir (al-get names j))
                     (store! (mut j) (+ j 1)))
@@ -532,7 +733,7 @@
                         (pool-push! pool it))
                       (store! (mut o) hi)))
                   0)))
-          (closedir dp)
+          (closedir (cast (ptr i8) handle))
           0))))
 
 ;; Read a queued batch: open its directory once, openat each basename.
