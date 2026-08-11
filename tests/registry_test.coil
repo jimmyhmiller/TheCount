@@ -6,7 +6,8 @@
 (import "thecount.lang" :use *)
 (import "thecount.registry" :use *)
 (import "thecount.counter" :use *)
-(import "thecount.engine" :use [dir-lang-key dir-rollup-key])
+(import "coil.arraylist" :use *)
+(import "thecount.engine" :use [dir-lang-key dir-rollup-key dir-base-len walk-roots-of])
 
 (defn fresh [] (-> (ptr Registry))
   (let [r (reg-new (malloc-allocator))]
@@ -91,7 +92,43 @@
            (assert (= (str-eq (dir-lang-key a "." "C") (dir-lang-key a "." "D")) false))))
 
 (deftest dir-rollup-key-depth
-         (assert (str-eq (dir-rollup-key "a/b/c" 1) "a"))
-         (assert (str-eq (dir-rollup-key "a/b/c" 2) "a/b"))
-         (assert (str-eq (dir-rollup-key "a/b/c" 9) "a/b/c"))
-         (assert (str-eq (dir-rollup-key "" 1) ".")))
+         (assert (str-eq (dir-rollup-key "a/b/c" 0 1) "a"))
+         (assert (str-eq (dir-rollup-key "a/b/c" 0 2) "a/b"))
+         (assert (str-eq (dir-rollup-key "a/b/c" 0 9) "a/b/c"))
+         (assert (str-eq (dir-rollup-key "" 0 1) ".")))
+
+;; depth is counted from the walk root, so `thecount src` groups by src's own
+;; subdirectories rather than putting everything in one "src" row
+(deftest dir-rollup-key-root-relative
+         (assert (str-eq (dir-rollup-key "src" 3 1) "src"))
+         (assert (str-eq (dir-rollup-key "src/bus" 3 1) "src/bus"))
+         (assert (str-eq (dir-rollup-key "src/bus/cc" 3 1) "src/bus"))
+         (assert (str-eq (dir-rollup-key "src/bus/cc" 3 2) "src/bus/cc"))
+         (assert (str-eq (dir-rollup-key "a/b/c" 3 1) "a/b/c")))
+
+(defn roots3 [(a (ptr Allocator))
+              (x (slice u8))
+              (y (slice u8))
+              (z (slice u8))] (-> (ptr (ArrayList (slice u8))))
+  (let [l (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))]
+    (store! l (al-new [(slice u8)] a))
+    (al-push! l x)
+    (al-push! l y)
+    (al-push! l z)
+    l))
+
+(deftest dir-base-len-longest-component-match
+         (let [a (malloc-allocator)
+               rs (roots3 a "src" "src/bus" "vendor")]
+           (assert-eq (dir-base-len rs "src") 3)
+           (assert-eq (dir-base-len rs "src/tui") 3)
+           (assert-eq (dir-base-len rs "src/bus/cc") 7)
+           (assert-eq (dir-base-len rs "srcX/y") 0)
+           (assert-eq (dir-base-len rs "other") 0)))
+
+(deftest walk-roots-dot-becomes-empty
+         (let [a (malloc-allocator)
+               w (walk-roots-of a (roots3 a "." "src" "vendor"))]
+           (assert-eq (slice-len (al-get (load w) 0)) 0)
+           (assert (str-eq (al-get (load w) 1) "src"))
+           (assert-eq (dir-base-len w "anything/here") 0)))

@@ -128,7 +128,8 @@
    (dir-rows (ptr (ArrayList Row)))
    (dir-idx (ptr (HashMap (slice u8) i64)))
    (want-dirs bool)
-   (depth i64)])
+   (depth i64)
+   (roots (ptr (ArrayList (slice u8))))])  ; walk roots, for root-relative depth
 
 ;; Immutable chain of .gitignore contexts, innermost first. Built during the
 ;; walk, only ever read afterwards, so it is safe to share across workers.
@@ -175,7 +176,8 @@
                (n-specs i64)
                (want-files bool)
                (want-dirs bool)
-               (depth i64)] (-> (ptr Agg))
+               (depth i64)
+               (roots (ptr (ArrayList (slice u8))))] (-> (ptr Agg))
   (let [agg (unwrap-ptr [Agg] (create [Agg] a))
         files-per (unwrap-ptr [i64] (alloc-slice [i64] a n-specs))
         counts-per (unwrap-ptr [Counts] (alloc-slice [Counts] a n-specs))
@@ -198,6 +200,7 @@
     (store! (field agg dir-idx) dir-idx)
     (store! (field agg want-dirs) want-dirs)
     (store! (field agg depth) depth)
+    (store! (field agg roots) roots)
     agg))
 
 ;; NUL byte in the first 8000 bytes = binary, skip it (same heuristic as scc).
@@ -213,39 +216,53 @@
       (store! (mut k) (+ k 1)))
     (= bin true)))
 
-;; Directory rollup key: the first `depth` segments of the directory part
-;; of path; "." for files at the root.
-(defn dir-key [(path (slice u8)) (depth i64)] (-> (slice u8))
-  (let [n (slice-len path)
-        (mut last-slash) -1
-        (mut k) 0]
-    (while (< k n)
-      (when (= (cast i64 (slice-get path k)) \/)
-        (store! (mut last-slash) k))
-      (store! (mut k) (+ k 1)))
-    (if (= last-slash -1)
-        "."
-        (dir-rollup-key (subslice path 0 last-slash) depth))))
-
-;; First `depth` segments of a directory path; "." for the walk root.
-(defn dir-rollup-key [(dir (slice u8)) (depth i64)] (-> (slice u8))
-  (let [dn (slice-len dir)]
-    (if (= dn 0)
-        "."
-        (let [(mut segs) 0
-              (mut cut) dn
-              (mut j) 0
-              (mut done) false]
-          (while (and (= done false) (< j dn))
-            (when (= (cast i64 (slice-get dir j)) \/)
-              (store! (mut segs) (+ segs 1))
-              (when (= segs depth)
-                (store! (mut cut) j)
-                (store! (mut done) true)
-                0)
+;; Length of the longest walk root `dir` sits under, or 0 for none. Depth is
+;; counted from there, so `thecount src --dirs` breaks src up by ITS own
+;; subdirectories instead of collapsing everything under one "src" row.
+;; A "." root walks with an empty prefix, which lands on 0 by itself.
+(defn dir-base-len [(roots (ptr (ArrayList (slice u8)))) (dir (slice u8))] (-> i64)
+  (let [n (al-len (load roots))
+        dn (slice-len dir)
+        (mut best) 0
+        (mut i) 0]
+    (while (< i n)
+      (let [rt (al-get (load roots) i)
+            rn (slice-len rt)]
+        (when (and (> rn best) (<= rn dn))
+          ;; a root matches only on a whole path component, so "srcX" is
+          ;; never treated as living under the root "src"
+          (let [bounded (if (= rn dn) true (= (cast i64 (slice-get dir rn)) \/))]
+            (when (and (= bounded true) (str-eq (subslice dir 0 rn) rt))
+              (store! (mut best) rn)
               0)
-            (store! (mut j) (+ j 1)))
-          (subslice dir 0 cut)))))
+            0)
+          0))
+      (store! (mut i) (+ i 1)))
+    best))
+
+;; Rollup key for a directory: its first `depth` segments below the walk root
+;; that starts it (`base` bytes long), labeled with the full path so rows stay
+;; unambiguous across several roots. "." for the walk root itself under ".".
+(defn dir-rollup-key [(dir (slice u8)) (base i64) (depth i64)] (-> (slice u8))
+  (let [dn (slice-len dir)]
+    (cond (= dn 0) "."
+          (<= dn base) dir  ; the root directory itself
+          :else
+            (let [start (if (= base 0) 0 (+ base 1))
+                  (mut segs) 0
+                  (mut cut) dn
+                  (mut j) start
+                  (mut done) false]
+              (while (and (= done false) (< j dn))
+                (when (= (cast i64 (slice-get dir j)) \/)
+                  (store! (mut segs) (+ segs 1))
+                  (when (= segs depth)
+                    (store! (mut cut) j)
+                    (store! (mut done) true)
+                    0)
+                  0)
+                (store! (mut j) (+ j 1)))
+              (subslice dir 0 cut)))))
 
 ;; --dirs keeps one row per (directory, language), so the rollup map is keyed
 ;; on both. \x01 is the separator: it cannot occur in a path or in a language
@@ -282,7 +299,9 @@
               (mk-row (join-path a dir name) (load (field (reg-spec r idx) name)) 1 c))
     0)
   (when (= (load (field agg want-dirs)) true)
-    (let [dkey (dir-rollup-key dir (load (field agg depth)))
+    (let [dkey (dir-rollup-key dir
+                               (dir-base-len (load (field agg roots)) dir)
+                               (load (field agg depth)))
           lang (load (field (reg-spec r idx) name))
           key (dir-lang-key a dkey lang)
           dmap (load (field agg dir-idx))
@@ -924,6 +943,21 @@
       (store! (mut i) (+ i 1))))
   0)
 
+;; The roots as the walk sees them: "." becomes "" so its paths stay bare
+;; ("src/x", not "./src/x"). Read-only once counting starts, so every worker
+;; aggregate can share the list.
+(defn walk-roots-of [(a (ptr Allocator))
+                     (roots (ptr (ArrayList (slice u8))))] (-> (ptr (ArrayList (slice u8))))
+  (let [out (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        n (al-len (load roots))
+        (mut i) 0]
+    (store! out (al-new [(slice u8)] a))
+    (while (< i n)
+      (let [rt (al-get (load roots) i)]
+        (al-push! out (if (str-eq rt ".") "" rt)))
+      (store! (mut i) (+ i 1)))
+    out))
+
 (defn env-int [(a (ptr Allocator)) (name (slice u8)) (dflt i64)] (-> i64)
   (match (os/env-get a name)
     (Ok [opt]
@@ -946,7 +980,8 @@
                  (use-ignore bool)
                  (excludes (ptr (ArrayList (slice u8))))] (-> (ptr Agg))
   (let [n-specs (reg-count r)
-        agg (new-agg a n-specs want-files want-dirs depth)
+        wroots (walk-roots-of a roots)
+        agg (new-agg a n-specs want-files want-dirs depth wroots)
         pool (unwrap-ptr [Pool] (create [Pool] a))
         queue (unwrap-ptr [(ArrayList DirItem)] (create [(ArrayList DirItem)] a))
         cqueue (unwrap-ptr [(ArrayList CountMsg)] (create [(ArrayList CountMsg)] a))
@@ -984,8 +1019,7 @@
     (let [nr (al-len (load roots))
           (mut i) 0]
       (while (< i nr)
-        (let [root0 (al-get (load roots) i)
-              root (if (str-eq root0 ".") "" root0)]
+        (let [root (al-get (load wroots) i)]
           (let [dp (opendir (str->cstr a (if (= (slice-len root) 0) "." root)))]
             (if (!= (cast i64 dp) 0)
                 (do
@@ -1012,7 +1046,7 @@
             cargs (unwrap-ptr [WorkerArg] (alloc-slice [WorkerArg] a ncounters))
             (mut t) 0]
         (while (< t ncounters)
-          (let [wagg (new-agg a n-specs want-files want-dirs depth)
+          (let [wagg (new-agg a n-specs want-files want-dirs depth wroots)
                 wa (index cargs t)]
             (store! (field wa pool) pool)
             (store! (field wa agg) wagg)

@@ -12,7 +12,9 @@ scc doesn't have:
   JSON, no source dive. Define a language from scratch with a handful of
   tokens, or inherit everything from an existing one with `like`.
 - **Per-folder rollups.** `--dirs` (with `--depth N`) breaks counts up by
-  directory, not just by language or file.
+  directory, not just by language or file. Depth is measured from each path
+  you name, so `thecount src --dirs` splits src up by its own subdirectories
+  instead of reporting one lump row for src.
 
 None of scc's estimation extras (COCOMO, complexity scores) — just counting.
 
