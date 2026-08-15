@@ -19,7 +19,7 @@
            (load-config! r cfg)
            (let [idx (reg-lookup-path r "x.foo")]
              (assert (>= idx 0))
-             (assert (str-eq (load (field (reg-spec r idx) name)) "Foo Script"))
+             (assert (= (load (field (reg-spec r idx) name)) "Foo Script"))
              (let [src ";; comment\n{- b1\n b2 -}\nx = ';; not comment'\n"
                    c (count-bytes (reg-spec r idx) src)]
                (assert-eq (load (field c comments)) 3)
@@ -32,7 +32,7 @@
            (load-config! r cfg)
            (let [idx (reg-lookup-path r "m.jai")]
              (assert (>= idx 0))
-             (assert (str-eq (load (field (reg-spec r idx) name)) "Jai"))
+             (assert (= (load (field (reg-spec r idx) name)) "Jai"))
              (let [src "// comment\nint x; /* b */\n"
                    c (count-bytes (reg-spec r idx) src)]
                (assert-eq (load (field c comments)) 1)
@@ -53,7 +53,7 @@
                cfg "lang NotRust\nlike python\next rs\n"]
            (load-config! r cfg)
            (let [idx (reg-lookup-path r "main.rs")]
-             (assert (str-eq (load (field (reg-spec r idx) name)) "NotRust")))))
+             (assert (= (load (field (reg-spec r idx) name)) "NotRust")))))
 
 (deftest file-directive
          (let [r (fresh)
@@ -61,7 +61,7 @@
            (load-config! r cfg)
            (let [idx (reg-lookup-path r "proj/Justfile")]
              (assert (>= idx 0))
-             (assert (str-eq (load (field (reg-spec r idx) name)) "Justfile")))))
+             (assert (= (load (field (reg-spec r idx) name)) "Justfile")))))
 
 (deftest multiple-stanzas
          (let [r (fresh)

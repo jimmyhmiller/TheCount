@@ -19,30 +19,24 @@
 ;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
 (defn config-path [(a (ptr Allocator))] (-> (slice u8))
   (let [(mut out) ""]
-    (match (os/env-get a "THECOUNT_LANGS")
-      (Ok [opt]
-          (match opt
-            (Some [s] (do (store! (mut out) (os/owned-string-slice s)) 0))
-            (None [] 0)))
-      (Err [_] 0))
+    (try (let [opt (try-or! (os/env-get a "THECOUNT_LANGS") 0)]
+           (match opt
+             (Some [s] (do (store! (mut out) (os/owned-string-slice s)) 0))
+             (None [] 0))))
     (if (> (slice-len out) 0)
         out
-        (match (os/env-get a "HOME")
-          (Ok [opt]
-              (match opt
-                (Some [h]
-                      (cat a (os/owned-string-slice h) "/.config/thecount/languages"))
-                (None [] "")))
-          (Err [_] "")))))
+        (try (let [opt (try-or! (os/env-get a "HOME") "")]
+               (match opt
+                 (Some [h]
+                       (cat a (os/owned-string-slice h) "/.config/thecount/languages"))
+                 (None [] "")))))))
 
 ;; Read the whole config file; "" when it does not exist.
 (defn config-read [(a (ptr Allocator))] (-> (slice u8))
   (let [path (config-path a)]
     (if (= (slice-len path) 0)
         ""
-        (match (read-file a path)
-          (Ok [data] data)
-          (Err [_] "")))))
+        (try (let [data (try-or! (read-file a path) "")] data)))))
 
 ;; Overwrite the config file with data, creating parent directories.
 (defn config-write [(a (ptr Allocator)) (data (slice u8))] (-> i64)
@@ -52,23 +46,21 @@
       (os/_exit 2)
       0)
     ;; best-effort mkdir -p of the two parents
-    (match (os/env-get a "HOME")
-      (Ok [opt]
-          (match opt
-            (Some [h]
-                  (let [home (os/owned-string-slice h)]
-                    (mkdir (str->cstr a (cat a home "/.config")) 493)
-                    (mkdir (str->cstr a (cat a home "/.config/thecount")) 493)
-                    0))
-            (None [] 0)))
-      (Err [_] 0))
-    (match (write-file a path data)
-      (Ok [_] 0)
-      (Err [_]
-           (do
-             (println "thecount: failed to write config file")
-             (os/_exit 2)
-             0)))))
+    (try (let [opt (try-or! (os/env-get a "HOME") 0)]
+           (match opt
+             (Some [h]
+                   (let [home (os/owned-string-slice h)]
+                     (mkdir (str->cstr a (cat a home "/.config")) 493)
+                     (mkdir (str->cstr a (cat a home "/.config/thecount")) 493)
+                     0))
+             (None [] 0))))
+    (try (let [_
+                 (try-or! (write-file a path data)
+                          (do
+                            (println "thecount: failed to write config file")
+                            (os/_exit 2)
+                            0))]
+           0))))
 
 (defn strip-cr [(line (slice u8))] (-> (slice u8))
   (let [n (slice-len line)]
@@ -159,7 +151,7 @@
           (let [toks (split-tokens a line)
                 d (slice-get toks 0)
                 rest (rest-of-line line)]
-            (cond (str-eq d "lang")
+            (cond (= d "lang")
                     (do
                       (flush-pending! r pend)
                       (store! pend (zeroed Pending))
@@ -171,30 +163,30 @@
                       0)
                   (= (load (field pend active)) false)
                     (do (println "thecount: config directive before any 'lang': {s}" line) 0)
-                  (str-eq d "like") (do (store! (field pend like) rest) 0)
-                  (str-eq d "ext") (do (store! (field pend exts) rest) 0)
-                  (str-eq d "file") (do (store! (field pend files) rest) 0)
-                  (str-eq d "line")
+                  (= d "like") (do (store! (field pend like) rest) 0)
+                  (= d "ext") (do (store! (field pend exts) rest) 0)
+                  (= d "file") (do (store! (field pend files) rest) 0)
+                  (= d "line")
                     (do
                       (store! (field pend lcs) rest)
                       (store! (field pend has-lcs) true)
                       0)
-                  (str-eq d "block")
+                  (= d "block")
                     (do
                       (store! (field pend blocks) rest)
                       (store! (field pend has-blocks) true)
                       0)
-                  (str-eq d "nested")
+                  (= d "nested")
                     (do
                       (store! (field pend nested) true)
                       (store! (field pend has-nested) true)
                       0)
-                  (str-eq d "quotes")
+                  (= d "quotes")
                     (do
                       (store! (field pend quotes) (strip-spaces a rest))
                       (store! (field pend has-quotes) true)
                       0)
-                  (str-eq d "multi")
+                  (= d "multi")
                     (do
                       (store! (field pend mqs) rest)
                       (store! (field pend has-mqs) true)
@@ -231,8 +223,8 @@
       (let [line (strip-cr (al-get lines k))
             trimmed (str-trim line)
             toks (split-tokens a trimmed)]
-        (if (and (> (slice-len toks) 0) (str-eq (slice-get toks 0) "lang"))
-            (if (str-eq (lower a (rest-of-line trimmed)) want)
+        (if (and (> (slice-len toks) 0) (= (slice-get toks 0) "lang"))
+            (if (= (lower a (rest-of-line trimmed)) want)
                 (do
                   (store! (mut skipping) true)
                   (store! (mut found) true)

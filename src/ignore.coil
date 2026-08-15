@@ -134,12 +134,12 @@
                 (None [] ".gitignore")))
         (mut ctx) (zeroed IgnoreCtx)]
     (store! (field (mut ctx) base) dir)
-    (match (read-file a path)
-      (Ok [src] (store! (field (mut ctx) rules) (parse-ignore a src)))
-      (Err [_]
-           (let [empty (unwrap-ptr [(ArrayList IgnoreRule)] (create [(ArrayList IgnoreRule)] a))]
-             (store! empty (al-new [IgnoreRule] a))
-             (store! (field (mut ctx) rules) empty))))
+    (try (let [src
+                 (try-or! (read-file a path)
+                          (let [empty (unwrap-ptr [(ArrayList IgnoreRule)] (create [(ArrayList IgnoreRule)] a))]
+                            (store! empty (al-new [IgnoreRule] a))
+                            (store! (field (mut ctx) rules) empty)))]
+           (store! (field (mut ctx) rules) (parse-ignore a src))))
     ctx))
 
 (defn basename-of [(path (slice u8))] (-> (slice u8))
@@ -177,7 +177,7 @@
                     target (if (= (load (field rule anchored)) true) rel name)
                     hit
                       (if (= (load (field rule literal)) true)
-                          (str-eq pat target)
+                          (= pat target)
                           (glob-match pat target))]
                 (when (= hit true)
                   (store! (mut ign) (= (load (field rule negated)) false))

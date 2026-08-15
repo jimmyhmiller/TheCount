@@ -22,7 +22,7 @@
 (const REPS 40)
 
 (defn now-ms [] (-> i64)
-  (match (time/monotonic-now-ms) (Ok [v] v) (Err [_] 0)))
+  (try (let [v (try-or! (time/monotonic-now-ms) 0)] v)))
 
 ;; MB/s for `reps` passes over `data`, using the interpreter when `use-generic`.
 (defn bench [(r (ptr Registry)) (idx i64) (data (slice u8)) (use-generic bool)] (-> i64)
@@ -54,18 +54,16 @@
         (let [idx (reg-lookup-path r path)]
           (if (= idx -1)
               (do (println "countbench: no language for {s}" path) 1)
-              (match (read-file a path)
-                (Err [_] (do (println "countbench: cannot read {s}" path) 1))
-                (Ok [data]
-                    (let [spec (reg-spec r idx)]
-                      (println "{s}: {d} bytes as {s}"
-                               path
-                               (slice-len data)
-                               (load (field spec name)))
-                      (println "interpreter (count-bytes):")
-                      (let [g (bench r idx data true)]
-                        (println "specialized:")
-                        (let [s (bench r idx data false)]
-                          (println "specialized takes {d}% of interpreter time"
-                                   (/ (* s 100) (if (= g 0) 1 g)))
-                          0))))))))))
+              (try (let [data (try-or! (read-file a path) (do (println "countbench: cannot read {s}" path) 1))]
+                     (let [spec (reg-spec r idx)]
+                       (println "{s}: {d} bytes as {s}"
+                                path
+                                (slice-len data)
+                                (load (field spec name)))
+                       (println "interpreter (count-bytes):")
+                       (let [g (bench r idx data true)]
+                         (println "specialized:")
+                         (let [s (bench r idx data false)]
+                           (println "specialized takes {d}% of interpreter time"
+                                    (/ (* s 100) (if (= g 0) 1 g)))
+                           0))))))))))

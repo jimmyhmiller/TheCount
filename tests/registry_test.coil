@@ -7,7 +7,7 @@
 (import "thecount.registry" :use *)
 (import "thecount.counter" :use *)
 (import "coil.arraylist" :use *)
-(import "thecount.engine" :use [dir-lang-key dir-rollup-key dir-base-len walk-roots-of])
+(import "thecount.engine" :use [dir-lang-key dir-rollup-key dir-row-key dir-base-len walk-roots-of])
 
 (defn fresh [] (-> (ptr Registry))
   (let [r (reg-new (malloc-allocator))]
@@ -24,18 +24,18 @@
 (deftest ext-lookup-names
          (let [r (fresh)]
            (let [rs (reg-lookup-path r "main.rs")]
-             (assert (str-eq (load (field (reg-spec r rs) name)) "Rust")))
+             (assert (= (load (field (reg-spec r rs) name)) "Rust")))
            (let [up (reg-lookup-path r "MAIN.RS")]
-             (assert (str-eq (load (field (reg-spec r up) name)) "Rust")))))
+             (assert (= (load (field (reg-spec r up) name)) "Rust")))))
 
 (deftest filename-lookup
          (let [r (fresh)]
            (let [mk (reg-lookup-path r "some/dir/Makefile")]
-             (assert (str-eq (load (field (reg-spec r mk) name)) "Makefile")))
+             (assert (= (load (field (reg-spec r mk) name)) "Makefile")))
            (let [dk (reg-lookup-path r "Dockerfile")]
-             (assert (str-eq (load (field (reg-spec r dk) name)) "Dockerfile")))
+             (assert (= (load (field (reg-spec r dk) name)) "Dockerfile")))
            (let [rk (reg-lookup-path r "proj/Rakefile")]
-             (assert (str-eq (load (field (reg-spec r rk) name)) "Ruby")))))
+             (assert (= (load (field (reg-spec r rk) name)) "Ruby")))))
 
 (deftest name-lookup-case-insensitive
          (let [r (fresh)]
@@ -50,7 +50,7 @@
                custom (lang-from-strings a "MyPython" "#" "" false "\"'" "")]
            (reg-add! r custom "py")
            (let [idx (reg-lookup-path r "x.py")]
-             (assert (str-eq (load (field (reg-spec r idx) name)) "MyPython")))))
+             (assert (= (load (field (reg-spec r idx) name)) "MyPython")))))
 
 (deftest dotfile-is-not-extension
          (let [r (fresh)]
@@ -81,30 +81,36 @@
 
 (deftest dir-lang-key-separates-halves
          (let [a (malloc-allocator)]
-           (assert (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "src" "C")))
-           (assert (= (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "src" "C++")) false))
-           (assert (= (str-eq (dir-lang-key a "src" "C") (dir-lang-key a "srcC" "")) false))
-           (assert (= (str-eq (dir-lang-key a "a/b" "Go") (dir-lang-key a "a" "b/Go")) false))))
+           (assert (= (dir-lang-key a "src" "C") (dir-lang-key a "src" "C")))
+           (assert (= (= (dir-lang-key a "src" "C") (dir-lang-key a "src" "C++")) false))
+           (assert (= (= (dir-lang-key a "src" "C") (dir-lang-key a "srcC" "")) false))
+           (assert (= (= (dir-lang-key a "a/b" "Go") (dir-lang-key a "a" "b/Go")) false))))
 
 (deftest dir-lang-key-handles-root-and-empty
          (let [a (malloc-allocator)]
            (assert (= (slice-len (dir-lang-key a "." "Markdown")) 10))
-           (assert (= (str-eq (dir-lang-key a "." "C") (dir-lang-key a "." "D")) false))))
+           (assert (= (= (dir-lang-key a "." "C") (dir-lang-key a "." "D")) false))))
 
 (deftest dir-rollup-key-depth
-         (assert (str-eq (dir-rollup-key "a/b/c" 0 1) "a"))
-         (assert (str-eq (dir-rollup-key "a/b/c" 0 2) "a/b"))
-         (assert (str-eq (dir-rollup-key "a/b/c" 0 9) "a/b/c"))
-         (assert (str-eq (dir-rollup-key "" 0 1) ".")))
+         (assert (= (dir-rollup-key "a/b/c" 0 1) "a"))
+         (assert (= (dir-rollup-key "a/b/c" 0 2) "a/b"))
+         (assert (= (dir-rollup-key "a/b/c" 0 9) "a/b/c"))
+         (assert (= (dir-rollup-key "" 0 1) ".")))
 
 ;; depth is counted from the walk root, so `thecount src` groups by src's own
 ;; subdirectories rather than putting everything in one "src" row
 (deftest dir-rollup-key-root-relative
-         (assert (str-eq (dir-rollup-key "src" 3 1) "src"))
-         (assert (str-eq (dir-rollup-key "src/bus" 3 1) "src/bus"))
-         (assert (str-eq (dir-rollup-key "src/bus/cc" 3 1) "src/bus"))
-         (assert (str-eq (dir-rollup-key "src/bus/cc" 3 2) "src/bus/cc"))
-         (assert (str-eq (dir-rollup-key "a/b/c" 3 1) "a/b/c")))
+         (assert (= (dir-rollup-key "src" 3 1) "src"))
+         (assert (= (dir-rollup-key "src/bus" 3 1) "src/bus"))
+         (assert (= (dir-rollup-key "src/bus/cc" 3 1) "src/bus"))
+         (assert (= (dir-rollup-key "src/bus/cc" 3 2) "src/bus/cc"))
+         (assert (= (dir-rollup-key "a/b/c" 3 1) "a/b/c")))
+
+(deftest dir-row-key-makes-named-root-explicit
+         (let [a (malloc-allocator)]
+           (assert (= (dir-row-key a "src" 3 1) "src/."))
+           (assert (= (dir-row-key a "src/bus" 3 1) "src/bus"))
+           (assert (= (dir-row-key a "" 0 1) "."))))
 
 (defn roots3 [(a (ptr Allocator))
               (x (slice u8))
@@ -130,5 +136,5 @@
          (let [a (malloc-allocator)
                w (walk-roots-of a (roots3 a "." "src" "vendor"))]
            (assert-eq (slice-len (al-get (load w) 0)) 0)
-           (assert (str-eq (al-get (load w) 1) "src"))
+           (assert (= (al-get (load w) 1) "src"))
            (assert-eq (dir-base-len w "anything/here") 0)))

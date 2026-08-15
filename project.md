@@ -14,7 +14,8 @@ scc doesn't have:
 - **Per-folder rollups.** `--dirs` (with `--depth N`) breaks counts up by
   directory, not just by language or file. Depth is measured from each path
   you name, so `thecount src --dirs` splits src up by its own subdirectories
-  instead of reporting one lump row for src.
+  instead of reporting one lump row for src. Files directly in a named root
+  are labeled `src/.`, distinguishing them from rows such as `src/lib`.
 
 None of scc's estimation extras (COCOMO, complexity scores) — just counting.
 

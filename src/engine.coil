@@ -232,7 +232,7 @@
           ;; a root matches only on a whole path component, so "srcX" is
           ;; never treated as living under the root "src"
           (let [bounded (if (= rn dn) true (= (cast i64 (slice-get dir rn)) \/))]
-            (when (and (= bounded true) (str-eq (subslice dir 0 rn) rt))
+            (when (and (= bounded true) (= (subslice dir 0 rn) rt))
               (store! (mut best) rn)
               0)
             0)
@@ -263,6 +263,18 @@
                   0)
                 (store! (mut j) (+ j 1)))
               (subslice dir 0 cut)))))
+
+;; Label files directly inside an explicitly named walk root as "root/.".
+;; Without the dot, a root containing no subdirectories looks like --dirs
+;; merely echoed the argument instead of showing where those files live.
+;; The current-directory root is already displayed as ".".
+(defn dir-row-key [(a (ptr Allocator))
+                   (dir (slice u8))
+                   (base i64)
+                   (depth i64)] (-> (slice u8))
+  (if (and (> base 0) (<= (slice-len dir) base))
+      (join-path a dir ".")
+      (dir-rollup-key dir base depth)))
 
 ;; --dirs keeps one row per (directory, language), so the rollup map is keyed
 ;; on both. \x01 is the separator: it cannot occur in a path or in a language
@@ -299,9 +311,8 @@
               (mk-row (join-path a dir name) (load (field (reg-spec r idx) name)) 1 c))
     0)
   (when (= (load (field agg want-dirs)) true)
-    (let [dkey (dir-rollup-key dir
-                               (dir-base-len (load (field agg roots)) dir)
-                               (load (field agg depth)))
+    (let [base (dir-base-len (load (field agg roots)) dir)
+          dkey (dir-row-key a dir base (load (field agg depth)))
           lang (load (field (reg-spec r idx) name))
           key (dir-lang-key a dkey lang)
           dmap (load (field agg dir-idx))
@@ -385,7 +396,7 @@
                       target (if (= (load (field rule anchored)) true) rel name)
                       hit
                         (if (= (load (field rule literal)) true)
-                            (str-eq pat target)
+                            (= pat target)
                             (glob-match pat target))]
                   (when (= hit true)
                     (store! (mut v) (if (= (load (field rule negated)) true) -1 1))
@@ -504,7 +515,7 @@
     (if (= namlen 0)
         0
         (let [first-b (cast i64 (slice-get name 0))]
-          (cond (str-eq name ".git") 0
+          (cond (= name ".git") 0
                 (and (= first-b \.) (= hidden false)) 0
                 (and (= first-b \.)
                      (or (= namlen 1)
@@ -577,7 +588,7 @@
     (if (= namlen 0)
         0
         (let [first-b (cast i64 (slice-get name 0))]
-          (cond (str-eq name ".git") 0
+          (cond (= name ".git") 0
                 (and (= first-b \.) (= hidden false)) 0
                 (and (= first-b \.)
                      (or (= namlen 1)
@@ -954,20 +965,18 @@
     (store! out (al-new [(slice u8)] a))
     (while (< i n)
       (let [rt (al-get (load roots) i)]
-        (al-push! out (if (str-eq rt ".") "" rt)))
+        (al-push! out (if (= rt ".") "" rt)))
       (store! (mut i) (+ i 1)))
     out))
 
 (defn env-int [(a (ptr Allocator)) (name (slice u8)) (dflt i64)] (-> i64)
-  (match (os/env-get a name)
-    (Ok [opt]
-        (match opt
-          (Some [ts]
-                (match (str-parse-int (os/owned-string-slice ts))
-                  (Some [tv] tv)
-                  (None [] dflt)))
-          (None [] dflt)))
-    (Err [_] dflt)))
+  (try (let [opt (try-or! (os/env-get a name) dflt)]
+         (match opt
+           (Some [ts]
+                 (match (str-parse-int (os/owned-string-slice ts))
+                   (Some [tv] tv)
+                   (None [] dflt)))
+           (None [] dflt)))))
 
 ;; Count everything under roots. Returns the merged aggregate.
 (defn count-all [(a (ptr Allocator))

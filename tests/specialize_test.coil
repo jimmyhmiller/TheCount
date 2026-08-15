@@ -24,7 +24,7 @@
         (mut k) 0
         (mut found) -1]
     (while (and (< k n) (= found -1))
-      (when (str-eq (spec-row-name k) name)
+      (when (= (spec-row-name k) name)
         (store! (mut found) k))
       (store! (mut k) (+ k 1)))
     (load found)))
