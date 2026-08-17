@@ -90,11 +90,11 @@
         (mut i) 0
         (mut c) 0]
     (while (< i n)
-      (while (and (< i n) (= (cast i64 (slice-get s i)) \space))
+      (while (and (< i n) (= (cast i64 (slice-get s i)) #\space))
         (store! (mut i) (+ i 1)))
       (when (< i n)
         (store! (mut c) (+ c 1))
-        (while (and (< i n) (!= (cast i64 (slice-get s i)) \space))
+        (while (and (< i n) (!= (cast i64 (slice-get s i)) #\space))
           (store! (mut i) (+ i 1)))
         0))
     (load c)))
@@ -106,12 +106,12 @@
         (mut seen) 0
         (mut res) -1]
     (while (and (< i n) (= res -1))
-      (while (and (< i n) (= (cast i64 (slice-get s i)) \space))
+      (while (and (< i n) (= (cast i64 (slice-get s i)) #\space))
         (store! (mut i) (+ i 1)))
       (when (< i n)
         (when (= seen k) (store! (mut res) (load i)) 0)
         (store! (mut seen) (+ seen 1))
-        (while (and (< i n) (!= (cast i64 (slice-get s i)) \space))
+        (while (and (< i n) (!= (cast i64 (slice-get s i)) #\space))
           (store! (mut i) (+ i 1)))
         0))
     (load res)))
@@ -123,7 +123,7 @@
     (if (< st 0)
         0
         (let [(mut j) st]
-          (while (and (< j n) (!= (cast i64 (slice-get s j)) \space))
+          (while (and (< j n) (!= (cast i64 (slice-get s j)) #\space))
             (store! (mut j) (+ j 1)))
           (- (load j) st)))))
 
@@ -334,32 +334,26 @@
                     (mqs (slice u8))
                     (b i64)] (-> bool)
   (let [(mut hit) false]
-    (let [n (ct-tok-count lcs)
-          (mut k) 0]
-      (while (< k n)
+    (let [n (ct-tok-count lcs)]
+      (for [k 0 n]
         (when (= (cast i64 (slice-get lcs (ct-tok-start lcs k))) b)
           (store! (mut hit) true)
-          0)
-        (store! (mut k) (+ k 1))))
+          0)))
     (when (> (ct-tok-count blocks) 0)
       (when (= (cast i64 (slice-get blocks (ct-tok-start blocks 0))) b)
         (store! (mut hit) true)
         0)
       0)
-    (let [n (ct-tok-count mqs)
-          (mut k) 0]
-      (while (< k n)
+    (let [n (ct-tok-count mqs)]
+      (for [k 0 n]
         (when (= (cast i64 (slice-get mqs (ct-tok-start mqs k))) b)
           (store! (mut hit) true)
-          0)
-        (store! (mut k) (+ k 1))))
-    (let [n (slice-len quotes)
-          (mut k) 0]
-      (while (< k n)
+          0)))
+    (let [n (slice-len quotes)]
+      (for [k 0 n]
         (when (= (cast i64 (slice-get quotes k)) b)
           (store! (mut hit) true)
-          0)
-        (store! (mut k) (+ k 1))))
+          0)))
     (load hit)))
 
 ;; One `(v16-eq-mask P b)` per distinct hot byte, to be or'd together.
@@ -444,7 +438,7 @@
                  (store! (mut acc) 1)))
            (while (all (< pos le) (= acc 0))
              (let [b (cast i64 (load (index data pos)))]
-               (if (any (= b \space) (= b \tab) (= b \return))
+               (if (any (= b #\space) (= b #\tab) (= b #\return))
                    (store! (mut pos) (+ pos 1))
                    (store! (mut acc) 1))))
            (when (!= acc 0) (store! (mut saw-code) true) 0)
@@ -489,7 +483,7 @@
              (mut n-comments) 0
              (mut n-code) 0]
          (while (< i len)
-           (let [le (find-byte bytes i len \newline)
+           (let [le (find-byte bytes i len #\newline)
                  (mut pos) (load i)
                  (mut saw-code) false
                  (mut saw-comment) false]
@@ -523,12 +517,11 @@
                    `((when (= state ST-STRING) (store! (mut state) ST-NORMAL) 0))
                    `())
              (store! (mut i) (+ le 1))))
-         (let [(mut c) (zeroed Counts)]
-           (store! (field (mut c) lines) n-lines)
-           (store! (field (mut c) blank) n-blank)
-           (store! (field (mut c) comments) n-comments)
-           (store! (field (mut c) code) n-code)
-           c)))))
+         (Counts
+           :lines n-lines
+           :blank n-blank
+           :comments n-comments
+           :code n-code)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Table accessors, so thecount.registry can register these rows without

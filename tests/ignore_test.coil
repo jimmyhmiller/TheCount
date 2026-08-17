@@ -26,9 +26,9 @@
   (let [a (malloc-allocator)
         ctxs (unwrap-ptr [(ArrayList IgnoreCtx)] (create [(ArrayList IgnoreCtx)] a))
         (mut ctx) (zeroed IgnoreCtx)]
-    (store! ctxs (al-new [IgnoreCtx] a))
-    (store! (field (mut ctx) base) "")
-    (store! (field (mut ctx) rules) (parse-ignore a src))
+    (set! ctxs (al-new [IgnoreCtx] a))
+    (set! (.base (mut ctx)) "")
+    (set! (.rules (mut ctx)) (parse-ignore a src))
     (al-push! ctxs ctx)
     ctxs))
 

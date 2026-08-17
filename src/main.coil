@@ -14,10 +14,11 @@
 (import "thecount.counter" :use *)
 (import "thecount.output" :use *)
 (import "thecount.engine" :use *)
+(import "thecount.util" :use *)
 
 (defn strip-trailing-slashes [(s (slice u8))] (-> (slice u8))
   (let [(mut n) (slice-len s)]
-    (while (and (> n 1) (= (cast i64 (slice-get s (- n 1))) \/))
+    (while (and (> n 1) (= (cast i64 (slice-get s (- n 1))) #\/))
       (store! (mut n) (- n 1)))
     (subslice s 0 n)))
 
@@ -61,13 +62,10 @@
                  (use-ignore bool)
                  (excludes (ptr (ArrayList (slice u8))))] (-> i64)
   (let [n-specs (reg-count r)
-        clean-roots (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))]
-    (store! clean-roots (al-new [(slice u8)] a))
-    (let [nr (al-len (load roots))
-          (mut i) 0]
-      (while (< i nr)
-        (al-push! clean-roots (strip-trailing-slashes (al-get (load roots) i)))
-        (store! (mut i) (+ i 1))))
+        clean-roots (new-list a (slice u8))]
+    (for root
+      (iter (load roots))
+      (al-push! clean-roots (strip-trailing-slashes root)))
     (let [agg (count-all a r clean-roots want-files want-dirs depth hidden use-ignore excludes)]
       ;; emit
       (cond (= want-files true)
@@ -80,47 +78,35 @@
             (= want-dirs true)
               (do
                 (agg-dir-groups! a agg)
-                (print-table a
-                             "Directory"
-                             (al-slice (load (load (field agg dir-rows))))
-                             true
-                             true
-                             (fnptr-of dir-row-cmp)))
+                (print-dir-tree a (al-slice (load (load (field agg dir-rows))))))
             :else
-              (let [rows (unwrap-ptr [(ArrayList Row)] (create [(ArrayList Row)] a))
+              (let [rows (new-list a Row)
                     files-per (slice-data (load (field agg files-per)))
                     counts-per (slice-data (load (field agg counts-per)))]
-                (store! rows (al-new [Row] a))
-                (let [(mut s) 0]
-                  (while (< s n-specs)
-                    (when (> (load (index files-per s)) 0)
-                      (al-push! rows
-                                (mk-row (load (field (reg-spec r s) name))
-                                        ""
-                                        (load (index files-per s))
-                                        (load (index counts-per s))))
-                      0)
-                    (store! (mut s) (+ s 1))))
+                (for [s 0 n-specs]
+                  (when (> (load (index files-per s)) 0)
+                    (al-push! rows
+                              (mk-row (load (field (reg-spec r s) name))
+                                      ""
+                                      (load (index files-per s))
+                                      (load (index counts-per s))))
+                    0))
                 (print-table a "Language" (al-slice (load rows)) true false (fnptr-of row-cmp)))))))
 
 (defn run-langs [(a (ptr Allocator)) (r (ptr Registry))] (-> i64)
   (let [n (reg-count r)
-        exts (unwrap-ptr [StrBuf] (alloc-slice [StrBuf] a n))
-        (mut k) 0]
-    (while (< k n)
-      (store! (index exts k) (sb-new a))
-      (store! (mut k) (+ k 1)))
+        exts (unwrap-ptr [StrBuf] (alloc-slice [StrBuf] a n))]
+    (for [k 0 n]
+      (store! (index exts k) (sb-new a)))
     (hm-for [ext idx (load (field r by-ext))]
             (let [bp (index exts idx)]
               (when (> (slice-len (sb-str (load bp))) 0)
                 (sb-push-str! bp " "))
               (sb-push-str! bp ext)))
-    (let [(mut j) 0]
-      (while (< j n)
-        (let [nm (load (field (reg-spec r j) name))
-              es (sb-str (load (index exts j)))]
-          (println "{s}: {s}" nm es))
-        (store! (mut j) (+ j 1))))
+    (for [j 0 n]
+      (let [nm (load (field (reg-spec r j) name))
+            es (sb-str (load (index exts j)))]
+        (println "{s}: {s}" nm es)))
     0))
 
 (defn push-directive! [(b (mut StrBuf)) (d (slice u8)) (val (slice u8))] (-> i64)
@@ -194,12 +180,10 @@
       (os/_exit 2)
       0)
     ;; join the args so multi-word names work unquoted
-    (let [(mut b) (sb-new a)
-          (mut k) 0]
-      (while (< k n)
+    (let [(mut b) (sb-new a)]
+      (for [k 0 n]
         (when (> k 0) (sb-push-str! (mut b) " ") 0)
-        (sb-push-str! (mut b) (al-get (load args) k))
-        (store! (mut k) (+ k 1)))
+        (sb-push-str! (mut b) (al-get (load args) k)))
       (let [name (sb-str b)
             src (config-read a)]
         (match (remove-stanza a src name)
@@ -220,19 +204,16 @@
 (defn main [(argc i32) (argv (ptr (ptr i8)))] (-> i64)
   (let [a (malloc-allocator)
         nargs (cast i64 argc)
-        roots (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
-        rest (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        roots (new-list a (slice u8))
+        rest (new-list a (slice u8))
         (mut want-files) false
         (mut want-dirs) false
         (mut depth) 1
         (mut hidden) false
         (mut use-ignore) true
-        excludes (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))
+        excludes (new-list a (slice u8))
         (mut mode) 0  ; 0=count 1=add-lang 2=langs 3=help 4=remove-lang
         (mut k) 1]
-    (store! roots (al-new [(slice u8)] a))
-    (store! rest (al-new [(slice u8)] a))
-    (store! excludes (al-new [(slice u8)] a))
     (while (< k nargs)
       (let [arg (cstr->str (load (index argv k)))]
         (cond (and (= k 1) (= arg "add-lang")) (do (store! (mut mode) 1) 0)

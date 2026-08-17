@@ -5,6 +5,9 @@
 (import "coil.arraylist" :use *)
 (import "coil.str" :use *)
 (import "coil.os" :as os)
+(import "coil.primitive" :as primitive)
+(import "coil.mem" :use [mem-fill])
+(import "thecount.util" :use *)
 
 ;; One block-comment delimiter pair, e.g. "/*" and "*/".
 (defstruct BlockPair [(bstart (slice u8)) (bend (slice u8))])
@@ -29,20 +32,18 @@
 (defn split-tokens [(a (ptr Allocator)) (s (slice u8))] (-> (slice (slice u8)))
   (let [pieces (str-split a s " ")
         n (al-len pieces)
-        (mut count) 0
-        (mut k) 0]
-    (while (< k n)
-      (when (> (slice-len (al-get pieces k)) 0)
-        (store! (mut count) (+ count 1)))
-      (store! (mut k) (+ k 1)))
+        (mut count) 0]
+    (for piece
+      (iter pieces)
+      (when (> (slice-len piece) 0)
+        (store! (mut count) (+ count 1))))
     (let [out (unwrap-ptr [(slice u8)] (alloc-slice [(slice u8)] a count))
-          (mut w) 0
-          (mut j) 0]
-      (while (< j n)
-        (when (> (slice-len (al-get pieces j)) 0)
-          (store! (index out w) (al-get pieces j))
-          (store! (mut w) (+ w 1)))
-        (store! (mut j) (+ j 1)))
+          (mut w) 0]
+      (for piece
+        (iter pieces)
+        (when (> (slice-len piece) 0)
+          (store! (index out w) piece)
+          (store! (mut w) (+ w 1))))
       (slice-new out count))))
 
 ;; Parse "START END START END ..." into block pairs. An odd trailing token is
@@ -55,14 +56,11 @@
       (os/_exit 2)
       0)
     (let [np (/ n 2)
-          out (unwrap-ptr [BlockPair] (alloc-slice [BlockPair] a np))
-          (mut k) 0]
-      (while (< k np)
-        (let [(mut b) (zeroed BlockPair)]
-          (store! (field (mut b) bstart) (slice-get toks (* k 2)))
-          (store! (field (mut b) bend) (slice-get toks (+ (* k 2) 1)))
-          (store! (index out k) b))
-        (store! (mut k) (+ k 1)))
+          out (unwrap-ptr [BlockPair] (alloc-slice [BlockPair] a np))]
+      (for [k 0 np]
+        (store! (index out k)
+                (BlockPair :bstart (slice-get toks (* k 2))
+                  :bend (slice-get toks (+ (* k 2) 1)))))
       (slice-new out np))))
 
 ;; Build a LangSpec from space-separated token strings — the exact same
@@ -78,47 +76,42 @@
                          (nested bool)
                          (quotes (slice u8))
                          (mqs (slice u8))] (-> LangSpec)
-  (let [(mut l) (zeroed LangSpec)]
-    (store! (field (mut l) name) name)
-    (store! (field (mut l) line-comments) (split-tokens a lcs))
-    (store! (field (mut l) blocks) (parse-blocks a blocks))
-    (store! (field (mut l) nested) nested)
-    (store! (field (mut l) quotes) quotes)
-    (store! (field (mut l) multi-quotes) (split-tokens a mqs))
+  (let [(mut l)
+          (zeroed-with LangSpec
+                       (name name)
+                       (line-comments (split-tokens a lcs))
+                       (blocks (parse-blocks a blocks))
+                       (nested nested)
+                       (quotes quotes)
+                       (multi-quotes (split-tokens a mqs)))]
     (rebuild-classes! a (mut l))
     l))
 
 ;; (Re)build the byte-class table from the token fields. Must be called
 ;; whenever line-comments/blocks/quotes/multi-quotes change.
 (defn rebuild-classes! [(a (ptr Allocator)) (l (mut LangSpec))] (-> i64)
-  (let [t (unwrap-ptr [u8] (alloc-slice [u8] a 256))
-        (mut k) 0]
-    (while (< k 256)
-      (store! (index t k) (cast u8 CLS-PLAIN))
-      (store! (mut k) (+ k 1)))
-    (store! (index t \space) (cast u8 CLS-WS))
-    (store! (index t \tab) (cast u8 CLS-WS))
-    (store! (index t \return) (cast u8 CLS-WS))
-    (let [lcs (load (field (mut l) line-comments))
-          (mut i) 0]
-      (while (< i (slice-len lcs))
-        (store! (index t (cast i64 (slice-get (slice-get lcs i) 0))) (cast u8 CLS-HOT))
-        (store! (mut i) (+ i 1))))
-    (let [bls (load (field (mut l) blocks))
-          (mut i2) 0]
-      (while (< i2 (slice-len bls))
-        (store! (index t (cast i64 (slice-get (load (field (index (slice-data bls) i2) bstart)) 0)))
-                (cast u8 CLS-HOT))
-        (store! (mut i2) (+ i2 1))))
-    (let [mqs (load (field (mut l) multi-quotes))
-          (mut i3) 0]
-      (while (< i3 (slice-len mqs))
-        (store! (index t (cast i64 (slice-get (slice-get mqs i3) 0))) (cast u8 CLS-HOT))
-        (store! (mut i3) (+ i3 1))))
-    (let [qs (load (field (mut l) quotes))
-          (mut i4) 0]
-      (while (< i4 (slice-len qs))
-        (store! (index t (cast i64 (slice-get qs i4))) (cast u8 CLS-HOT))
-        (store! (mut i4) (+ i4 1))))
-    (store! (field (mut l) classes) t)
+  (let [t (unwrap-ptr [u8] (alloc-slice [u8] a 256))]
+    (mem-fill t (cast u8 CLS-PLAIN) 256)
+    (set! (index t #\space) (cast u8 CLS-WS))
+    (set! (index t #\tab) (cast u8 CLS-WS))
+    (set! (index t #\return) (cast u8 CLS-WS))
+    (let [lcs (.line-comments (mut l))]
+      (for lc
+        (iter lcs)
+        (store! (index t (cast i64 (slice-get lc 0))) (cast u8 CLS-HOT))))
+    (let [bls (.blocks (mut l))]
+      (for block
+        (iter bls)
+        (let [(mut b) block]
+          (store! (index t (cast i64 (slice-get (load (field (mut b) bstart)) 0)))
+                  (cast u8 CLS-HOT)))))
+    (let [mqs (.multi-quotes (mut l))]
+      (for mq
+        (iter mqs)
+        (store! (index t (cast i64 (slice-get mq 0))) (cast u8 CLS-HOT))))
+    (let [qs (.quotes (mut l))]
+      (for q
+        (iter qs)
+        (store! (index t (cast i64 q)) (cast u8 CLS-HOT))))
+    (set! (.classes (mut l)) t)
     0))

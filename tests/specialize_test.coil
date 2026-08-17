@@ -33,14 +33,14 @@
 (defn row-spec-ptr [(i i64)] (-> (ptr LangSpec))
   (let [a (malloc-allocator)
         p (unwrap-ptr [LangSpec] (create [LangSpec] a))]
-    (store! p
-            (lang-from-strings a
-                               (spec-row-name i)
-                               (spec-row-lcs i)
-                               (spec-row-blocks i)
-                               (spec-row-nested i)
-                               (spec-row-quotes i)
-                               (spec-row-mqs i)))
+    (set! p
+          (lang-from-strings a
+                             (spec-row-name i)
+                             (spec-row-lcs i)
+                             (spec-row-blocks i)
+                             (spec-row-nested i)
+                             (spec-row-quotes i)
+                             (spec-row-mqs i)))
     p))
 
 ;; Run both scanners for language `name` over `src` and assert they agree.

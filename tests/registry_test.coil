@@ -117,7 +117,7 @@
               (y (slice u8))
               (z (slice u8))] (-> (ptr (ArrayList (slice u8))))
   (let [l (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))]
-    (store! l (al-new [(slice u8)] a))
+    (set! l (al-new [(slice u8)] a))
     (al-push! l x)
     (al-push! l y)
     (al-push! l z)

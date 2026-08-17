@@ -5,6 +5,8 @@
 (import "coil.arraylist" :use *)
 (import "coil.str" :use *)
 (import "coil.fs" :use [os-pick])
+(import "coil.primitive" :as primitive)
+(import "coil.mem" :use [mem-copy])
 
 (extern strlen :cc c [(ptr i8)] (-> i64))
 (extern opendir :cc c [(ptr i8)] (-> (ptr i8)))
@@ -30,11 +32,8 @@
 ;; Copy s into allocator-owned storage (dirent name buffers are reused).
 (defn copy-str [(a (ptr Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (slice-len s)
-        p (unwrap-ptr [u8] (alloc-slice [u8] a n))
-        (mut k) 0]
-    (while (< k n)
-      (store! (index p k) (slice-get s k))
-      (store! (mut k) (+ k 1)))
+        p (unwrap-ptr [u8] (alloc-slice [u8] a n))]
+    (mem-copy p (slice-data s) n)
     (slice-new p n)))
 
 ;; dir + "/" + name, allocator-owned. A dir of "" yields just name.
@@ -43,14 +42,8 @@
     (if (= dn 0)
         (copy-str a name)
         (let [nn (slice-len name)
-              p (unwrap-ptr [u8] (alloc-slice [u8] a (+ (+ dn nn) 1)))
-              (mut k) 0]
-          (while (< k dn)
-            (store! (index p k) (slice-get dir k))
-            (store! (mut k) (+ k 1)))
-          (store! (index p dn) (cast u8 \/))
-          (let [(mut j) 0]
-            (while (< j nn)
-              (store! (index p (+ (+ dn 1) j)) (slice-get name j))
-              (store! (mut j) (+ j 1))))
+              p (unwrap-ptr [u8] (alloc-slice [u8] a (+ (+ dn nn) 1)))]
+          (mem-copy p (slice-data dir) dn)
+          (set! (index p dn) (cast u8 #\/))
+          (mem-copy (index p (+ dn 1)) (slice-data name) nn)
           (slice-new p (+ (+ dn nn) 1))))))

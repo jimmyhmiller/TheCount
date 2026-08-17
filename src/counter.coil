@@ -1,7 +1,9 @@
 (module thecount.counter)
 
 (import "coil.slice" :use *)
+(import "coil.primitive" :as primitive)
 (import "thecount.lang" :use *)
+(import "thecount.util" :use [bytes-contains?])
 
 (extern memchr :cc c [(ptr u8) i32 i64] (-> (ptr u8)))
 
@@ -11,10 +13,10 @@
   (zeroed Counts))
 
 (defn counts-add! [(dst (mut Counts)) (src Counts)] (-> i64)
-  (store! (field (mut dst) lines) (+ (load (field dst lines)) (load (field src lines))))
-  (store! (field (mut dst) blank) (+ (load (field dst blank)) (load (field src blank))))
-  (store! (field (mut dst) comments) (+ (load (field dst comments)) (load (field src comments))))
-  (store! (field (mut dst) code) (+ (load (field dst code)) (load (field src code))))
+  (set! (.lines (mut dst)) (+ (.lines dst) (.lines src)))
+  (set! (.blank (mut dst)) (+ (.blank dst) (.blank src)))
+  (set! (.comments (mut dst)) (+ (.comments dst) (.comments src)))
+  (set! (.code (mut dst)) (+ (.code dst) (.code src)))
   0)
 
 ;; True iff tok occurs in s starting at byte i.
@@ -32,25 +34,15 @@
 
 ;; Index of the first token in toks matching at i, or -1.
 (defn match-any [(s (slice u8)) (i i64) (toks (slice (slice u8)))] (-> i64)
-  (let [n (slice-len toks)
-        (mut k) 0
-        (mut found) -1]
-    (while (and (= found -1) (< k n))
-      (when (match-at s i (slice-get toks k))
-        (store! (mut found) k))
-      (store! (mut k) (+ k 1)))
-    found))
+  (block :found
+         (for [k 0 (slice-len toks)]
+           (when (match-at s i (slice-get toks k))
+             (return-from :found k)))
+         -1))
 
 ;; True iff byte b is one of the single-char quote delimiters.
 (defn quote-byte? [(b i64) (quotes (slice u8))] (-> bool)
-  (let [n (slice-len quotes)
-        (mut k) 0
-        (mut hit) false]
-    (while (and (= hit false) (< k n))
-      (when (= b (cast i64 (slice-get quotes k)))
-        (store! (mut hit) true))
-      (store! (mut k) (+ k 1)))
-    (= hit true)))
+  (bytes-contains? quotes (cast u8 b)))
 
 (const ST-NORMAL 0)
 (const ST-BLOCK 1)
@@ -70,7 +62,7 @@
 (defn backslashes-before [(s (slice u8)) (lo i64) (q i64)] (-> i64)
   (let [(mut j) (- q 1)
         (mut n) 0]
-    (while (and (>= j lo) (= (cast i64 (slice-get s j)) \u5C))
+    (while (and (>= j lo) (= (cast i64 (slice-get s j)) #\u5C))
       (store! (mut n) (+ n 1))
       (store! (mut j) (- j 1)))
     n))
@@ -87,11 +79,11 @@
 ;; table (normal state), so plain code bytes never reach the token matcher.
 (defn count-bytes [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
   (let [len (slice-len bytes)
-        lcs (load (field spec line-comments))
-        bls (load (field spec blocks))
-        nested (load (field spec nested))
-        quotes (load (field spec quotes))
-        mqs (load (field spec multi-quotes))
+        lcs (.line-comments spec)
+        bls (.blocks spec)
+        nested (.nested spec)
+        quotes (.quotes spec)
+        mqs (.multi-quotes spec)
         classes (load (field spec classes))
         data (slice-data bytes)
         (mut i) 0
@@ -106,7 +98,7 @@
         (mut comments) 0
         (mut code) 0]
     (while (< i len)
-      (let [le (find-byte bytes i len \newline)
+      (let [le (find-byte bytes i len #\newline)
             (mut pos) (load i)
             (mut saw-code) false
             (mut saw-comment) false]
@@ -256,20 +248,16 @@
           (store! (mut state) ST-NORMAL)
           0)
         (store! (mut i) (+ le 1))))
-    (let [(mut c) (zeroed Counts)]
-      (store! (field (mut c) lines) lines)
-      (store! (field (mut c) blank) blank)
-      (store! (field (mut c) comments) comments)
-      (store! (field (mut c) code) code)
-      c)))
+    (Counts
+      :lines lines
+      :blank blank
+      :comments comments
+      :code code)))
 
 ;; Index of the block pair whose start matches at i, or -1.
 (defn block-start-at [(s (slice u8)) (i i64) (bls (slice BlockPair))] (-> i64)
-  (let [n (slice-len bls)
-        (mut k) 0
-        (mut found) -1]
-    (while (and (= found -1) (< k n))
-      (when (match-at s i (load (field (index (slice-data bls) k) bstart)))
-        (store! (mut found) k))
-      (store! (mut k) (+ k 1)))
-    found))
+  (block :found
+         (for [k 0 (slice-len bls)]
+           (when (match-at s i (load (field (index (slice-data bls) k) bstart)))
+             (return-from :found k)))
+         -1))

@@ -6,8 +6,10 @@
 (import "coil.str" :use *)
 (import "coil.fs" :use *)
 (import "coil.os" :as os)
+(import "coil.primitive" :as primitive)
 (import "thecount.lang" :use *)
 (import "thecount.registry" :use *)
+(import "thecount.util" :use *)
 
 (extern mkdir :cc c [(ptr i8) i32] (-> i32))
 
@@ -64,7 +66,7 @@
 
 (defn strip-cr [(line (slice u8))] (-> (slice u8))
   (let [n (slice-len line)]
-    (if (and (> n 0) (= (cast i64 (slice-get line (- n 1))) \return))
+    (if (and (> n 0) (= (cast i64 (slice-get line (- n 1))) #\return))
         (subslice line 0 (- n 1))
         line)))
 
@@ -72,7 +74,7 @@
 (defn rest-of-line [(line (slice u8))] (-> (slice u8))
   (let [n (slice-len line)
         (mut k) 0]
-    (while (and (< k n) (!= (cast i64 (slice-get line k)) \space))
+    (while (and (< k n) (!= (cast i64 (slice-get line k)) #\space))
       (store! (mut k) (+ k 1)))
     (str-trim (subslice line k n))))
 
@@ -95,10 +97,10 @@
    (has-mqs bool)])
 
 (defn flush-pending! [(r (ptr Registry)) (p (ptr Pending))] (-> i64)
-  (if (= (load (field p active)) false)
+  (if (= (.active p) false)
       0
       (let [a (load (field r arena))
-            like (load (field p like))
+            like (.like p)
             (mut base) -1]
         (when (> (slice-len like) 0)
           (store! (mut base) (reg-lookup-name r like))
@@ -107,9 +109,9 @@
             0))
         (let [(mut spec) (zeroed LangSpec)]
           (if (>= base 0)
-              (store! (mut spec) (load (reg-spec r base)))
-              (store! (mut spec) (lang-from-strings a "" "" "" false "" "")))
-          (store! (field (mut spec) name) (load (field p name)))
+              (set! (mut spec) (load (reg-spec r base)))
+              (set! (mut spec) (lang-from-strings a "" "" "" false "" "")))
+          (set! (.name (mut spec)) (.name p))
           (when (= (load (field p has-lcs)) true)
             (store! (field (mut spec) line-comments) (split-tokens a (load (field p lcs)))))
           (when (= (load (field p has-blocks)) true)
@@ -121,7 +123,7 @@
           (when (= (load (field p has-mqs)) true)
             (store! (field (mut spec) multi-quotes) (split-tokens a (load (field p mqs)))))
           (rebuild-classes! a (mut spec))
-          (let [idx (reg-add! r spec (load (field p exts)))]
+          (let [idx (reg-add! r spec (.exts p))]
             (when (> (slice-len (load (field p files))) 0)
               (reg-add-files! r idx (load (field p files))))
             idx)))))
@@ -140,14 +142,12 @@
 (defn load-config! [(r (ptr Registry)) (src (slice u8))] (-> i64)
   (let [a (load (field r arena))
         lines (str-split a src "\n")
-        n (al-len lines)
-        pend (unwrap-ptr [Pending] (create [Pending] a))
-        (mut k) 0]
-    (store! pend (zeroed Pending))
-    (while (< k n)
-      (let [line (str-trim (strip-cr (al-get lines k)))]
+        pend (box a Pending (zeroed Pending))]
+    (for raw-line
+      (iter lines)
+      (let [line (str-trim (strip-cr raw-line))]
         (when (and (> (slice-len line) 0)
-                   (!= (cast i64 (slice-get line 0)) \u23))  ; '#'
+                   (!= (cast i64 (slice-get line 0)) #\u23))  ; '#'
           (let [toks (split-tokens a line)
                 d (slice-get toks 0)
                 rest (rest-of-line line)]
@@ -168,31 +168,25 @@
                   (= d "file") (do (store! (field pend files) rest) 0)
                   (= d "line")
                     (do
-                      (store! (field pend lcs) rest)
-                      (store! (field pend has-lcs) true)
+                      (set-fields! pend (lcs rest) (has-lcs true))
                       0)
                   (= d "block")
                     (do
-                      (store! (field pend blocks) rest)
-                      (store! (field pend has-blocks) true)
+                      (set-fields! pend (blocks rest) (has-blocks true))
                       0)
                   (= d "nested")
                     (do
-                      (store! (field pend nested) true)
-                      (store! (field pend has-nested) true)
+                      (set-fields! pend (nested true) (has-nested true))
                       0)
                   (= d "quotes")
                     (do
-                      (store! (field pend quotes) (strip-spaces a rest))
-                      (store! (field pend has-quotes) true)
+                      (set-fields! pend (quotes (strip-spaces a rest)) (has-quotes true))
                       0)
                   (= d "multi")
                     (do
-                      (store! (field pend mqs) rest)
-                      (store! (field pend has-mqs) true)
+                      (set-fields! pend (mqs rest) (has-mqs true))
                       0)
-                  :else (do (println "thecount: unknown config directive: {s}" d) 0)))))
-      (store! (mut k) (+ k 1)))
+                  :else (do (println "thecount: unknown config directive: {s}" d) 0))))))
     (flush-pending! r pend)
     0))
 
@@ -200,13 +194,11 @@
 (defn strip-spaces [(a (ptr Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (slice-len s)
         p (unwrap-ptr [u8] (alloc-slice [u8] a n))
-        (mut w) 0
-        (mut k) 0]
-    (while (< k n)
-      (when (!= (cast i64 (slice-get s k)) \space)
+        (mut w) 0]
+    (for [k 0 n]
+      (when (!= (cast i64 (slice-get s k)) #\space)
         (store! (index p w) (slice-get s k))
-        (store! (mut w) (+ w 1)))
-      (store! (mut k) (+ k 1)))
+        (store! (mut w) (+ w 1))))
     (slice-new p w)))
 
 ;; Remove the stanza for `name` (case-insensitive) from config text.
@@ -217,9 +209,8 @@
         want (lower a name)
         (mut b) (sb-new a)
         (mut skipping) false
-        (mut found) false
-        (mut k) 0]
-    (while (< k n)
+        (mut found) false]
+    (for [k 0 n]
       (let [line (strip-cr (al-get lines k))
             trimmed (str-trim line)
             toks (split-tokens a trimmed)]
@@ -240,8 +231,7 @@
                 (sb-push-str! (mut b) line)
                 (sb-push-str! (mut b) "\n")
                 0)
-              0)))
-      (store! (mut k) (+ k 1)))
+              0))))
     (if (= found true) (Some (sb-str b)) (None))))
 
 ;; Load user languages from the config file on top of the builtins.
