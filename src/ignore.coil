@@ -71,7 +71,7 @@
   (glob-rec pat s 0 0))
 
 ;; Parse one .gitignore's content into rules (in file order).
-(defn parse-ignore [(a (ptr Allocator)) (src (slice u8))] (-> (ptr (ArrayList IgnoreRule)))
+(defn parse-ignore [(a (dyn Allocator)) (src (slice u8))] (-> (ptr (ArrayList IgnoreRule)))
   (let [rules (new-list a IgnoreRule)
         lines (str-split a src "\n")]
     (for source-line
@@ -120,7 +120,7 @@
     rules))
 
 ;; Load dir/.gitignore into an IgnoreCtx; rules list is empty when absent.
-(defn load-ignore-ctx [(a (ptr Allocator)) (dir (slice u8))] (-> IgnoreCtx)
+(defn load-ignore-ctx [(a (dyn Allocator)) (dir (slice u8))] (-> IgnoreCtx)
   (let [path
           (if (= (slice-len dir) 0)
               ".gitignore"

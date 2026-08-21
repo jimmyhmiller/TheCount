@@ -52,7 +52,7 @@
   (println "languages live in ~/.config/thecount/languages — plain text, edit freely")
   0)
 
-(defn run-count [(a (ptr Allocator))
+(defn run-count [(a (dyn Allocator))
                  (r (ptr Registry))
                  (roots (ptr (ArrayList (slice u8))))
                  (want-files bool)
@@ -93,9 +93,9 @@
                     0))
                 (print-table a "Language" (al-slice (load rows)) true false (fnptr-of row-cmp)))))))
 
-(defn run-langs [(a (ptr Allocator)) (r (ptr Registry))] (-> i64)
+(defn run-langs [(a (dyn Allocator)) (r (ptr Registry))] (-> i64)
   (let [n (reg-count r)
-        exts (unwrap-ptr [StrBuf] (alloc-slice [StrBuf] a n))]
+        exts (must-alloc [StrBuf] a n)]
     (for [k 0 n]
       (store! (index exts k) (sb-new a)))
     (hm-for [ext idx (load (field r by-ext))]
@@ -116,7 +116,7 @@
   (sb-push-str! (mut b) "\n")
   0)
 
-(defn run-add-lang [(a (ptr Allocator))
+(defn run-add-lang [(a (dyn Allocator))
                     (r (ptr Registry))
                     (args (ptr (ArrayList (slice u8))))] (-> i64)
   (let [n (al-len (load args))]
@@ -171,7 +171,7 @@
         (println "config: ~/.config/thecount/languages")
         0))))
 
-(defn run-remove-lang [(a (ptr Allocator))
+(defn run-remove-lang [(a (dyn Allocator))
                        (r (ptr Registry))
                        (args (ptr (ArrayList (slice u8))))] (-> i64)
   (let [n (al-len (load args))]

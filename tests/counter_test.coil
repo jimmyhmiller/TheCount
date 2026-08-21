@@ -18,10 +18,10 @@
                      "\"\"\" '''"))
 
 (defn c-spec-ptr [] (-> (ptr LangSpec))
-  (box (malloc-allocator) LangSpec (c-spec)))
+  (box! (malloc-allocator) LangSpec (c-spec)))
 
 (defn py-spec-ptr [] (-> (ptr LangSpec))
-  (box (malloc-allocator) LangSpec (py-spec)))
+  (box! (malloc-allocator) LangSpec (py-spec)))
 
 (deftest simple-c
          (let [spec-p (c-spec-ptr)

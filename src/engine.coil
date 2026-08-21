@@ -51,22 +51,22 @@
 ;; Reusable file buffer: grows to the largest file seen.
 (defstruct ReadBuf [(p (ptr u8)) (cap i64)])
 
-(defn rb-new [(a (ptr Allocator))] (-> (ptr ReadBuf))
-  (box a ReadBuf (ReadBuf :p (cast (ptr u8) 0) :cap 0)))
+(defn rb-new [(a (dyn Allocator))] (-> (ptr ReadBuf))
+  (box! a ReadBuf (ReadBuf :p (cast (ptr u8) 0) :cap 0)))
 
 ;; Grow rb to at least newcap bytes (contents are not preserved).
 ;; Buffer memory ALWAYS comes from the global malloc allocator: buffers are
 ;; shared across threads, and freeing one arena's region pointer through
 ;; another arena's free hook aborts (libmalloc: pointer was not allocated).
-(defn rb-grow! [(a (ptr Allocator)) (rb (ptr ReadBuf)) (newcap i64)] (-> i64)
+(defn rb-grow! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (newcap i64)] (-> i64)
   (let [ma (malloc-allocator)]
     (when (> (load (field rb cap)) 0)
-      (raw-free ma (cast (ptr i8) (load (field rb p))) (load (field rb cap)) 8)
+      (free [u8] ma (alloc-slice-new (.p rb) (.cap rb)))
       0)
-    (match (raw-alloc ma newcap 8)
-      (Some [np]
+    (match (alloc [u8] ma newcap)
+      (Some [memory]
             (do
-              (set! (.p rb) (cast (ptr u8) np))
+              (set! (.p rb) (alloc-slice-data memory))
               (set! (.cap rb) newcap)
               0))
       (None [] (do (set! (.cap rb) 0) 0)))
@@ -75,15 +75,15 @@
 ;; Read the whole file into rb's buffer. A short read from a regular file
 ;; means EOF, so anything smaller than the buffer costs exactly one read(2):
 ;; open + read + close, three syscalls per file. Returns size or -1.
-(defn read-into! [(a (ptr Allocator)) (rb (ptr ReadBuf)) (cpath (ptr i8))] (-> i64)
+(defn read-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (cpath (ptr i8))] (-> i64)
   (read-fd-into! a rb (os/open cpath 0)))
 
 ;; openat variant: resolve name relative to dfd — one path component of
 ;; kernel name lookup instead of the whole path.
-(defn read-into-at! [(a (ptr Allocator)) (rb (ptr ReadBuf)) (dfd i32) (cname (ptr i8))] (-> i64)
+(defn read-into-at! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (dfd i32) (cname (ptr i8))] (-> i64)
   (read-fd-into! a rb (openat dfd cname 0)))
 
-(defn read-fd-into! [(a (ptr Allocator)) (rb (ptr ReadBuf)) (fd i32)] (-> i64)
+(defn read-fd-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (fd i32)] (-> i64)
   (if (< (cast i64 fd) 0)
       -1
       (let [(mut got) 0
@@ -172,20 +172,20 @@
 
 (defstruct WorkerArg [(pool (ptr Pool)) (agg (ptr Agg))])
 
-(defn new-agg [(a (ptr Allocator))
+(defn new-agg [(a (dyn Allocator))
                (n-specs i64)
                (want-files bool)
                (want-dirs bool)
                (depth i64)
                (roots (ptr (ArrayList (slice u8))))] (-> (ptr Agg))
-  (let [files-per (unwrap-ptr [i64] (alloc-slice [i64] a n-specs))
-        counts-per (unwrap-ptr [Counts] (alloc-slice [Counts] a n-specs))
+  (let [files-per (must-alloc [i64] a n-specs)
+        counts-per (must-alloc [Counts] a n-specs)
         file-rows (new-list a Row)
         dir-rows (new-list a Row)
         dir-idx (new-map a (slice u8) i64 (str-keyops))]
     (mem-zero files-per n-specs)
     (mem-zero counts-per n-specs)
-    (box a
+    (box! a
          Agg
          (Agg
            :files-per (slice-new files-per n-specs)
@@ -254,7 +254,7 @@
 ;; Without the dot, a root containing no subdirectories looks like --dirs
 ;; merely echoed the argument instead of showing where those files live.
 ;; The current-directory root is already displayed as ".".
-(defn dir-row-key [(a (ptr Allocator))
+(defn dir-row-key [(a (dyn Allocator))
                    (dir (slice u8))
                    (base i64)
                    (depth i64)] (-> (slice u8))
@@ -265,18 +265,18 @@
 ;; --dirs keeps one row per (directory, language), so the rollup map is keyed
 ;; on both. \x01 is the separator: it cannot occur in a path or in a language
 ;; name, so the two halves can never run together to form a colliding key.
-(defn dir-lang-key [(a (ptr Allocator)) (dir (slice u8)) (lang (slice u8))] (-> (slice u8))
+(defn dir-lang-key [(a (dyn Allocator)) (dir (slice u8)) (lang (slice u8))] (-> (slice u8))
   (let [dn (slice-len dir)
         ln (slice-len lang)
         total (+ (+ dn 1) ln)
-        p (unwrap-ptr [u8] (alloc-slice [u8] a total))]
+        p (must-alloc [u8] a total)]
     (mem-copy p (slice-data dir) dn)
     (set! (index p dn) (cast u8 1))
     (mem-copy (index p (+ dn 1)) (slice-data lang) ln)
     (slice-new p total)))
 
 ;; Record counted results for one file into agg.
-(defn agg-file! [(a (ptr Allocator))
+(defn agg-file! [(a (dyn Allocator))
                  (r (ptr Registry))
                  (agg (ptr Agg))
                  (idx i64)
@@ -311,7 +311,7 @@
   0)
 
 ;; Count one file synchronously (used for plain-file roots on the main thread).
-(defn process-file! [(a (ptr Allocator))
+(defn process-file! [(a (dyn Allocator))
                      (r (ptr Registry))
                      (agg (ptr Agg))
                      (rb (ptr ReadBuf))
@@ -452,7 +452,7 @@
 
 ;; Read one file (living in the directory open as dfd) into a pool buffer and
 ;; hand it to the counters. openat = one path component of kernel lookup.
-(defn reader-file! [(a (ptr Allocator))
+(defn reader-file! [(a (dyn Allocator))
                     (pool (ptr Pool))
                     (dfd i32)
                     (dir (slice u8))
@@ -474,7 +474,7 @@
 ;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
 ;; and gitignore/exclude checks, then queue directories and collect file
 ;; basenames. Callers only pass regular files and directories.
-(defn classify-entry! [(a (ptr Allocator))
+(defn classify-entry! [(a (dyn Allocator))
                        (pool (ptr Pool))
                        (chain (ptr CtxNode))
                        (dir (slice u8))
@@ -509,7 +509,7 @@
                         (do (al-push! (mut names) (copy-str a name)) 0))))))))
 
 ;; readdir enumerator (linux, and the portable fallback).
-(defn enum-readdir! [(a (ptr Allocator))
+(defn enum-readdir! [(a (dyn Allocator))
                      (pool (ptr Pool))
                      (dp (ptr i8))
                      (chain (ptr CtxNode))
@@ -544,7 +544,7 @@
 ;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
 ;; and gitignore/exclude checks, then queue directories and collect file
 ;; basenames. Callers only pass regular files and directories.
-(defn classify-entry! [(a (ptr Allocator))
+(defn classify-entry! [(a (dyn Allocator))
                        (pool (ptr Pool))
                        (chain (ptr CtxNode))
                        (dir (slice u8))
@@ -579,7 +579,7 @@
                         (do (al-push! (mut names) (copy-str a name)) 0))))))))
 
 ;; readdir enumerator (linux, and the portable fallback).
-(defn enum-readdir! [(a (ptr Allocator))
+(defn enum-readdir! [(a (dyn Allocator))
                      (pool (ptr Pool))
                      (dp (ptr i8))
                      (chain (ptr CtxNode))
@@ -632,7 +632,7 @@
 (const VDIR 2)
 (const BULK-BUF-SIZE 131072)
 
-(defn enum-bulk! [(a (ptr Allocator))
+(defn enum-bulk! [(a (dyn Allocator))
                   (pool (ptr Pool))
                   (fd i32)
                   (chain (ptr CtxNode))
@@ -649,7 +649,7 @@
              (os/_exit 70)
              0)
            (let [al
-                   (box a
+                   (box! a
                         AttrList
                         (AttrList
                           :bitmapcount (cast u16 5)
@@ -706,7 +706,7 @@
 ;; (2026-08-04) and cut sys time 35% but nearly DOUBLED wall time on llvm —
 ;; the bulk call is synchronously slower than readdir when only names and
 ;; types are needed; it only pays when it replaces per-file stat calls.
-(defn process-dir! [(a (ptr Allocator))
+(defn process-dir! [(a (dyn Allocator))
                     (pool (ptr Pool))
                     (item DirItem)] (-> i64)
   (let [dir (.path item)
@@ -723,7 +723,7 @@
                   rules (load (field ctx rules))
                   nrules (al-len [IgnoreRule] (load rules))]
               (when (> nrules 0)
-                (let [node (box a CtxNode (CtxNode :ctx ctx :parent chain))]
+                (let [node (box! a CtxNode (CtxNode :ctx ctx :parent chain))]
                   (store! (mut chain) node)
                   0)
                 0)
@@ -740,7 +740,7 @@
                 (let [(mut o) 0]
                   (while (< o nfl)
                     (let [hi (if (< (+ o FILE-BATCH) nfl) (+ o FILE-BATCH) nfl)
-                          chunk (unwrap-ptr [(slice u8)] (alloc-slice [(slice u8)] a (- hi o)))]
+                          chunk (must-alloc [(slice u8)] a (- hi o))]
                       (mem-copy chunk (index (slice-data (al-slice (load names))) o) (- hi o))
                       (pool-push! pool
                                   (zeroed-with DirItem
@@ -752,7 +752,7 @@
           0))))
 
 ;; Read a queued batch: open its directory once, openat each basename.
-(defn process-batch! [(a (ptr Allocator))
+(defn process-batch! [(a (dyn Allocator))
                       (pool (ptr Pool))
                       (item DirItem)] (-> i64)
   (let [dir (.path item)
@@ -857,7 +857,7 @@
 ;; Give every --dirs row its directory's total code, which dir-row-cmp uses to
 ;; order directories by size while keeping each directory's languages together.
 ;; Run once, after all counter aggregates have been merged.
-(defn agg-dir-groups! [(a (ptr Allocator)) (agg (ptr Agg))] (-> i64)
+(defn agg-dir-groups! [(a (dyn Allocator)) (agg (ptr Agg))] (-> i64)
   (when (= (load (field agg want-dirs)) true)
     (let [drows (load (field agg dir-rows))
           n (al-len (load drows))
@@ -875,7 +875,7 @@
   0)
 
 ;; Merge counter aggregate src into dst.
-(defn agg-merge! [(a (ptr Allocator)) (dst (ptr Agg)) (src (ptr Agg))] (-> i64)
+(defn agg-merge! [(a (dyn Allocator)) (dst (ptr Agg)) (src (ptr Agg))] (-> i64)
   (let [nf (slice-len (.files-per dst))]
     (for [k 0 nf]
       (store! (index (slice-data (load (field dst files-per))) k)
@@ -910,7 +910,7 @@
 ;; The roots as the walk sees them: "." becomes "" so its paths stay bare
 ;; ("src/x", not "./src/x"). Read-only once counting starts, so every worker
 ;; aggregate can share the list.
-(defn walk-roots-of [(a (ptr Allocator))
+(defn walk-roots-of [(a (dyn Allocator))
                      (roots (ptr (ArrayList (slice u8))))] (-> (ptr (ArrayList (slice u8))))
   (let [out (new-list a (slice u8))]
     (for rt
@@ -918,7 +918,7 @@
       (al-push! out (if (= rt ".") "" rt)))
     out))
 
-(defn env-int [(a (ptr Allocator)) (name (slice u8)) (dflt i64)] (-> i64)
+(defn env-int [(a (dyn Allocator)) (name (slice u8)) (dflt i64)] (-> i64)
   (try (let [opt (try-or! (os/env-get a name) dflt)]
          (match opt
            (Some [ts]
@@ -928,7 +928,7 @@
            (None [] dflt)))))
 
 ;; Count everything under roots. Returns the merged aggregate.
-(defn count-all [(a (ptr Allocator))
+(defn count-all [(a (dyn Allocator))
                  (r (ptr Registry))
                  (roots (ptr (ArrayList (slice u8))))
                  (want-files bool)
@@ -940,13 +940,13 @@
   (let [n-specs (reg-count r)
         wroots (walk-roots-of a roots)
         agg (new-agg a n-specs want-files want-dirs depth wroots)
-        pool (box a Pool (zeroed Pool))
+        pool (box! a Pool (zeroed Pool))
         queue (new-list a DirItem)
         cqueue (new-list a CountMsg)
         free-bufs (new-list a i64)
-        bufs (unwrap-ptr [ReadBuf] (alloc-slice [ReadBuf] a NBUFS))
-        inflight (box a i64 0)
-        rdone (box a i64 0)]
+        bufs (must-alloc [ReadBuf] a NBUFS)
+        inflight (box! a i64 0)
+        rdone (box! a i64 0)]
     (for [b 0 NBUFS]
       (store! (index bufs b) (ReadBuf :p (cast (ptr u8) 0) :cap 0))
       (al-push! free-bufs b))
@@ -990,23 +990,23 @@
         (when (> nreaders 16) (store! (mut nreaders) 16))
         (when (< ncounters 2) (store! (mut ncounters) 2))
         (when (> ncounters 12) (store! (mut ncounters) 12))
-        (let [rthreads (unwrap-ptr [Thread] (alloc-slice [Thread] a nreaders))
-              cthreads (unwrap-ptr [Thread] (alloc-slice [Thread] a ncounters))
-              cargs (unwrap-ptr [WorkerArg] (alloc-slice [WorkerArg] a ncounters))]
-          (for [t 0 ncounters]
+        (let [rthreads (must-alloc [Thread] a nreaders)
+              cthreads (must-alloc [Thread] a ncounters)
+              cargs (must-alloc [WorkerArg] a ncounters)]
+          (for [t 0 (load ncounters)]
             (let [wagg (new-agg a n-specs want-files want-dirs depth wroots)
                   wa (index cargs t)]
               (set-fields! wa (pool pool) (agg wagg))
               (thread-spawn (index cthreads t) (fnptr-of counter-worker) (cast (ptr i8) wa))))
-          (for [t 0 nreaders]
+          (for [t 0 (load nreaders)]
             (thread-spawn (index rthreads t) (fnptr-of reader-worker) (cast (ptr i8) pool)))
-          (for [t 0 nreaders]
+          (for [t 0 (load nreaders)]
             (thread-join (index rthreads t)))
           (atomic-store rdone 1)
           (pthread_mutex_lock (cast (ptr i8) (field pool cmutex)))
           (pthread_mutex_unlock (cast (ptr i8) (field pool cmutex)))
           (pthread_cond_broadcast (cast (ptr i8) (field pool ccond)))
-          (for [t 0 ncounters]
+          (for [t 0 (load ncounters)]
             (thread-join (index cthreads t))
             (agg-merge! a agg (load (field (index cargs t) agg)))))
         agg))))

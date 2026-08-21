@@ -471,7 +471,7 @@
       (primitive/error "specialize: a table row may declare at most two multiline-string delimiters"))
     (when (!= (% (ct-tok-count blocks) 2) 0)
       (primitive/error "specialize: block tokens must come in start/end pairs"))
-    `(defn ~(primitive/code-symbol "count$" ident) [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
+    `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
        (let [len (slice-len bytes)
              data (slice-data bytes)
              ~@(if has-hot `(cls-tab (load (field spec classes))) `()) (mut i)
@@ -541,11 +541,11 @@
            ~(gen-field-arms tbl (+ k 1) n fidx))))
 
 (defn gen-field-accessor [(nm Code) (rty Code) (tbl Code) (fidx i64)] (-> Code)
-  `(defn ~nm [(i i64)] (-> ~rty)
+  `(defn ~(primitive/syntax->datum nm) [(i i64)] (-> ~rty)
      ~(gen-field-arms tbl 0 (primitive/code-count tbl) fidx)))
 
 (defn gen-counter-arms [(tbl Code) (k i64) (n i64)] (-> Code)
-  (let [f `(primitive/fnptr-of ~(primitive/code-symbol "count$" (primitive/code-nth (primitive/code-nth tbl k) 0)))]
+  (let [f `(primitive/fnptr-of ~(primitive/syntax->datum (primitive/code-symbol "count$" (primitive/code-nth (primitive/code-nth tbl k) 0))))]
     (if (= k (- n 1))
         f
         `(if (= i ~k) ~f ~(gen-counter-arms tbl (+ k 1) n)))))
@@ -554,23 +554,88 @@
 ;; spliced after macro expansion has already run, so they may not call `while`,
 ;; `cond`, `when` or any other macro. A macro's output is expanded normally,
 ;; which is what lets the generated scanners below be written in ordinary Coil.
+(defn scanner-id [(names Code) (ids Code) (f Code)] (-> Code)
+  (let [n (primitive/code-count names)
+        (mut i) 0
+        (mut found) f]
+    (when (primitive/code-sym? f)
+      (while (< i n)
+        (when (= (primitive/code-sym f)
+                 (primitive/code-str (primitive/code-nth names (load i))))
+          (store! (mut found) (primitive/code-nth ids (load i)))
+          (store! (mut i) n)
+          0)
+        (store! (mut i) (+ i 1)))
+      0)
+    (load found)))
+
+;; Give the lexical protocol used by the independently composed scanner
+;; fragments one coherent set of identities.  This is deliberately a closed
+;; list: declarations and references which merely happen to have the same
+;; printed spelling outside this protocol retain their original hygiene.
+(defn bind-scanner-identifiers-children [(names Code) (ids Code) (f Code) (out CodeBuilder)] (-> CodeBuilder)
+  (let [n (primitive/code-count f)
+        (mut i) 0]
+    (while (< i n)
+      (primitive/code-list-push! out (bind-scanner-identifiers names ids (primitive/code-nth f (load i))))
+      (store! (mut i) (+ i 1)))
+    out))
+
+(defn bind-scanner-identifiers [(names Code) (ids Code) (f Code)] (-> Code)
+  (cond (primitive/code-vector? f)
+          `[~@(primitive/code-list-done
+                (bind-scanner-identifiers-children names ids f (primitive/code-list-new)))]
+        (primitive/code-list? f)
+          (primitive/code-list-done
+            (bind-scanner-identifiers-children names ids f (primitive/code-list-new)))
+        (primitive/code-sym? f) (scanner-id names ids f)
+        f))
+
 (defn define-specialized-counters [& (_ Code)] (-> Code)
   (let [tbl (spec-table)
-        n (primitive/code-count tbl)]
-    `(do
-       ~@(gen-counters tbl 0 n)
-       ;; How many languages have a generated scanner.
-       (defn spec-row-count [] (-> i64)
-         ~n)
-       ~(gen-field-accessor `spec-row-name `(slice u8) tbl 1)
-       ~(gen-field-accessor `spec-row-exts `(slice u8) tbl 2)
-       ~(gen-field-accessor `spec-row-lcs `(slice u8) tbl 3)
-       ~(gen-field-accessor `spec-row-blocks `(slice u8) tbl 4)
-       ~(gen-field-accessor `spec-row-nested `bool tbl 5)
-       ~(gen-field-accessor `spec-row-quotes `(slice u8) tbl 6)
-       ~(gen-field-accessor `spec-row-mqs `(slice u8) tbl 7)
-       ;; The generated scanner for row i.
-       (defn spec-row-counter [(i i64)] (-> (fnptr c [(ptr LangSpec) (slice u8)] Counts))
-         ~(gen-counter-arms tbl 0 n)))))
+        n (primitive/code-count tbl)
+        ;; Names are data, while each corresponding identifier is allocated
+        ;; exactly once and reused at every binder/reference site.
+        scanner-names
+          `("spec" "bytes" "len" "data" "cls-tab" "i" "le" "pos"
+            "state" "saw-code" "saw-comment" "bdepth" "qch" "mqi" "mqdoc"
+            "n-lines" "n-blank" "n-comments" "n-code" "mq" "scanning"
+            "he" "hs" "h" "q" "hot" "acc" "hm" "nonws" "fh" "cls" "b"
+            "Counts")
+        scanner-ids
+          `(~(primitive/fresh-identifier "spec")
+            ~(primitive/fresh-identifier "bytes") ~(primitive/fresh-identifier "len")
+            ~(primitive/fresh-identifier "data") ~(primitive/fresh-identifier "cls-tab")
+            ~(primitive/fresh-identifier "i") ~(primitive/fresh-identifier "le")
+            ~(primitive/fresh-identifier "pos") ~(primitive/fresh-identifier "state")
+            ~(primitive/fresh-identifier "saw-code") ~(primitive/fresh-identifier "saw-comment")
+            ~(primitive/fresh-identifier "bdepth") ~(primitive/fresh-identifier "qch")
+            ~(primitive/fresh-identifier "mqi") ~(primitive/fresh-identifier "mqdoc")
+            ~(primitive/fresh-identifier "n-lines") ~(primitive/fresh-identifier "n-blank")
+            ~(primitive/fresh-identifier "n-comments") ~(primitive/fresh-identifier "n-code")
+            ~(primitive/fresh-identifier "mq") ~(primitive/fresh-identifier "scanning")
+            ~(primitive/fresh-identifier "he") ~(primitive/fresh-identifier "hs")
+            ~(primitive/fresh-identifier "h") ~(primitive/fresh-identifier "q")
+            ~(primitive/fresh-identifier "hot") ~(primitive/fresh-identifier "acc")
+            ~(primitive/fresh-identifier "hm") ~(primitive/fresh-identifier "nonws")
+            ~(primitive/fresh-identifier "fh") ~(primitive/fresh-identifier "cls")
+            ~(primitive/fresh-identifier "b") ~(primitive/syntax->datum (primitive/code-nth `(Counts) 0)))
+        generated
+          `(do
+             ~@(gen-counters tbl 0 n)
+             ;; How many languages have a generated scanner.
+             (defn ~(primitive/syntax->datum `spec-row-count) [] (-> i64)
+               ~n)
+             ~(gen-field-accessor `spec-row-name `(slice u8) tbl 1)
+             ~(gen-field-accessor `spec-row-exts `(slice u8) tbl 2)
+             ~(gen-field-accessor `spec-row-lcs `(slice u8) tbl 3)
+             ~(gen-field-accessor `spec-row-blocks `(slice u8) tbl 4)
+             ~(gen-field-accessor `spec-row-nested `bool tbl 5)
+             ~(gen-field-accessor `spec-row-quotes `(slice u8) tbl 6)
+             ~(gen-field-accessor `spec-row-mqs `(slice u8) tbl 7)
+             ;; The generated scanner for row i.
+             (defn ~(primitive/syntax->datum `spec-row-counter) [(i i64)] (-> (fnptr c [(ptr LangSpec) (slice u8)] Counts))
+               ~(gen-counter-arms tbl 0 n)))]
+    (bind-scanner-identifiers scanner-names scanner-ids generated)))
 
 (define-specialized-counters)

@@ -24,9 +24,8 @@
 
 (defn rules-of [(src (slice u8))] (-> (ptr (ArrayList IgnoreCtx)))
   (let [a (malloc-allocator)
-        ctxs (unwrap-ptr [(ArrayList IgnoreCtx)] (create [(ArrayList IgnoreCtx)] a))
+        ctxs (box! a (ArrayList IgnoreCtx) (al-new [IgnoreCtx] a))
         (mut ctx) (zeroed IgnoreCtx)]
-    (set! ctxs (al-new [IgnoreCtx] a))
     (set! (.base (mut ctx)) "")
     (set! (.rules (mut ctx)) (parse-ignore a src))
     (al-push! ctxs ctx)

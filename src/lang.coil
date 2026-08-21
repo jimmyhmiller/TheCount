@@ -29,7 +29,7 @@
 (const CLS-HOT 3)  ; byte can start a comment/string token: leave the fast path
 
 ;; Split s on runs of spaces into freshly allocated token slices (views into s).
-(defn split-tokens [(a (ptr Allocator)) (s (slice u8))] (-> (slice (slice u8)))
+(defn split-tokens [(a (dyn Allocator)) (s (slice u8))] (-> (slice (slice u8)))
   (let [pieces (str-split a s " ")
         n (al-len pieces)
         (mut count) 0]
@@ -37,7 +37,7 @@
       (iter pieces)
       (when (> (slice-len piece) 0)
         (store! (mut count) (+ count 1))))
-    (let [out (unwrap-ptr [(slice u8)] (alloc-slice [(slice u8)] a count))
+    (let [out (must-alloc [(slice u8)] a count)
           (mut w) 0]
       (for piece
         (iter pieces)
@@ -48,7 +48,7 @@
 
 ;; Parse "START END START END ..." into block pairs. An odd trailing token is
 ;; a configuration error and aborts with a message.
-(defn parse-blocks [(a (ptr Allocator)) (s (slice u8))] (-> (slice BlockPair))
+(defn parse-blocks [(a (dyn Allocator)) (s (slice u8))] (-> (slice BlockPair))
   (let [toks (split-tokens a s)
         n (slice-len toks)]
     (when (!= (% n 2) 0)
@@ -56,7 +56,7 @@
       (os/_exit 2)
       0)
     (let [np (/ n 2)
-          out (unwrap-ptr [BlockPair] (alloc-slice [BlockPair] a np))]
+          out (must-alloc [BlockPair] a np)]
       (for [k 0 np]
         (store! (index out k)
                 (BlockPair :bstart (slice-get toks (* k 2))
@@ -69,7 +69,7 @@
 ;;   blocks: "/* */"       block pairs, start end start end
 ;;   quotes: "\"'"         each BYTE is a single-char string delimiter
 ;;   mqs:    "\"\"\" '''"  multiline string delimiters
-(defn lang-from-strings [(a (ptr Allocator))
+(defn lang-from-strings [(a (dyn Allocator))
                          (name (slice u8))
                          (lcs (slice u8))
                          (blocks (slice u8))
@@ -89,8 +89,8 @@
 
 ;; (Re)build the byte-class table from the token fields. Must be called
 ;; whenever line-comments/blocks/quotes/multi-quotes change.
-(defn rebuild-classes! [(a (ptr Allocator)) (l (mut LangSpec))] (-> i64)
-  (let [t (unwrap-ptr [u8] (alloc-slice [u8] a 256))]
+(defn rebuild-classes! [(a (dyn Allocator)) (l (mut LangSpec))] (-> i64)
+  (let [t (must-alloc [u8] a 256)]
     (mem-fill t (cast u8 CLS-PLAIN) 256)
     (set! (index t #\space) (cast u8 CLS-WS))
     (set! (index t #\tab) (cast u8 CLS-WS))

@@ -6,6 +6,7 @@
 (import "coil.str" :use *)
 (import "coil.primitive" :as primitive)
 (import "thecount.counter" :use [Counts])
+(import "thecount.util" :use [must-alloc])
 
 (extern snprintf :cc c [(ptr i8) i64 (ptr i8) ...] (-> i32))
 (extern qsort :cc c [(ptr Row) i64 i64 (fnptr c [(ptr Row) (ptr Row)] i32)] (-> void))
@@ -26,12 +27,12 @@
     :c c
     :group 0))
 
-(defn i64->str [(a (ptr Allocator)) (v i64)] (-> (slice u8))
-  (let [buf (unwrap-ptr [u8] (alloc-slice [u8] a 32))
+(defn i64->str [(a (dyn Allocator)) (v i64)] (-> (slice u8))
+  (let [buf (must-alloc [u8] a 32)
         n (snprintf (cast (ptr i8) buf) 32 c"%lld" v)]
     (slice-new buf (cast i64 n))))
 
-(defn i64->pretty [(a (ptr Allocator)) (v i64)] (-> (slice u8))
+(defn i64->pretty [(a (dyn Allocator)) (v i64)] (-> (slice u8))
   (let [raw (i64->str a v)
         n (slice-len raw)
         (mut b) (sb-new a)]
@@ -47,7 +48,7 @@
   (let [n (slice-len s)
         (mut pad) (- w n)]
     (when (< pad 1) (store! (mut pad) 1))
-    (for [_ 0 pad]
+    (for [_ 0 (load pad)]
       (sb-push-byte! (mut b) (cast u8 #\space)))
     (sb-push-str! (mut b) s)
     0))
@@ -56,7 +57,7 @@
 (defn push-left! [(b (mut StrBuf)) (s (slice u8)) (w i64)] (-> i64)
   (sb-push-str! (mut b) s)
   (let [(mut pad) (- w (slice-len s))]
-    (for [_ 0 pad]
+    (for [_ 0 (load pad)]
       (sb-push-byte! (mut b) (cast u8 #\space)))
     0))
 
@@ -98,7 +99,7 @@
 
 ;; Print a full table. with-files / with-sub choose the optional columns, and
 ;; `cmp` the row order (row-cmp for the flat tables, dir-row-cmp for --dirs).
-(defn print-table [(a (ptr Allocator))
+(defn print-table [(a (dyn Allocator))
                    (title (slice u8))
                    (rows (slice Row))
                    (with-files bool)
@@ -171,7 +172,7 @@
 ;; Print --dirs as a hierarchy instead of repeating the directory on every
 ;; language row. Rows arrive as one (directory, language) pair and are sorted
 ;; so each directory is contiguous, largest directory first.
-(defn print-dir-tree [(a (ptr Allocator)) (rows (slice Row))] (-> i64)
+(defn print-dir-tree [(a (dyn Allocator)) (rows (slice Row))] (-> i64)
   (qsort (slice-data rows) (slice-len rows) (sizeof Row) (fnptr-of dir-row-cmp))
   (let [n (slice-len rows)
         (mut lang-w) 8

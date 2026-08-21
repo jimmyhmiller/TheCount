@@ -112,12 +112,11 @@
            (assert (= (dir-row-key a "src/bus" 3 1) "src/bus"))
            (assert (= (dir-row-key a "" 0 1) "."))))
 
-(defn roots3 [(a (ptr Allocator))
+(defn roots3 [(a (dyn Allocator))
               (x (slice u8))
               (y (slice u8))
               (z (slice u8))] (-> (ptr (ArrayList (slice u8))))
-  (let [l (unwrap-ptr [(ArrayList (slice u8))] (create [(ArrayList (slice u8))] a))]
-    (set! l (al-new [(slice u8)] a))
+  (let [l (box! a (ArrayList (slice u8)) (al-new [(slice u8)] a))]
     (al-push! l x)
     (al-push! l y)
     (al-push! l z)

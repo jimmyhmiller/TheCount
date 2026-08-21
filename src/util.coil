@@ -1,7 +1,7 @@
 (module thecount.util)
 
 (import "coil.primitive" :as primitive)
-(import "coil.alloc" :use [Allocator box])
+(import "coil.alloc" :use [Allocator alloc alloc-slice-data box! oom-at])
 (import "coil.arraylist" :use [ArrayList al-new])
 (import "coil.hashmap" :use [HashMap KeyOps hm-new hm-get hm-put!])
 (import "coil.slice" :use [slice-len slice-get])
@@ -13,13 +13,21 @@
     (Some [v] v)
     (None [] dflt)))
 
+;; This application cannot recover from allocation failure. Keep that policy
+;; explicit while retaining the typed allocation's element count and TypeId.
+(defn must-alloc [T] [(a (dyn Allocator)) (n i64)] (-> (ptr T))
+  (match (alloc [T] a n)
+    (Some [memory] (alloc-slice-data memory))
+    (None [] (do (oom-at c"thecount" (* n (sizeof T)))
+                 (cast (ptr T) 0)))))
+
 ;; Heap-backed collection headers are common because a pointer to the stable
 ;; header can be shared while the collection grows.
 (defn new-list [(a Code) (T Code)] (-> Code)
-  `(box ~a (ArrayList ~T) (al-new [~T] ~a)))
+  `(box! ~a (ArrayList ~T) (al-new [~T] ~a)))
 
 (defn new-map [(a Code) (K Code) (V Code) (ops Code)] (-> Code)
-  `(box ~a (HashMap ~K ~V) (hm-new [~K ~V] ~a ~ops)))
+  `(box! ~a (HashMap ~K ~V) (hm-new [~K ~V] ~a ~ops)))
 
 ;; Last index containing a byte, or -1.
 (defn bytes-last-index-of :inline (Always) [(s (slice u8)) (needle u8)] (-> i64)
