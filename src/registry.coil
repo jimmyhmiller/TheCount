@@ -11,11 +11,11 @@
 (import "thecount.specialize" :use *)
 (import "thecount.util" :use *)
 
-;; `counters` runs parallel to `specs`: the scanner to use for spec i. Every
-;; entry starts out as the interpreter, count-bytes; add-specialized! swaps in a
-;; compile-time-generated scanner for the languages thecount.specialize knows.
-;; Keeping it here rather than in LangSpec means thecount.lang stays free of any
-;; dependency on the counter.
+;;; `counters` runs parallel to `specs`: the scanner to use for spec i. Every
+;;; entry starts out as the interpreter, count-bytes; add-specialized! swaps in a
+;;; compile-time-generated scanner for the languages thecount.specialize knows.
+;;; Keeping it here rather than in LangSpec means thecount.lang stays free of any
+;;; dependency on the counter.
 (defstruct Registry
   [(arena (dyn Allocator))
    (specs (ptr (ArrayList LangSpec)))
@@ -49,9 +49,9 @@
     (set! (.by-file r) by-file)
     r))
 
-;; Register a language spec under space-separated extensions.
-;; Re-registering an extension or name overrides the previous mapping,
-;; which is how user languages shadow builtins. Returns the spec index.
+;;; Register a language spec under space-separated extensions.
+;;; Re-registering an extension or name overrides the previous mapping,
+;;; which is how user languages shadow builtins. Returns the spec index.
 (defn reg-add! [(r (ptr Registry)) (spec LangSpec) (exts (slice u8))] (-> i64)
   (let [a (.arena r)
         specs (load (field r specs))
@@ -65,7 +65,7 @@
         (hm-put! (load (field r by-ext)) (lower a tok) idx)))
     idx))
 
-;; Map extra space-separated extensions onto an existing spec index.
+;;; Map extra space-separated extensions onto an existing spec index.
 (defn reg-add-ext! [(r (ptr Registry)) (idx i64) (exts (slice u8))] (-> i64)
   (let [a (.arena r)
         toks (split-tokens a exts)]
@@ -74,7 +74,7 @@
       (hm-put! (load (field r by-ext)) (lower a tok) idx))
     0))
 
-;; Map exact (space-separated) filenames like Makefile to a spec index.
+;;; Map exact (space-separated) filenames like Makefile to a spec index.
 (defn reg-add-files! [(r (ptr Registry)) (idx i64) (names (slice u8))] (-> i64)
   (let [a (.arena r)
         toks (split-tokens a names)]
@@ -86,30 +86,30 @@
 (defn reg-spec [(r (ptr Registry)) (idx i64)] (-> (ptr LangSpec))
   (index (slice-data (al-slice (load (load (field r specs))))) idx))
 
-;; Install a compile-time-generated scanner for spec idx.
+;;; Install a compile-time-generated scanner for spec idx.
 (defn reg-set-counter! [(r (ptr Registry))
                         (idx i64)
                         (f (fnptr c [(ptr LangSpec) (slice u8)] Counts))] (-> i64)
   (set! (index (slice-data (al-slice (load (load (field r counters))))) idx) f)
   0)
 
-;; Count `bytes` as language idx. The one entry point the engine uses — it picks
-;; the generated scanner when there is one and count-bytes otherwise, so adding
-;; a language to thecount.specialize's table is invisible to every caller.
+;;; Count `bytes` as language idx. The one entry point the engine uses — it picks
+;;; the generated scanner when there is one and count-bytes otherwise, so adding
+;;; a language to thecount.specialize's table is invisible to every caller.
 (defn reg-count-bytes [(r (ptr Registry)) (idx i64) (bytes (slice u8))] (-> Counts)
   (primitive/call-ptr (al-get (load (field r counters)) idx) (reg-spec r idx) bytes))
 
 (defn reg-count [(r (ptr Registry))] (-> i64)
   (al-len (load (field r specs))))
 
-;; Spec index for a language name (case-insensitive), or -1.
+;;; Spec index for a language name (case-insensitive), or -1.
 (defn reg-lookup-name [(r (ptr Registry)) (name (slice u8))] (-> i64)
   (match (hm-get (load (load (field r by-name))) (lower (.arena r) name))
     (Some [v] v)
     (None [] -1)))
 
-;; Spec index for a file path: exact basename match first, then the
-;; (lowercased) extension after the last dot. -1 when unknown.
+;;; Spec index for a file path: exact basename match first, then the
+;;; (lowercased) extension after the last dot. -1 when unknown.
 (defn reg-lookup-path [(r (ptr Registry)) (path (slice u8))] (-> i64)
   (let [n (slice-len path)]
     (let [base (subslice path (+ (bytes-last-index-of path (cast u8 #\/)) 1) n)]
@@ -140,9 +140,9 @@
                     (mqs (slice u8))] (-> i64)
   (reg-add! r (lang-from-strings (.arena r) name lcs blocks nested quotes mqs) exts))
 
-;; Register every row of thecount.specialize's table and attach the scanner that
-;; was generated for it. The tokens come straight from that table, so a language
-;; cannot be registered with one set of delimiters and counted with another.
+;;; Register every row of thecount.specialize's table and attach the scanner that
+;;; was generated for it. The tokens come straight from that table, so a language
+;;; cannot be registered with one set of delimiters and counted with another.
 (defn add-specialized! [(r (ptr Registry))] (-> i64)
   (let [n (spec-row-count)]
     (for [k 0 n]

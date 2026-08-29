@@ -39,17 +39,17 @@
 (import "thecount.counter" :use *)
 (import "thecount.simd" :use *)
 
-;; ---------------------------------------------------------------------------
-;; The table. Same seven token strings `add-builtin!` takes, so a row here reads
-;; exactly like a row in thecount.registry — plus a leading identifier used to
-;; name the generated function. thecount.registry registers these rows itself
-;; (see add-specialized!), so they must NOT also appear in add-builtins!.
-;;
-;; Restrictions the generator enforces below: at most one block-comment pair and
-;; at most two multiline-string delimiters per row. A language that needs more
-;; simply stays out of the table and keeps using the interpreter.
-;;
-;;        ident   name              extensions             line comments  blocks        nested quotes  multiline
+;;; ---------------------------------------------------------------------------
+;;; The table. Same seven token strings `add-builtin!` takes, so a row here reads
+;;; exactly like a row in thecount.registry — plus a leading identifier used to
+;;; name the generated function. thecount.registry registers these rows itself
+;;; (see add-specialized!), so they must NOT also appear in add-builtins!.
+;;;
+;;; Restrictions the generator enforces below: at most one block-comment pair and
+;;; at most two multiline-string delimiters per row. A language that needs more
+;;; simply stays out of the table and keeps using the interpreter.
+;;;
+;;;        ident   name              extensions             line comments  blocks        nested quotes  multiline
 (defn spec-table [] (-> Code)
   `((c "C" "c" "//" "/* */" false "\"'" "") (h "C Header" "h" "//" "/* */" false "\"'" "")
       (cpp "C++" "cc cpp cxx c++" "//" "/* */" false "\"'" "")
@@ -84,7 +84,7 @@
 ;; sequence of literal byte compares. (Splicing a comptime-built slice back as a
 ;; string literal is not an option: it segfaults the compiler as of 2026-08.)
 
-;; How many space-separated tokens are in s.
+;;; How many space-separated tokens are in s.
 (defn ct-tok-count [(s (slice u8))] (-> i64)
   (let [n (slice-len s)
         (mut i) 0
@@ -99,7 +99,7 @@
         0))
     (load c)))
 
-;; Byte offset where token k starts, or -1.
+;;; Byte offset where token k starts, or -1.
 (defn ct-tok-start [(s (slice u8)) (k i64)] (-> i64)
   (let [n (slice-len s)
         (mut i) 0
@@ -116,7 +116,7 @@
         0))
     (load res)))
 
-;; Length of token k.
+;;; Length of token k.
 (defn ct-tok-len [(s (slice u8)) (k i64)] (-> i64)
   (let [st (ct-tok-start s k)
         n (slice-len s)]
@@ -131,7 +131,7 @@
 ;; Code emitters. `data`, `len`, `pos` etc. are the names bound in the generated
 ;; function; these fragments are only ever spliced into it.
 
-;; data[posc + j] == b
+;;; data[posc + j] == b
 (defn ct-cmp [(b i64) (posc Code) (j i64)] (-> Code)
   (if (= j 0)
       `(= (cast i64 (load (index data ~posc))) ~b)
@@ -142,8 +142,8 @@
       `()
       `(~(ct-cmp (cast i64 (slice-get s (+ st j))) posc j) ~@(ct-cmps s st (+ j 1) n posc))))
 
-;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`len`),
-;; exactly as the interpreter's match-at does — not against the line end.
+;;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`len`),
+;;; exactly as the interpreter's match-at does — not against the line end.
 (defn ct-match [(s (slice u8)) (k i64) (posc Code)] (-> Code)
   (let [st (ct-tok-start s k)
         n (ct-tok-len s k)]
@@ -154,7 +154,7 @@
       `()
       `(~(ct-match s k posc) ~@(ct-matches s (+ k 1) n posc))))
 
-;; bc is one of the language's single-char quote delimiters.
+;;; bc is one of the language's single-char quote delimiters.
 (defn ct-quote-tests [(q (slice u8)) (k i64) (n i64) (bc Code)] (-> Code)
   (if (>= k n)
       `()
@@ -163,9 +163,9 @@
 ;; ---------------------------------------------------------------------------
 ;; The scanner body, assembled per language.
 
-;; Hot-byte dispatch, built inside out so that an absent category collapses its
-;; whole level away. Order matches count-bytes exactly: block start, multiline
-;; quote, line comment, quote, plain byte.
+;;; Hot-byte dispatch, built inside out so that an absent category collapses its
+;;; whole level away. Order matches count-bytes exactly: block start, multiline
+;;; quote, line comment, quote, plain byte.
 (defn gen-dispatch [(lcs (slice u8)) (blocks (slice u8)) (nested bool) (quotes (slice u8)) (mqs (slice u8))] (-> Code)
   (let [n-lc (ct-tok-count lcs)
         n-bl (/ (ct-tok-count blocks) 2)
@@ -236,9 +236,9 @@
              ~at-mq)
         at-mq)))
 
-;; The ST-BLOCK arm: jump between candidate delimiters with memchr. Nesting
-;; brings in the depth counter and the second memchr for the opener; without it
-;; the first closer always returns to ST-NORMAL, so neither is emitted.
+;;; The ST-BLOCK arm: jump between candidate delimiters with memchr. Nesting
+;;; brings in the depth counter and the second memchr for the opener; without it
+;;; the first closer always returns to ST-NORMAL, so neither is emitted.
 (defn gen-block-arm [(blocks (slice u8)) (nested bool)] (-> Code)
   (let [len-end (ct-tok-len blocks 1)
         len-start (ct-tok-len blocks 0)
@@ -270,8 +270,8 @@
                    (do (store! (mut pos) (+ h 1)) 0))))
          0))))
 
-;; The ST-STRING arm. One quote character means the closer is a literal and no
-;; `qch` is carried.
+;;; The ST-STRING arm. One quote character means the closer is a literal and no
+;;; `qch` is carried.
 (defn gen-string-arm [(quotes (slice u8))] (-> Code)
   (let [n-q (slice-len quotes)
         closer (if (= n-q 1) `~(cast i64 (slice-get quotes 0)) `(load qch))]
@@ -291,7 +291,7 @@
                        0)))))
          0))))
 
-;; The ST-MSTRING arm.
+;;; The ST-MSTRING arm.
 (defn gen-mstring-arm [(mqs (slice u8))] (-> Code)
   (let [n-mq (ct-tok-count mqs)
         t0
@@ -326,8 +326,8 @@
                      (do (store! (mut pos) (+ h 1)) 0)))))
          0))))
 
-;; True iff byte b can begin a comment or string token in this language —
-;; the same set rebuild-classes! marks CLS-HOT, computed at compile time.
+;;; True iff byte b can begin a comment or string token in this language —
+;;; the same set rebuild-classes! marks CLS-HOT, computed at compile time.
 (defn ct-hot-byte? [(lcs (slice u8))
                     (blocks (slice u8))
                     (quotes (slice u8))
@@ -356,7 +356,7 @@
           0)))
     (load hit)))
 
-;; One `(v16-eq-mask P b)` per distinct hot byte, to be or'd together.
+;;; One `(v16-eq-mask P b)` per distinct hot byte, to be or'd together.
 (defn ct-hot-mask-calls [(lcs (slice u8))
                          (blocks (slice u8))
                          (quotes (slice u8))
@@ -369,7 +369,7 @@
           `((v16-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs blocks quotes mqs (+ b 1) pexpr))
           (ct-hot-mask-calls lcs blocks quotes mqs (+ b 1) pexpr))))
 
-;; Fold a list of mask expressions into `(| a (| b …))`, or 0 when empty.
+;;; Fold a list of mask expressions into `(| a (| b …))`, or 0 when empty.
 (defn ct-or-fold [(xs Code) (i i64)] (-> Code)
   (if (>= i (primitive/code-count xs))
       `0
@@ -377,20 +377,20 @@
           (primitive/code-nth xs i)
           `(| ~(primitive/code-nth xs i) ~(ct-or-fold xs (+ i 1))))))
 
-;; The ST-NORMAL arm — where 98.8% of the bytes go, so the only loop whose cost
-;; really matters.
-;;
-;; Both variants scan 16 bytes at a time via thecount.simd: one bitmask of the
-;; language's delimiter bytes and one of whitespace, from which "is there a
-;; delimiter in this chunk" and "is any byte before it non-blank" are answered
-;; with bit arithmetic instead of a table load per byte. The scan then jumps
-;; straight to the delimiter with a count-trailing-zeros. A chunk that would
-;; cross the line end falls through to the original byte-at-a-time loop, which
-;; also keeps the two paths trivially comparable in the differential tests.
-;;
-;; With no delimiters at all there is nothing to leave the fast path for, so the
-;; whole delimiter half drops out and the scan stops at the line's first
-;; non-space byte instead of walking the line.
+;;; The ST-NORMAL arm — where 98.8% of the bytes go, so the only loop whose cost
+;;; really matters.
+;;;
+;;; Both variants scan 16 bytes at a time via thecount.simd: one bitmask of the
+;;; language's delimiter bytes and one of whitespace, from which "is there a
+;;; delimiter in this chunk" and "is any byte before it non-blank" are answered
+;;; with bit arithmetic instead of a table load per byte. The scan then jumps
+;;; straight to the delimiter with a count-trailing-zeros. A chunk that would
+;;; cross the line end falls through to the original byte-at-a-time loop, which
+;;; also keeps the two paths trivially comparable in the differential tests.
+;;;
+;;; With no delimiters at all there is nothing to leave the fast path for, so the
+;;; whole delimiter half drops out and the scan stops at the line's first
+;;; non-space byte instead of walking the line.
 (defn gen-normal-arm [(has-hot bool)
                       (lcs (slice u8))
                       (blocks (slice u8))
@@ -532,7 +532,7 @@
       `()
       `(~(gen-counter (primitive/code-nth tbl k)) ~@(gen-counters tbl (+ k 1) n))))
 
-;; Nested ifs over the row index; the last row doubles as the fallback.
+;;; Nested ifs over the row index; the last row doubles as the fallback.
 (defn gen-field-arms [(tbl Code) (k i64) (n i64) (fidx i64)] (-> Code)
   (if (= k (- n 1))
       (primitive/code-nth (primitive/code-nth tbl k) fidx)
@@ -550,10 +550,10 @@
         f
         `(if (= i ~k) ~f ~(gen-counter-arms tbl (+ k 1) n)))))
 
-;; Invoked as a MACRO rather than through `(meta …)`: meta-generated forms are
-;; spliced after macro expansion has already run, so they may not call `while`,
-;; `cond`, `when` or any other macro. A macro's output is expanded normally,
-;; which is what lets the generated scanners below be written in ordinary Coil.
+;;; Invoked as a MACRO rather than through `(meta …)`: meta-generated forms are
+;;; spliced after macro expansion has already run, so they may not call `while`,
+;;; `cond`, `when` or any other macro. A macro's output is expanded normally,
+;;; which is what lets the generated scanners below be written in ordinary Coil.
 (defn scanner-id [(names Code) (ids Code) (f Code)] (-> Code)
   (let [n (primitive/code-count names)
         (mut i) 0
@@ -569,10 +569,10 @@
       0)
     (load found)))
 
-;; Give the lexical protocol used by the independently composed scanner
-;; fragments one coherent set of identities.  This is deliberately a closed
-;; list: declarations and references which merely happen to have the same
-;; printed spelling outside this protocol retain their original hygiene.
+;;; Give the lexical protocol used by the independently composed scanner
+;;; fragments one coherent set of identities.  This is deliberately a closed
+;;; list: declarations and references which merely happen to have the same
+;;; printed spelling outside this protocol retain their original hygiene.
 (defn bind-scanner-identifiers-children [(names Code) (ids Code) (f Code) (out CodeBuilder)] (-> CodeBuilder)
   (let [n (primitive/code-count f)
         (mut i) 0]

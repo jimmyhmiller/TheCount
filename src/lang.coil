@@ -9,12 +9,12 @@
 (import "coil.mem" :use [mem-fill])
 (import "thecount.util" :use *)
 
-;; One block-comment delimiter pair, e.g. "/*" and "*/".
+;;; One block-comment delimiter pair, e.g. "/*" and "*/".
 (defstruct BlockPair [(bstart (slice u8)) (bend (slice u8))])
 
-;; Everything the counter needs to know about a language.
-;; quotes: each byte is a single-char string delimiter (' " `).
-;; multi-quotes: multi-char string delimiters that may span lines (Python """).
+;;; Everything the counter needs to know about a language.
+;;; quotes: each byte is a single-char string delimiter (' " `).
+;;; multi-quotes: multi-char string delimiters that may span lines (Python """).
 (defstruct LangSpec
   [(name (slice u8))
    (line-comments (slice (slice u8)))
@@ -28,7 +28,7 @@
 (const CLS-WS 2)
 (const CLS-HOT 3)  ; byte can start a comment/string token: leave the fast path
 
-;; Split s on runs of spaces into freshly allocated token slices (views into s).
+;;; Split s on runs of spaces into freshly allocated token slices (views into s).
 (defn split-tokens [(a (dyn Allocator)) (s (slice u8))] (-> (slice (slice u8)))
   (let [pieces (str-split a s " ")
         n (al-len pieces)
@@ -46,8 +46,8 @@
           (store! (mut w) (+ w 1))))
       (slice-new out count))))
 
-;; Parse "START END START END ..." into block pairs. An odd trailing token is
-;; a configuration error and aborts with a message.
+;;; Parse "START END START END ..." into block pairs. An odd trailing token is
+;;; a configuration error and aborts with a message.
 (defn parse-blocks [(a (dyn Allocator)) (s (slice u8))] (-> (slice BlockPair))
   (let [toks (split-tokens a s)
         n (slice-len toks)]
@@ -63,12 +63,12 @@
                   :bend (slice-get toks (+ (* k 2) 1)))))
       (slice-new out np))))
 
-;; Build a LangSpec from space-separated token strings — the exact same
-;; format the user config file and `thecount add-lang` use.
-;;   lcs:    "// #"        line comment starters
-;;   blocks: "/* */"       block pairs, start end start end
-;;   quotes: "\"'"         each BYTE is a single-char string delimiter
-;;   mqs:    "\"\"\" '''"  multiline string delimiters
+;;; Build a LangSpec from space-separated token strings — the exact same
+;;; format the user config file and `thecount add-lang` use.
+;;;   lcs:    "// #"        line comment starters
+;;;   blocks: "/* */"       block pairs, start end start end
+;;;   quotes: "\"'"         each BYTE is a single-char string delimiter
+;;;   mqs:    "\"\"\" '''"  multiline string delimiters
 (defn lang-from-strings [(a (dyn Allocator))
                          (name (slice u8))
                          (lcs (slice u8))
@@ -87,8 +87,8 @@
     (rebuild-classes! a (mut l))
     l))
 
-;; (Re)build the byte-class table from the token fields. Must be called
-;; whenever line-comments/blocks/quotes/multi-quotes change.
+;;; (Re)build the byte-class table from the token fields. Must be called
+;;; whenever line-comments/blocks/quotes/multi-quotes change.
 (defn rebuild-classes! [(a (dyn Allocator)) (l (mut LangSpec))] (-> i64)
   (let [t (must-alloc [u8] a 256)]
     (mem-fill t (cast u8 CLS-PLAIN) 256)

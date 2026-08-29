@@ -28,7 +28,7 @@
 
 (import "coil.primitive" :as primitive)
 
-;; Bit i is set iff the byte at p[i] equals b, for i in 0..15.
+;;; Bit i is set iff the byte at p[i] equals b, for i in 0..15.
 (defn v16-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
   (primitive/llvm-ir i64
                      [p b]
@@ -41,8 +41,8 @@
 %r = zext i16 %m to i64
 ret i64 %r"))
 
-;; Bit i is set iff p[i] is a space, tab or carriage return — the three bytes
-;; count-bytes classifies as CLS-WS. One load, three compares, two ors.
+;;; Bit i is set iff p[i] is a space, tab or carriage return — the three bytes
+;;; count-bytes classifies as CLS-WS. One load, three compares, two ors.
 (defn v16-ws-mask [(p (ptr u8))] (-> i64)
   (primitive/llvm-ir i64
                      [p]
@@ -56,8 +56,8 @@ ret i64 %r"))
 %r = zext i16 %m to i64
 ret i64 %r"))
 
-;; Index of the lowest set bit. Only called on a non-zero mask, so the
-;; is_zero_poison flag is safe and saves a branch.
+;;; Index of the lowest set bit. Only called on a non-zero mask, so the
+;;; is_zero_poison flag is safe and saves a branch.
 (defn ctz [(x i64)] (-> i64)
   (primitive/llvm-ir i64
                      [x]

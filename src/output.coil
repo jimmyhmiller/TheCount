@@ -11,7 +11,7 @@
 (extern snprintf :cc c [(ptr i8) i64 (ptr i8) ...] (-> i32))
 (extern qsort :cc c [(ptr Row) i64 i64 (fnptr c [(ptr Row) (ptr Row)] i32)] (-> void))
 
-;; One output row for any of the three tables.
+;;; One output row for any of the three tables.
 (defstruct Row
   [(label (slice u8))  ; language name, file path, or directory
    (sub (slice u8))  ; language name on --files and --dirs rows, else ""
@@ -43,7 +43,7 @@
       (sb-push-byte! (mut b) (slice-get raw i)))
     (sb-str (mut b))))
 
-;; Append s right-aligned in a field of width w (always at least one leading space).
+;;; Append s right-aligned in a field of width w (always at least one leading space).
 (defn push-right! [(b (mut StrBuf)) (s (slice u8)) (w i64)] (-> i64)
   (let [n (slice-len s)
         (mut pad) (- w n)]
@@ -53,7 +53,7 @@
     (sb-push-str! (mut b) s)
     0))
 
-;; Append s left-aligned, padded to width w.
+;;; Append s left-aligned, padded to width w.
 (defn push-left! [(b (mut StrBuf)) (s (slice u8)) (w i64)] (-> i64)
   (sb-push-str! (mut b) s)
   (let [(mut pad) (- w (slice-len s))]
@@ -66,7 +66,7 @@
     (sb-push-byte! (mut b) (cast u8 ch)))
   0)
 
-;; code desc, then label asc
+;;; code desc, then label asc
 (defn row-cmp [(x (ptr Row)) (y (ptr Row))] (-> i32)
   (let [a (.code (.c x))
         b (.code (.c y))]
@@ -74,9 +74,9 @@
           (< a b) (cast i32 1)
           :else (cast i32 (str-cmp (load (field x label)) (load (field y label)))))))
 
-;; --dirs ordering: biggest directory first (by its total code), every row of a
-;; directory kept together, and within a directory the biggest language first.
-;; `group` carries the directory total so the comparison stays local to a row.
+;;; --dirs ordering: biggest directory first (by its total code), every row of a
+;;; directory kept together, and within a directory the biggest language first.
+;;; `group` carries the directory total so the comparison stays local to a row.
 (defn dir-row-cmp [(x (ptr Row)) (y (ptr Row))] (-> i32)
   (let [gx (.group x)
         gy (.group y)]
@@ -97,8 +97,8 @@
 
 (const NUM-W 10)
 
-;; Print a full table. with-files / with-sub choose the optional columns, and
-;; `cmp` the row order (row-cmp for the flat tables, dir-row-cmp for --dirs).
+;;; Print a full table. with-files / with-sub choose the optional columns, and
+;;; `cmp` the row order (row-cmp for the flat tables, dir-row-cmp for --dirs).
 (defn print-table [(a (dyn Allocator))
                    (title (slice u8))
                    (rows (slice Row))
@@ -169,9 +169,9 @@
           (print "{s}" (sb-str (mut b)))
           0)))))
 
-;; Print --dirs as a hierarchy instead of repeating the directory on every
-;; language row. Rows arrive as one (directory, language) pair and are sorted
-;; so each directory is contiguous, largest directory first.
+;;; Print --dirs as a hierarchy instead of repeating the directory on every
+;;; language row. Rows arrive as one (directory, language) pair and are sorted
+;;; so each directory is contiguous, largest directory first.
 (defn print-dir-tree [(a (dyn Allocator)) (rows (slice Row))] (-> i64)
   (qsort (slice-data rows) (slice-len rows) (sizeof Row) (fnptr-of dir-row-cmp))
   (let [n (slice-len rows)

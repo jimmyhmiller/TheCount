@@ -48,16 +48,16 @@
 ;; are in flight, so memory stays bounded.
 ;; ---------------------------------------------------------------------------
 
-;; Reusable file buffer: grows to the largest file seen.
+;;; Reusable file buffer: grows to the largest file seen.
 (defstruct ReadBuf [(p (ptr u8)) (cap i64)])
 
 (defn rb-new [(a (dyn Allocator))] (-> (ptr ReadBuf))
   (box! a ReadBuf (ReadBuf :p (cast (ptr u8) 0) :cap 0)))
 
-;; Grow rb to at least newcap bytes (contents are not preserved).
-;; Buffer memory ALWAYS comes from the global malloc allocator: buffers are
-;; shared across threads, and freeing one arena's region pointer through
-;; another arena's free hook aborts (libmalloc: pointer was not allocated).
+;;; Grow rb to at least newcap bytes (contents are not preserved).
+;;; Buffer memory ALWAYS comes from the global malloc allocator: buffers are
+;;; shared across threads, and freeing one arena's region pointer through
+;;; another arena's free hook aborts (libmalloc: pointer was not allocated).
 (defn rb-grow! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (newcap i64)] (-> i64)
   (let [ma (malloc-allocator)]
     (when (> (load (field rb cap)) 0)
@@ -72,14 +72,14 @@
       (None [] (do (set! (.cap rb) 0) 0)))
     0))
 
-;; Read the whole file into rb's buffer. A short read from a regular file
-;; means EOF, so anything smaller than the buffer costs exactly one read(2):
-;; open + read + close, three syscalls per file. Returns size or -1.
+;;; Read the whole file into rb's buffer. A short read from a regular file
+;;; means EOF, so anything smaller than the buffer costs exactly one read(2):
+;;; open + read + close, three syscalls per file. Returns size or -1.
 (defn read-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (cpath (ptr i8))] (-> i64)
   (read-fd-into! a rb (os/open cpath 0)))
 
-;; openat variant: resolve name relative to dfd — one path component of
-;; kernel name lookup instead of the whole path.
+;;; openat variant: resolve name relative to dfd — one path component of
+;;; kernel name lookup instead of the whole path.
 (defn read-into-at! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (dfd i32) (cname (ptr i8))] (-> i64)
   (read-fd-into! a rb (openat dfd cname 0)))
 
@@ -119,7 +119,7 @@
         (os/close fd)
         (if (= failed true) -1 got))))
 
-;; Aggregation state; each counter owns one, merged after the pools drain.
+;;; Aggregation state; each counter owns one, merged after the pools drain.
 (defstruct Agg
   [(files-per (slice i64))  ; per-spec-index file count
    (counts-per (slice Counts))  ; per-spec-index line counts
@@ -131,12 +131,12 @@
    (depth i64)
    (roots (ptr (ArrayList (slice u8))))])  ; walk roots, for root-relative depth
 
-;; Immutable chain of .gitignore contexts, innermost first. Built during the
-;; walk, only ever read afterwards, so it is safe to share across workers.
+;;; Immutable chain of .gitignore contexts, innermost first. Built during the
+;;; walk, only ever read afterwards, so it is safe to share across workers.
 (defstruct CtxNode [(ctx IgnoreCtx) (parent (ptr CtxNode))])
 
-;; A walk item: a directory to walk (files empty), or a batch of
-;; already-filtered file basenames within dir `path` (files non-empty).
+;;; A walk item: a directory to walk (files empty), or a batch of
+;;; already-filtered file basenames within dir `path` (files non-empty).
 (defstruct DirItem
   [(path (slice u8))
    (chain (ptr CtxNode))
@@ -145,7 +145,7 @@
 (const FILE-BATCH 16)
 (const NBUFS 32)
 
-;; One filled buffer traveling from a reader to a counter.
+;;; One filled buffer traveling from a reader to a counter.
 (defstruct CountMsg
   [(buf-id i64)
    (size i64)
@@ -198,16 +198,16 @@
            :depth depth
            :roots roots))))
 
-;; NUL byte in the first 8000 bytes = binary, skip it (same heuristic as scc).
+;;; NUL byte in the first 8000 bytes = binary, skip it (same heuristic as scc).
 (defn binary? [(data (slice u8))] (-> bool)
   (let [n (slice-len data)
         lim (if (< n 8000) n 8000)]
     (bytes-contains? (subslice data 0 lim) (cast u8 0))))
 
-;; Length of the longest walk root `dir` sits under, or 0 for none. Depth is
-;; counted from there, so `thecount src --dirs` breaks src up by ITS own
-;; subdirectories instead of collapsing everything under one "src" row.
-;; A "." root walks with an empty prefix, which lands on 0 by itself.
+;;; Length of the longest walk root `dir` sits under, or 0 for none. Depth is
+;;; counted from there, so `thecount src --dirs` breaks src up by ITS own
+;;; subdirectories instead of collapsing everything under one "src" row.
+;;; A "." root walks with an empty prefix, which lands on 0 by itself.
 (defn dir-base-len [(roots (ptr (ArrayList (slice u8)))) (dir (slice u8))] (-> i64)
   (let [n (al-len (load roots))
         dn (slice-len dir)
@@ -226,9 +226,9 @@
           0)))
     best))
 
-;; Rollup key for a directory: its first `depth` segments below the walk root
-;; that starts it (`base` bytes long), labeled with the full path so rows stay
-;; unambiguous across several roots. "." for the walk root itself under ".".
+;;; Rollup key for a directory: its first `depth` segments below the walk root
+;;; that starts it (`base` bytes long), labeled with the full path so rows stay
+;;; unambiguous across several roots. "." for the walk root itself under ".".
 (defn dir-rollup-key [(dir (slice u8)) (base i64) (depth i64)] (-> (slice u8))
   (let [dn (slice-len dir)]
     (cond (= dn 0) "."
@@ -250,10 +250,10 @@
                 (store! (mut j) (+ j 1)))
               (subslice dir 0 cut)))))
 
-;; Label files directly inside an explicitly named walk root as "root/.".
-;; Without the dot, a root containing no subdirectories looks like --dirs
-;; merely echoed the argument instead of showing where those files live.
-;; The current-directory root is already displayed as ".".
+;;; Label files directly inside an explicitly named walk root as "root/.".
+;;; Without the dot, a root containing no subdirectories looks like --dirs
+;;; merely echoed the argument instead of showing where those files live.
+;;; The current-directory root is already displayed as ".".
 (defn dir-row-key [(a (dyn Allocator))
                    (dir (slice u8))
                    (base i64)
@@ -262,9 +262,9 @@
       (join-path a dir ".")
       (dir-rollup-key dir base depth)))
 
-;; --dirs keeps one row per (directory, language), so the rollup map is keyed
-;; on both. \x01 is the separator: it cannot occur in a path or in a language
-;; name, so the two halves can never run together to form a colliding key.
+;;; --dirs keeps one row per (directory, language), so the rollup map is keyed
+;;; on both. \x01 is the separator: it cannot occur in a path or in a language
+;;; name, so the two halves can never run together to form a colliding key.
 (defn dir-lang-key [(a (dyn Allocator)) (dir (slice u8)) (lang (slice u8))] (-> (slice u8))
   (let [dn (slice-len dir)
         ln (slice-len lang)
@@ -275,7 +275,7 @@
     (mem-copy (index p (+ dn 1)) (slice-data lang) ln)
     (slice-new p total)))
 
-;; Record counted results for one file into agg.
+;;; Record counted results for one file into agg.
 (defn agg-file! [(a (dyn Allocator))
                  (r (ptr Registry))
                  (agg (ptr Agg))
@@ -310,7 +310,7 @@
                 0)))))
   0)
 
-;; Count one file synchronously (used for plain-file roots on the main thread).
+;;; Count one file synchronously (used for plain-file roots on the main thread).
 (defn process-file! [(a (dyn Allocator))
                      (r (ptr Registry))
                      (agg (ptr Agg))
@@ -335,7 +335,7 @@
                                  (subslice path (+ last-slash 1) dn)
                                  (reg-count-bytes r idx data))))))))))
 
-;; True iff path contains any of the exclude substrings.
+;;; True iff path contains any of the exclude substrings.
 (defn excluded? [(excludes (ptr (ArrayList (slice u8)))) (path (slice u8))] (-> bool)
   (let [n (al-len (load excludes))
         (mut k) 0
@@ -347,9 +347,9 @@
       (store! (mut k) (+ k 1)))
     (= hit true)))
 
-;; Verdict for the entry over the ctx chain: 0 no rule matched, 1 ignore,
-;; -1 keep (negated). Outermost rules apply first (recursion to the chain
-;; root), inner and later rules override.
+;;; Verdict for the entry over the ctx chain: 0 no rule matched, 1 ignore,
+;;; -1 keep (negated). Outermost rules apply first (recursion to the chain
+;;; root), inner and later rules override.
 (defn chain-verdict [(node (ptr CtxNode))
                      (path (slice u8))
                      (name (slice u8))
@@ -407,7 +407,7 @@
     (pthread_mutex_unlock fm)
     got))
 
-;; Release a batch of buffer ids in one lock.
+;;; Release a batch of buffer ids in one lock.
 (defn release-bufs! [(pool (ptr Pool)) (ids (ptr (ArrayList i64)))] (-> i64)
   (let [fm (cast (ptr i8) (field pool fmutex))
         fc (cast (ptr i8) (field pool fcond))]
@@ -450,8 +450,8 @@
 
 ;; --- reader side -----------------------------------------------------------
 
-;; Read one file (living in the directory open as dfd) into a pool buffer and
-;; hand it to the counters. openat = one path component of kernel lookup.
+;;; Read one file (living in the directory open as dfd) into a pool buffer and
+;;; hand it to the counters. openat = one path component of kernel lookup.
 (defn reader-file! [(a (dyn Allocator))
                     (pool (ptr Pool))
                     (dfd i32)
@@ -468,12 +468,12 @@
               (release-buf! pool bid)
               (push-count-msg! pool bid size idx dir name))))))
 
-;; Walk one directory: honor .gitignore, queue subdirectories, and either
-;; read the files right here through the open dir fd (small dirs) or hand
-;; batches of basenames to the walk queue for other readers.
-;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
-;; and gitignore/exclude checks, then queue directories and collect file
-;; basenames. Callers only pass regular files and directories.
+;;; Walk one directory: honor .gitignore, queue subdirectories, and either
+;;; read the files right here through the open dir fd (small dirs) or hand
+;;; batches of basenames to the walk queue for other readers.
+;;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
+;;; and gitignore/exclude checks, then queue directories and collect file
+;;; basenames. Callers only pass regular files and directories.
 (defn classify-entry! [(a (dyn Allocator))
                        (pool (ptr Pool))
                        (chain (ptr CtxNode))
@@ -508,7 +508,7 @@
                         0
                         (do (al-push! (mut names) (copy-str a name)) 0))))))))
 
-;; readdir enumerator (linux, and the portable fallback).
+;;; readdir enumerator (linux, and the portable fallback).
 (defn enum-readdir! [(a (dyn Allocator))
                      (pool (ptr Pool))
                      (dp (ptr i8))
@@ -538,12 +538,12 @@
                   0)))))
     0))
 
-;; Walk one directory: honor .gitignore, queue subdirectories, and either
-;; read the files right here through the open dir fd (small dirs) or hand
-;; batches of basenames to the walk queue for other readers.
-;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
-;; and gitignore/exclude checks, then queue directories and collect file
-;; basenames. Callers only pass regular files and directories.
+;;; Walk one directory: honor .gitignore, queue subdirectories, and either
+;;; read the files right here through the open dir fd (small dirs) or hand
+;;; batches of basenames to the walk queue for other readers.
+;;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
+;;; and gitignore/exclude checks, then queue directories and collect file
+;;; basenames. Callers only pass regular files and directories.
 (defn classify-entry! [(a (dyn Allocator))
                        (pool (ptr Pool))
                        (chain (ptr CtxNode))
@@ -578,7 +578,7 @@
                         0
                         (do (al-push! (mut names) (copy-str a name)) 0))))))))
 
-;; readdir enumerator (linux, and the portable fallback).
+;;; readdir enumerator (linux, and the portable fallback).
 (defn enum-readdir! [(a (dyn Allocator))
                      (pool (ptr Pool))
                      (dp (ptr i8))
@@ -608,12 +608,12 @@
                   0)))))
     0))
 
-;; getattrlistbulk enumerator (darwin): batches of entries with name and
-;; object type in one syscall per ~128KB, without creating child vnodes.
-;; Entry layout (4-byte aligned): u32 total length, attribute_set_t (20
-;; bytes, from ATTR_CMN_RETURNED_ATTRS), attrreference_t for ATTR_CMN_NAME
-;; (i32 offset relative to the reference itself, u32 length incl NUL),
-;; u32 ATTR_CMN_OBJTYPE.
+;;; getattrlistbulk enumerator (darwin): batches of entries with name and
+;;; object type in one syscall per ~128KB, without creating child vnodes.
+;;; Entry layout (4-byte aligned): u32 total length, attribute_set_t (20
+;;; bytes, from ATTR_CMN_RETURNED_ATTRS), attrreference_t for ATTR_CMN_NAME
+;;; (i32 offset relative to the reference itself, u32 length incl NUL),
+;;; u32 ATTR_CMN_OBJTYPE.
 (defstruct AttrList
   [(bitmapcount u16)
    (reserved u16)
@@ -699,13 +699,13 @@
                          0)))))
              0)))
 
-;; Walk one directory: honor .gitignore, queue subdirectories, and either
-;; read the files right here through the open dir fd (small dirs) or hand
-;; batches of basenames to the walk queue for other readers.
-;; Enumeration is plain readdir on every platform: getattrlistbulk was tried
-;; (2026-08-04) and cut sys time 35% but nearly DOUBLED wall time on llvm —
-;; the bulk call is synchronously slower than readdir when only names and
-;; types are needed; it only pays when it replaces per-file stat calls.
+;;; Walk one directory: honor .gitignore, queue subdirectories, and either
+;;; read the files right here through the open dir fd (small dirs) or hand
+;;; batches of basenames to the walk queue for other readers.
+;;; Enumeration is plain readdir on every platform: getattrlistbulk was tried
+;;; (2026-08-04) and cut sys time 35% but nearly DOUBLED wall time on llvm —
+;;; the bulk call is synchronously slower than readdir when only names and
+;;; types are needed; it only pays when it replaces per-file stat calls.
 (defn process-dir! [(a (dyn Allocator))
                     (pool (ptr Pool))
                     (item DirItem)] (-> i64)
@@ -751,7 +751,7 @@
           (closedir (cast (ptr i8) handle))
           0))))
 
-;; Read a queued batch: open its directory once, openat each basename.
+;;; Read a queued batch: open its directory once, openat each basename.
 (defn process-batch! [(a (dyn Allocator))
                       (pool (ptr Pool))
                       (item DirItem)] (-> i64)
@@ -854,9 +854,9 @@
               0))))
     (cast (ptr i8) 0)))
 
-;; Give every --dirs row its directory's total code, which dir-row-cmp uses to
-;; order directories by size while keeping each directory's languages together.
-;; Run once, after all counter aggregates have been merged.
+;;; Give every --dirs row its directory's total code, which dir-row-cmp uses to
+;;; order directories by size while keeping each directory's languages together.
+;;; Run once, after all counter aggregates have been merged.
 (defn agg-dir-groups! [(a (dyn Allocator)) (agg (ptr Agg))] (-> i64)
   (when (= (load (field agg want-dirs)) true)
     (let [drows (load (field agg dir-rows))
@@ -874,7 +874,7 @@
       0))
   0)
 
-;; Merge counter aggregate src into dst.
+;;; Merge counter aggregate src into dst.
 (defn agg-merge! [(a (dyn Allocator)) (dst (ptr Agg)) (src (ptr Agg))] (-> i64)
   (let [nf (slice-len (.files-per dst))]
     (for [k 0 nf]
@@ -907,9 +907,9 @@
                   0)))))
     0))
 
-;; The roots as the walk sees them: "." becomes "" so its paths stay bare
-;; ("src/x", not "./src/x"). Read-only once counting starts, so every worker
-;; aggregate can share the list.
+;;; The roots as the walk sees them: "." becomes "" so its paths stay bare
+;;; ("src/x", not "./src/x"). Read-only once counting starts, so every worker
+;;; aggregate can share the list.
 (defn walk-roots-of [(a (dyn Allocator))
                      (roots (ptr (ArrayList (slice u8))))] (-> (ptr (ArrayList (slice u8))))
   (let [out (new-list a (slice u8))]
@@ -927,7 +927,7 @@
                    (None [] dflt)))
            (None [] dflt)))))
 
-;; Count everything under roots. Returns the merged aggregate.
+;;; Count everything under roots. Returns the merged aggregate.
 (defn count-all [(a (dyn Allocator))
                  (r (ptr Registry))
                  (roots (ptr (ArrayList (slice u8))))

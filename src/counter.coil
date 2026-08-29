@@ -19,7 +19,7 @@
   (set! (.code (mut dst)) (+ (.code dst) (.code src)))
   0)
 
-;; True iff tok occurs in s starting at byte i.
+;;; True iff tok occurs in s starting at byte i.
 (defn match-at [(s (slice u8)) (i i64) (tok (slice u8))] (-> bool)
   (let [n (slice-len tok)]
     (if (> (+ i n) (slice-len s))
@@ -32,7 +32,7 @@
             (store! (mut j) (+ j 1)))
           (= ok true)))))
 
-;; Index of the first token in toks matching at i, or -1.
+;;; Index of the first token in toks matching at i, or -1.
 (defn match-any [(s (slice u8)) (i i64) (toks (slice (slice u8)))] (-> i64)
   (block :found
          (for [k 0 (slice-len toks)]
@@ -40,7 +40,7 @@
              (return-from :found k)))
          -1))
 
-;; True iff byte b is one of the single-char quote delimiters.
+;;; True iff byte b is one of the single-char quote delimiters.
 (defn quote-byte? [(b i64) (quotes (slice u8))] (-> bool)
   (bytes-contains? quotes (cast u8 b)))
 
@@ -49,7 +49,7 @@
 (const ST-STRING 2)
 (const ST-MSTRING 3)
 
-;; Index of byte c within s[from..to), or `to` when absent (memchr, SIMD).
+;;; Index of byte c within s[from..to), or `to` when absent (memchr, SIMD).
 (defn find-byte [(s (slice u8)) (from i64) (to i64) (c i64)] (-> i64)
   (if (>= from to)
       to
@@ -58,7 +58,7 @@
             to
             (+ from (- (cast i64 p) (cast i64 (index (slice-data s) from))))))))
 
-;; Number of consecutive backslashes immediately before position q (>= lo).
+;;; Number of consecutive backslashes immediately before position q (>= lo).
 (defn backslashes-before [(s (slice u8)) (lo i64) (q i64)] (-> i64)
   (let [(mut j) (- q 1)
         (mut n) 0]
@@ -67,16 +67,16 @@
       (store! (mut j) (- j 1)))
     n))
 
-;; Classify every line of bytes as code, comment, or blank, scc-style:
-;; a line with any code is code; else any comment content makes it a comment;
-;; else blank. Strings are tracked so comment tokens inside them don't count.
-;; Single-char strings reset at end of line; multi-quote strings and block
-;; comments carry across lines; docstrings (a multi-quote opening a line)
-;; count as comments.
-;;
-;; The scan is line-oriented: memchr finds each newline, then each state
-;; advances with memchr jumps (string closes, block ends) or a byte-class
-;; table (normal state), so plain code bytes never reach the token matcher.
+;;; Classify every line of bytes as code, comment, or blank, scc-style:
+;;; a line with any code is code; else any comment content makes it a comment;
+;;; else blank. Strings are tracked so comment tokens inside them don't count.
+;;; Single-char strings reset at end of line; multi-quote strings and block
+;;; comments carry across lines; docstrings (a multi-quote opening a line)
+;;; count as comments.
+;;;
+;;; The scan is line-oriented: memchr finds each newline, then each state
+;;; advances with memchr jumps (string closes, block ends) or a byte-class
+;;; table (normal state), so plain code bytes never reach the token matcher.
 (defn count-bytes [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
   (let [len (slice-len bytes)
         lcs (.line-comments spec)
@@ -254,7 +254,7 @@
       :comments comments
       :code code)))
 
-;; Index of the block pair whose start matches at i, or -1.
+;;; Index of the block pair whose start matches at i, or -1.
 (defn block-start-at [(s (slice u8)) (i i64) (bls (slice BlockPair))] (-> i64)
   (block :found
          (for [k 0 (slice-len bls)]

@@ -24,7 +24,7 @@
 (defn now-ms [] (-> i64)
   (try (let [v (try-or! (time/monotonic-now-ms) 0)] v)))
 
-;; MB/s for `reps` passes over `data`, using the interpreter when `use-generic`.
+;;; MB/s for `reps` passes over `data`, using the interpreter when `use-generic`.
 (defn bench [(r (ptr Registry)) (idx i64) (data (slice u8)) (use-generic bool)] (-> i64)
   (let [t0 (now-ms)
         (mut k) 0

@@ -18,7 +18,7 @@
     (Some [s] s)
     (None [] "")))
 
-;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
+;;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
 (defn config-path [(a (dyn Allocator))] (-> (slice u8))
   (let [(mut out) ""]
     (try (let [opt (try-or! (os/env-get a "THECOUNT_LANGS") 0)]
@@ -33,14 +33,14 @@
                        (cat a (os/owned-string-slice h) "/.config/thecount/languages"))
                  (None [] "")))))))
 
-;; Read the whole config file; "" when it does not exist.
+;;; Read the whole config file; "" when it does not exist.
 (defn config-read [(a (dyn Allocator))] (-> (slice u8))
   (let [path (config-path a)]
     (if (= (slice-len path) 0)
         ""
         (try (let [data (try-or! (read-file a path) "")] data)))))
 
-;; Overwrite the config file with data, creating parent directories.
+;;; Overwrite the config file with data, creating parent directories.
 (defn config-write [(a (dyn Allocator)) (data (slice u8))] (-> i64)
   (let [path (config-path a)]
     (when (= (slice-len path) 0)
@@ -70,7 +70,7 @@
         (subslice line 0 (- n 1))
         line)))
 
-;; Rest of the line after the first token (trimmed), e.g. the name in "lang Foo Bar".
+;;; Rest of the line after the first token (trimmed), e.g. the name in "lang Foo Bar".
 (defn rest-of-line [(line (slice u8))] (-> (slice u8))
   (let [n (slice-len line)
         (mut k) 0]
@@ -78,7 +78,7 @@
       (store! (mut k) (+ k 1)))
     (str-trim (subslice line k n))))
 
-;; Pending user-language stanza being accumulated during parsing.
+;;; Pending user-language stanza being accumulated during parsing.
 (defstruct Pending
   [(active bool)
    (name (slice u8))
@@ -128,17 +128,17 @@
               (reg-add-files! r idx (load (field p files))))
             idx)))))
 
-;; Parse the user config format and register every language in it.
-;; Format, one directive per line ('#' comments, blank lines ignored):
-;;   lang My Language      start a stanza; rest of line is the display name
-;;   like c                inherit every field from an existing language
-;;   ext foo bar           file extensions (without dots)
-;;   file Foofile          exact filenames for this language
-;;   line // #             line comment starters
-;;   block /* */ (* *)     block comment start/end pairs
-;;   nested                block comments nest
-;;   quotes " '            single-char string delimiters
-;;   multi """ '''         multiline string delimiters
+;;; Parse the user config format and register every language in it.
+;;; Format, one directive per line ('#' comments, blank lines ignored):
+;;;   lang My Language      start a stanza; rest of line is the display name
+;;;   like c                inherit every field from an existing language
+;;;   ext foo bar           file extensions (without dots)
+;;;   file Foofile          exact filenames for this language
+;;;   line // #             line comment starters
+;;;   block /* */ (* *)     block comment start/end pairs
+;;;   nested                block comments nest
+;;;   quotes " '            single-char string delimiters
+;;;   multi """ '''         multiline string delimiters
 (defn load-config! [(r (ptr Registry)) (src (slice u8))] (-> i64)
   (let [a (.arena r)
         lines (str-split a src "\n")
@@ -190,7 +190,7 @@
     (flush-pending! r pend)
     0))
 
-;; "\" '" -> "\"'" — quotes are single chars, spacing is only for readability.
+;;; "\" '" -> "\"'" — quotes are single chars, spacing is only for readability.
 (defn strip-spaces [(a (dyn Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (slice-len s)
         p (must-alloc [u8] a n)
@@ -201,8 +201,8 @@
         (store! (mut w) (+ w 1))))
     (slice-new p w)))
 
-;; Remove the stanza for `name` (case-insensitive) from config text.
-;; (Some new-text) on success, (None) when no stanza matched.
+;;; Remove the stanza for `name` (case-insensitive) from config text.
+;;; (Some new-text) on success, (None) when no stanza matched.
 (defn remove-stanza [(a (dyn Allocator)) (src (slice u8)) (name (slice u8))] (-> (Option (slice u8)))
   (let [lines (str-split a src "\n")
         n (al-len lines)
@@ -234,7 +234,7 @@
               0))))
     (if (= found true) (Some (sb-str b)) (None))))
 
-;; Load user languages from the config file on top of the builtins.
+;;; Load user languages from the config file on top of the builtins.
 (defn load-user-langs! [(r (ptr Registry))] (-> i64)
   (let [src (config-read (.arena r))]
     (if (> (slice-len src) 0)

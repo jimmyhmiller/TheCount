@@ -6,30 +6,30 @@
 (import "coil.hashmap" :use [HashMap KeyOps hm-new hm-get hm-put!])
 (import "coil.slice" :use [slice-len slice-get])
 
-;; Value default for an Option. Keep effectful/lazy fallbacks as an explicit
-;; match so callers do not accidentally evaluate them eagerly.
+;;; Value default for an Option. Keep effectful/lazy fallbacks as an explicit
+;;; match so callers do not accidentally evaluate them eagerly.
 (defn option-or :inline (Always) [T] [(o (Option T)) (dflt T)] (-> T)
   (match o
     (Some [v] v)
     (None [] dflt)))
 
-;; This application cannot recover from allocation failure. Keep that policy
-;; explicit while retaining the typed allocation's element count and TypeId.
+;;; This application cannot recover from allocation failure. Keep that policy
+;;; explicit while retaining the typed allocation's element count and TypeId.
 (defn must-alloc [T] [(a (dyn Allocator)) (n i64)] (-> (ptr T))
   (match (alloc [T] a n)
     (Some [memory] (alloc-slice-data memory))
     (None [] (do (oom-at c"thecount" (* n (sizeof T)))
                  (cast (ptr T) 0)))))
 
-;; Heap-backed collection headers are common because a pointer to the stable
-;; header can be shared while the collection grows.
+;;; Heap-backed collection headers are common because a pointer to the stable
+;;; header can be shared while the collection grows.
 (defn new-list [(a Code) (T Code)] (-> Code)
   `(box! ~a (ArrayList ~T) (al-new [~T] ~a)))
 
 (defn new-map [(a Code) (K Code) (V Code) (ops Code)] (-> Code)
   `(box! ~a (HashMap ~K ~V) (hm-new [~K ~V] ~a ~ops)))
 
-;; Last index containing a byte, or -1.
+;;; Last index containing a byte, or -1.
 (defn bytes-last-index-of :inline (Always) [(s (slice u8)) (needle u8)] (-> i64)
   (let [(mut i) (- (slice-len s) 1)]
     (while (and (>= i 0) (!= (slice-get s i) needle))
@@ -43,16 +43,16 @@
       (store! (mut i) (+ i 1)))
     (< i n)))
 
-;; Increment an i64 map value, treating a missing key as zero. Returns the new
-;; value and preserves the map's existing key ownership policy.
+;;; Increment an i64 map value, treating a missing key as zero. Returns the new
+;;; value and preserves the map's existing key ownership policy.
 (defn hm-add! :inline (Always) [K] [(m (mut (HashMap K i64))) (key K) (delta i64)] (-> i64)
   (let [next (+ (option-or (hm-get (load m) key) 0) delta)]
     (hm-put! (mut m) key next)
     next))
 
-;; Emit field stores for set-fields!/zeroed-with. Each initializer is `(field value)` so
-;; field names stay symbols and are checked by the ordinary `field` form after
-;; expansion.
+;;; Emit field stores for set-fields!/zeroed-with. Each initializer is `(field value)` so
+;;; field names stay symbols and are checked by the ordinary `field` form after
+;;; expansion.
 (defn zeroed-with-stores [(place Code) (inits Code) (i i64)] (-> Code)
   (if (>= i (primitive/code-count inits))
       `()
@@ -62,17 +62,17 @@
                                                                                                                         (+ i
                                                                                                                            1))))))
 
-;; Assign several fields of one mutable place, with field names checked after
-;; expansion by Coil's ordinary `field` form.
+;;; Assign several fields of one mutable place, with field names checked after
+;;; expansion by Coil's ordinary `field` form.
 (defn set-fields! [(place Code) & (inits Code)] (-> Code)
   `(do ~@(zeroed-with-stores place inits 0) 0))
 
-;; Construct a zero-initialized T with selected fields overridden:
-;;
-;;   (zeroed-with Job (path path) (priority 2))
-;;
-;; Use T's native named constructor when every field is supplied. This macro is
-;; for structs whose omitted fields deliberately take their zero value.
+;;; Construct a zero-initialized T with selected fields overridden:
+;;;
+;;;   (zeroed-with Job (path path) (priority 2))
+;;;
+;;; Use T's native named constructor when every field is supplied. This macro is
+;;; for structs whose omitted fields deliberately take their zero value.
 (defn zeroed-with [(T Code) & (inits Code)] (-> Code)
   (let [place (primitive/gensym)]
     `(let [(mut ~place) (zeroed ~T)]

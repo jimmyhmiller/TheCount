@@ -8,7 +8,7 @@
 (import "coil.primitive" :as primitive)
 (import "thecount.util" :use *)
 
-;; One parsed .gitignore line.
+;;; One parsed .gitignore line.
 (defstruct IgnoreRule
   [(pat (slice u8))
    (negated bool)
@@ -16,12 +16,12 @@
    (anchored bool)  ; pattern contains '/', match against dir-relative path
    (literal bool)])  ; no glob metacharacters: plain compare suffices
 
-;; The rules of one .gitignore, tied to the directory that holds it.
+;;; The rules of one .gitignore, tied to the directory that holds it.
 (defstruct IgnoreCtx
   [(base (slice u8))  ; dir prefix rules are relative to ("" = walk root)
    (rules (ptr (ArrayList IgnoreRule)))])
 
-;; Glob match over bytes: * (within segment), ? (single non-/), ** (across /).
+;;; Glob match over bytes: * (within segment), ? (single non-/), ** (across /).
 (defn glob-rec [(pat (slice u8)) (s (slice u8)) (pi i64) (si i64)] (-> bool)
   (let [pl (slice-len pat)
         sl (slice-len s)]
@@ -70,7 +70,7 @@
 (defn glob-match [(pat (slice u8)) (s (slice u8))] (-> bool)
   (glob-rec pat s 0 0))
 
-;; Parse one .gitignore's content into rules (in file order).
+;;; Parse one .gitignore's content into rules (in file order).
 (defn parse-ignore [(a (dyn Allocator)) (src (slice u8))] (-> (ptr (ArrayList IgnoreRule)))
   (let [rules (new-list a IgnoreRule)
         lines (str-split a src "\n")]
@@ -119,7 +119,7 @@
                   0)))))))
     rules))
 
-;; Load dir/.gitignore into an IgnoreCtx; rules list is empty when absent.
+;;; Load dir/.gitignore into an IgnoreCtx; rules list is empty when absent.
 (defn load-ignore-ctx [(a (dyn Allocator)) (dir (slice u8))] (-> IgnoreCtx)
   (let [path
           (if (= (slice-len dir) 0)
@@ -139,9 +139,9 @@
 (defn basename-of [(path (slice u8))] (-> (slice u8))
   (subslice path (+ (bytes-last-index-of path (cast u8 #\/)) 1) (slice-len path)))
 
-;; Is `path` (with basename `name`) ignored by the ctx stack?
-;; Rules apply outermost-first, in file order; the LAST matching rule wins,
-;; which is exactly git's negation semantics for the subset we support.
+;;; Is `path` (with basename `name`) ignored by the ctx stack?
+;;; Rules apply outermost-first, in file order; the LAST matching rule wins,
+;;; which is exactly git's negation semantics for the subset we support.
 (defn ignored? [(ctxs (ptr (ArrayList IgnoreCtx)))
                 (path (slice u8))
                 (name (slice u8))

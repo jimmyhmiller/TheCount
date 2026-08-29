@@ -18,7 +18,7 @@
 (import "thecount.counter" :use *)
 (import "thecount.specialize" :use *)
 
-;; Index of the table row named `name`, or -1.
+;;; Index of the table row named `name`, or -1.
 (defn row-of [(name (slice u8))] (-> i64)
   (let [n (spec-row-count)
         (mut k) 0
@@ -29,7 +29,7 @@
       (store! (mut k) (+ k 1)))
     (load found)))
 
-;; The LangSpec for a table row, built through the ordinary runtime path.
+;;; The LangSpec for a table row, built through the ordinary runtime path.
 (defn row-spec-ptr [(i i64)] (-> (ptr LangSpec))
   (let [a (malloc-allocator)
         value (lang-from-strings a
@@ -41,7 +41,7 @@
                                  (spec-row-mqs i))]
     (box! a LangSpec value)))
 
-;; Run both scanners for language `name` over `src` and assert they agree.
+;;; Run both scanners for language `name` over `src` and assert they agree.
 (defn same? [(name (slice u8)) (src (slice u8))] (-> i64)
   (let [i (row-of name)]
     (assert (>= i 0))
