@@ -3,3 +3,4 @@
 .coil/
 /thecount
 *.o
+/build
