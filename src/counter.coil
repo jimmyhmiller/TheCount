@@ -244,8 +244,18 @@
               (and (= state ST-MSTRING) (= mq-doc true)) (store! (mut comments) (+ comments 1))
               (= state ST-MSTRING) (store! (mut code) (+ code 1))
               :else (store! (mut blank) (+ blank 1)))
-        (when (= state ST-STRING)  ; unterminated single-line string
-          (store! (mut state) ST-NORMAL)
+        ;; A single-line string ends at the newline UNLESS the line ends with an
+        ;; odd number of backslashes: that is a line continuation and the string
+        ;; carries on, so a `//` on the next line is still string content.
+        (when (= state ST-STRING)
+          (let [e (if (and (> le i)
+                           (= (cast i64 (load (index data (- le 1)))) #\u0D))
+                      (- le 1)
+                      le)]
+            (when (= (% (backslashes-before bytes i e) 2) 0)
+              (store! (mut state) ST-NORMAL)
+              0)
+            0)
           0)
         (store! (mut i) (+ le 1))))
     (Counts

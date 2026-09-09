@@ -224,3 +224,10 @@
 
 (deftest json-long-string-line
          (same? "JSON" "{\n  \"key\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n\n  \"n\": 1\n}\n"))
+
+;; the specialized scanner must honor string line-continuation too
+(deftest c-string-continued-by-backslash
+         (same? "C" "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"))
+
+(deftest c-string-not-continued-by-escaped-backslash
+         (same? "C" "char *s = \"a\\\\\n// real comment\nint x;\n"))

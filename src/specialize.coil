@@ -513,8 +513,19 @@
                                (store! (mut n-code) (+ n-code 1)))
                            `())
                    true (store! (mut n-blank) (+ n-blank 1)))
+             ;; A trailing odd run of backslashes continues the string onto the
+             ;; next line, so it must NOT drop back to ST-NORMAL here.
              ~@(if has-q
-                   `((when (= state ST-STRING) (store! (mut state) ST-NORMAL) 0))
+                   `((when (= state ST-STRING)
+                       (let [e (if (all (> le i)
+                                        (= (cast i64 (load (index data (- le 1)))) #\u0D))
+                                   (- le 1)
+                                   le)]
+                         (when (= (% (backslashes-before bytes i e) 2) 0)
+                           (store! (mut state) ST-NORMAL)
+                           0)
+                         0)
+                       0))
                    `())
              (store! (mut i) (+ le 1))))
          (Counts

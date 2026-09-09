@@ -107,3 +107,24 @@
                c (count-bytes spec-p src)]
            (assert-eq (load (field c lines)) 3)
            (assert-eq (load (field c blank)) 3)))
+
+;; A trailing backslash continues a string literal onto the next line, so a
+;; `//` there is string content, not a comment. Without this, every line of a
+;; multi-line continued string after the first is misread.
+(deftest c-string-continued-by-backslash
+         (let [spec-p (c-spec-ptr)
+               src "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 4)
+           (assert-eq (load (field c comments)) 0)
+           (assert-eq (load (field c code)) 4)))
+
+;; An even run of backslashes is an escaped backslash, NOT a continuation:
+;; the string still ends at the newline and the next line's `//` is a comment.
+(deftest c-string-not-continued-by-escaped-backslash
+         (let [spec-p (c-spec-ptr)
+               src "char *s = \"a\\\\\n// real comment\nint x;\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 3)
+           (assert-eq (load (field c comments)) 1)
+           (assert-eq (load (field c code)) 2)))
