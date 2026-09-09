@@ -1,5 +1,4 @@
 (module thecount.output)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -9,7 +8,12 @@
 (import "thecount.util" :use [must-alloc])
 
 (extern snprintf :cc c [(ptr i8) i64 (ptr i8) ...] (-> i32))
-(extern qsort :cc c [(ptr Row) i64 i64 (fnptr c [(ptr Row) (ptr Row)] i32)] (-> void))
+
+(extern qsort
+        :cc
+        c
+        [(ptr Row) i64 i64 (fnptr c [(ptr Row) (ptr Row)] i32)]
+        (-> void))
 
 ;;; One output row for any of the three tables.
 (defstruct Row
@@ -72,7 +76,8 @@
         b (.code (.c y))]
     (cond (> a b) (cast i32 -1)
           (< a b) (cast i32 1)
-          :else (cast i32 (str-cmp (load (field x label)) (load (field y label)))))))
+          :else
+            (cast i32 (str-cmp (load (field x label)) (load (field y label)))))))
 
 ;;; --dirs ordering: biggest directory first (by its total code), every row of a
 ;;; directory kept together, and within a directory the biggest language first.
@@ -142,7 +147,8 @@
             (let [r (index (slice-data rows) j)
                   c (field r c)]
               (push-left! (mut b) (load (field r label)) lw)
-              (when (= with-sub true) (push-left! (mut b) (load (field r sub)) (+ sub-w 1)))
+              (when (= with-sub true)
+                (push-left! (mut b) (load (field r sub)) (+ sub-w 1)))
               (when (= with-files true)
                 (push-right! (mut b) (i64->str a (load (field r files))) NUM-W))
               (push-right! (mut b) (i64->str a (load (field c lines))) NUM-W)
@@ -160,7 +166,8 @@
           (sb-push-byte! (mut b) (cast u8 #\newline))
           (push-left! (mut b) "Total" lw)
           (when (= with-sub true) (push-left! (mut b) "" (+ sub-w 1)))
-          (when (= with-files true) (push-right! (mut b) (i64->str a t-files) NUM-W))
+          (when (= with-files true)
+            (push-right! (mut b) (i64->str a t-files) NUM-W))
           (push-right! (mut b) (i64->str a t-lines) NUM-W)
           (push-right! (mut b) (i64->str a t-blank) NUM-W)
           (push-right! (mut b) (i64->str a t-comments) NUM-W)
@@ -201,7 +208,10 @@
                   dir (load (field first label))
                   (mut end) (+ i 1)]
               (while (and (< end n)
-                          (= (str-cmp dir (load (field (index (slice-data rows) end) label))) 0))
+                          (= (str-cmp dir
+                                      (load (field (index (slice-data rows) end)
+                                                   label)))
+                             0))
                 (store! (mut end) (+ end 1)))
               (let [last-dir (= end n)
                     branch (if (= last-dir true) "└─ " "├─ ")
@@ -216,13 +226,22 @@
                         c (field r c)
                         last-lang (= (+ j 1) end)]
                     (sb-push-str! (mut b) stem)
-                    (sb-push-str! (mut b) (if (= last-lang true) "└─ " "├─ "))
+                    (sb-push-str! (mut b)
+                                  (if (= last-lang true) "└─ " "├─ "))
                     (push-left! (mut b) (load (field r sub)) (+ lang-w 1))
-                    (push-right! (mut b) (i64->pretty a (load (field r files))) NUM-W)
-                    (sb-push-str! (mut b) (if (= (load (field r files)) 1) " file" " files"))
-                    (push-right! (mut b) (i64->pretty a (load (field c code))) NUM-W)
+                    (push-right! (mut b)
+                                 (i64->pretty a (load (field r files)))
+                                 NUM-W)
+                    (sb-push-str! (mut b)
+                                  (if (= (load (field r files)) 1)
+                                      " file"
+                                      " files"))
+                    (push-right! (mut b)
+                                 (i64->pretty a (load (field c code)))
+                                 NUM-W)
                     (sb-push-str! (mut b) " code\n")
-                    (store! (mut dir-files) (+ dir-files (load (field r files))))
+                    (store! (mut dir-files)
+                            (+ dir-files (load (field r files))))
                     (store! (mut dir-code) (+ dir-code (load (field c code))))))
                 (sb-push-str! (mut b) (if (= last-dir true) "\n" "│\n"))
                 (sb-push-str! (mut b) stem)
@@ -231,7 +250,8 @@
                 (sb-push-str! (mut b) (if (= dir-files 1) " file" " files"))
                 (push-right! (mut b) (i64->pretty a dir-code) NUM-W)
                 (sb-push-str! (mut b) " code\n")
-                (when (= last-dir false) (sb-push-byte! (mut b) (cast u8 #\newline))))
+                (when (= last-dir false)
+                  (sb-push-byte! (mut b) (cast u8 #\newline))))
               (store! (mut i) (load end))))
           (print "{s}" (sb-str (mut b)))
           0)))))

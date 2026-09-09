@@ -1,5 +1,4 @@
 (module thecount.util)
-
 (import "coil.primitive" :as primitive)
 (import "coil.alloc" :use [Allocator alloc alloc-slice-data box! oom-at])
 (import "coil.arraylist" :use [ArrayList al-new])
@@ -18,8 +17,10 @@
 (defn must-alloc [T] [(a (dyn Allocator)) (n i64)] (-> (ptr T))
   (match (alloc [T] a n)
     (Some [memory] (alloc-slice-data memory))
-    (None [] (do (oom-at c"thecount" (* n (sizeof T)))
-                 (cast (ptr T) 0)))))
+    (None []
+          (do
+            (oom-at c"thecount" (* n (sizeof T)))
+            (cast (ptr T) 0)))))
 
 ;;; Heap-backed collection headers are common because a pointer to the stable
 ;;; header can be shared while the collection grows.
@@ -45,7 +46,9 @@
 
 ;;; Increment an i64 map value, treating a missing key as zero. Returns the new
 ;;; value and preserves the map's existing key ownership policy.
-(defn hm-add! :inline (Always) [K] [(m (mut (HashMap K i64))) (key K) (delta i64)] (-> i64)
+(defn hm-add! :inline (Always) [K] [(m (mut (HashMap K i64)))
+                                    (key K)
+                                    (delta i64)] (-> i64)
   (let [next (+ (option-or (hm-get (load m) key) 0) delta)]
     (hm-put! (mut m) key next)
     next))
@@ -57,10 +60,11 @@
   (if (>= i (primitive/code-count inits))
       `()
       (let [init (primitive/code-nth inits i)]
-        `((store! (field (mut ~place) ~(primitive/code-nth init 0)) ~(primitive/code-nth init 1)) ~@(zeroed-with-stores place
-                                                                                                                        inits
-                                                                                                                        (+ i
-                                                                                                                           1))))))
+        `((store! (field (mut ~place) ~(primitive/code-nth init 0))
+                  ~(primitive/code-nth init 1)) ~@(zeroed-with-stores place
+                                                                      inits
+                                                                      (+ i
+                                                                         1))))))
 
 ;;; Assign several fields of one mutable place, with field names checked after
 ;;; expansion by Coil's ordinary `field` form.

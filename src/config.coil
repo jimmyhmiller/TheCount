@@ -1,5 +1,4 @@
 (module thecount.config)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -30,7 +29,9 @@
         (try (let [opt (try-or! (os/env-get a "HOME") "")]
                (match opt
                  (Some [h]
-                       (cat a (os/owned-string-slice h) "/.config/thecount/languages"))
+                       (cat a
+                            (os/owned-string-slice h)
+                            "/.config/thecount/languages"))
                  (None [] "")))))))
 
 ;;; Read the whole config file; "" when it does not exist.
@@ -105,7 +106,8 @@
         (when (> (slice-len like) 0)
           (store! (mut base) (reg-lookup-name r like))
           (when (= base -1)
-            (println "thecount: config references unknown base language: {s}" like)
+            (println "thecount: config references unknown base language: {s}"
+                     like)
             0))
         (let [(mut spec) (zeroed LangSpec)]
           (if (>= base 0)
@@ -113,15 +115,18 @@
               (set! (mut spec) (lang-from-strings a "" "" "" false "" "")))
           (set! (.name (mut spec)) (.name p))
           (when (= (load (field p has-lcs)) true)
-            (store! (field (mut spec) line-comments) (split-tokens a (load (field p lcs)))))
+            (store! (field (mut spec) line-comments)
+                    (split-tokens a (load (field p lcs)))))
           (when (= (load (field p has-blocks)) true)
-            (store! (field (mut spec) blocks) (parse-blocks a (load (field p blocks)))))
+            (store! (field (mut spec) blocks)
+                    (parse-blocks a (load (field p blocks)))))
           (when (= (load (field p has-nested)) true)
             (store! (field (mut spec) nested) (load (field p nested))))
           (when (= (load (field p has-quotes)) true)
             (store! (field (mut spec) quotes) (load (field p quotes))))
           (when (= (load (field p has-mqs)) true)
-            (store! (field (mut spec) multi-quotes) (split-tokens a (load (field p mqs)))))
+            (store! (field (mut spec) multi-quotes)
+                    (split-tokens a (load (field p mqs)))))
           (rebuild-classes! a (mut spec))
           (let [idx (reg-add! r spec (.exts p))]
             (when (> (slice-len (load (field p files))) 0)
@@ -162,7 +167,10 @@
                         0)
                       0)
                   (= (load (field pend active)) false)
-                    (do (println "thecount: config directive before any 'lang': {s}" line) 0)
+                    (do
+                      (println "thecount: config directive before any 'lang': {s}"
+                               line)
+                      0)
                   (= d "like") (do (store! (field pend like) rest) 0)
                   (= d "ext") (do (store! (field pend exts) rest) 0)
                   (= d "file") (do (store! (field pend files) rest) 0)
@@ -180,13 +188,16 @@
                       0)
                   (= d "quotes")
                     (do
-                      (set-fields! pend (quotes (strip-spaces a rest)) (has-quotes true))
+                      (set-fields! pend
+                                   (quotes (strip-spaces a rest))
+                                   (has-quotes true))
                       0)
                   (= d "multi")
                     (do
                       (set-fields! pend (mqs rest) (has-mqs true))
                       0)
-                  :else (do (println "thecount: unknown config directive: {s}" d) 0))))))
+                  :else
+                    (do (println "thecount: unknown config directive: {s}" d) 0))))))
     (flush-pending! r pend)
     0))
 

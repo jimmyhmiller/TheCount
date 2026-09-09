@@ -1,5 +1,4 @@
 (module thecount.ignore-test)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -32,7 +31,8 @@
     ctxs))
 
 (deftest ignore-rules
-         (let [ctxs (rules-of "*.log\nbuild/\n/rooted.txt\n!keep.log\n# comment\n")]
+         (let [ctxs
+                 (rules-of "*.log\nbuild/\n/rooted.txt\n!keep.log\n# comment\n")]
            (assert (ignored? ctxs "x.log" "x.log" false))
            (assert (ignored? ctxs "deep/y.log" "y.log" false))
            (assert (not (ignored? ctxs "x.txt" "x.txt" false)))

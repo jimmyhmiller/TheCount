@@ -1,5 +1,4 @@
 (module thecount.engine)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -21,19 +20,33 @@
 (import "thecount.util" :use *)
 
 (extern lseek :cc c [i32 i64 i32] (-> i64))
+
 (extern openat :cc c [i32 (ptr i8) i32] (-> i32))
+
 (extern dirfd :cc c [(ptr i8)] (-> i32))
+
 (extern pthread_mutex_init :cc c [(ptr i8) (ptr i8)] (-> i32))
+
 (extern pthread_mutex_lock :cc c [(ptr i8)] (-> i32))
+
 (extern pthread_mutex_unlock :cc c [(ptr i8)] (-> i32))
+
 (extern sched_yield :cc c [] (-> i32))
+
 (extern sysconf :cc c [i32] (-> i64))
+
 (extern access :cc c [(ptr i8) i32] (-> i32))
+
 (extern usleep :cc c [i32] (-> i32))
+
 (extern pthread_cond_init :cc c [(ptr i8) (ptr i8)] (-> i32))
+
 (extern pthread_cond_wait :cc c [(ptr i8) (ptr i8)] (-> i32))
+
 (extern pthread_cond_signal :cc c [(ptr i8)] (-> i32))
+
 (extern pthread_cond_broadcast :cc c [(ptr i8)] (-> i32))
+
 (const SC-NPROCESSORS-ONLN (os-pick 84 58))
 
 ;; ---------------------------------------------------------------------------
@@ -80,7 +93,10 @@
 
 ;;; openat variant: resolve name relative to dfd — one path component of
 ;;; kernel name lookup instead of the whole path.
-(defn read-into-at! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (dfd i32) (cname (ptr i8))] (-> i64)
+(defn read-into-at! [(a (dyn Allocator))
+                     (rb (ptr ReadBuf))
+                     (dfd i32)
+                     (cname (ptr i8))] (-> i64)
   (read-fd-into! a rb (openat dfd cname 0)))
 
 (defn read-fd-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (fd i32)] (-> i64)
@@ -143,6 +159,7 @@
    (files (slice (slice u8)))])
 
 (const FILE-BATCH 16)
+
 (const NBUFS 32)
 
 ;;; One filled buffer traveling from a reader to a counter.
@@ -186,17 +203,17 @@
     (mem-zero files-per n-specs)
     (mem-zero counts-per n-specs)
     (box! a
-         Agg
-         (Agg
-           :files-per (slice-new files-per n-specs)
-           :counts-per (slice-new counts-per n-specs)
-           :file-rows file-rows
-           :want-files want-files
-           :dir-rows dir-rows
-           :dir-idx dir-idx
-           :want-dirs want-dirs
-           :depth depth
-           :roots roots))))
+          Agg
+          (Agg
+            :files-per (slice-new files-per n-specs)
+            :counts-per (slice-new counts-per n-specs)
+            :file-rows file-rows
+            :want-files want-files
+            :dir-rows dir-rows
+            :dir-idx dir-idx
+            :want-dirs want-dirs
+            :depth depth
+            :roots roots))))
 
 ;;; NUL byte in the first 8000 bytes = binary, skip it (same heuristic as scc).
 (defn binary? [(data (slice u8))] (-> bool)
@@ -218,7 +235,8 @@
         (when (and (> rn best) (<= rn dn))
           ;; a root matches only on a whole path component, so "srcX" is
           ;; never treated as living under the root "src"
-          (let [bounded (if (= rn dn) true (= (cast i64 (slice-get dir rn)) #\/))]
+          (let [bounded
+                  (if (= rn dn) true (= (cast i64 (slice-get dir rn)) #\/))]
             (when (and (= bounded true) (= (subslice dir 0 rn) rt))
               (store! (mut best) rn)
               0)
@@ -288,7 +306,10 @@
   (counts-add! (index (slice-data (.counts-per agg)) idx) c)
   (when (= (load (field agg want-files)) true)
     (al-push! (load (field agg file-rows))
-              (mk-row (join-path a dir name) (load (field (reg-spec r idx) name)) 1 c))
+              (mk-row (join-path a dir name)
+                      (load (field (reg-spec r idx) name))
+                      1
+                      c))
     0)
   (when (= (load (field agg want-dirs)) true)
     (let [base (dir-base-len (load (field agg roots)) dir)
@@ -331,7 +352,9 @@
                                  r
                                  agg
                                  idx
-                                 (if (= last-slash -1) "" (subslice path 0 last-slash))
+                                 (if (= last-slash -1)
+                                     ""
+                                     (subslice path 0 last-slash))
                                  (subslice path (+ last-slash 1) dn)
                                  (reg-count-bytes r idx data))))))))))
 
@@ -373,7 +396,8 @@
                             (= pat target)
                             (glob-match pat target))]
                   (when (= hit true)
-                    (store! (mut v) (if (= (load (field rule negated)) true) -1 1))
+                    (store! (mut v)
+                            (if (= (load (field rule negated)) true) -1 1))
                     0))
                 0)))
           v))))
@@ -393,7 +417,6 @@
     0))
 
 ;; --- buffer ring -----------------------------------------------------------
-
 (defn acquire-buf! [(pool (ptr Pool))] (-> i64)
   (let [fm (cast (ptr i8) (field pool fmutex))
         fc (cast (ptr i8) (field pool fcond))
@@ -491,7 +514,8 @@
                 (and (= first-b #\.) (= hidden false)) 0
                 (and (= first-b #\.)
                      (or (= namlen 1)
-                         (and (= namlen 2) (= (cast i64 (slice-get name 1)) #\.))))
+                         (and (= namlen 2)
+                              (= (cast i64 (slice-get name 1)) #\.))))
                   0
                 (= is-dir true)
                   (let [full (join-path a dir name)]
@@ -499,7 +523,10 @@
                             (and (= use-ignore true)
                                  (entry-ignored? chain full name true)))
                         0
-                        (pool-push! pool (zeroed-with DirItem (path full) (chain chain)))))
+                        (pool-push! pool
+                                    (zeroed-with DirItem
+                                                 (path full)
+                                                 (chain chain)))))
                 :else
                   (let [full (join-path a dir name)]
                     (if (or (excluded? (load (field pool excludes)) full)
@@ -523,8 +550,12 @@
         (if (= (cast i64 ent) 0)
             (do (store! (mut going) false) 0)
             (let [namlen (dirent-name-len ent)
-                  dtype (cast i64 (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
-                  name (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF)) namlen)]
+                  dtype
+                    (cast i64
+                          (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
+                  name
+                    (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF))
+                               namlen)]
               (if (or (= dtype DT-DIR) (= dtype DT-REG))
                   (classify-entry! a
                                    pool
@@ -561,7 +592,8 @@
                 (and (= first-b #\.) (= hidden false)) 0
                 (and (= first-b #\.)
                      (or (= namlen 1)
-                         (and (= namlen 2) (= (cast i64 (slice-get name 1)) #\.))))
+                         (and (= namlen 2)
+                              (= (cast i64 (slice-get name 1)) #\.))))
                   0
                 (= is-dir true)
                   (let [full (join-path a dir name)]
@@ -569,7 +601,10 @@
                             (and (= use-ignore true)
                                  (entry-ignored? chain full name true)))
                         0
-                        (pool-push! pool (zeroed-with DirItem (path full) (chain chain)))))
+                        (pool-push! pool
+                                    (zeroed-with DirItem
+                                                 (path full)
+                                                 (chain chain)))))
                 :else
                   (let [full (join-path a dir name)]
                     (if (or (excluded? (load (field pool excludes)) full)
@@ -593,8 +628,12 @@
         (if (= (cast i64 ent) 0)
             (do (store! (mut going) false) 0)
             (let [namlen (dirent-name-len ent)
-                  dtype (cast i64 (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
-                  name (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF)) namlen)]
+                  dtype
+                    (cast i64
+                          (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
+                  name
+                    (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF))
+                               namlen)]
               (if (or (= dtype DT-DIR) (= dtype DT-REG))
                   (classify-entry! a
                                    pool
@@ -626,10 +665,15 @@
 (extern getattrlistbulk :cc c [i32 (ptr AttrList) (ptr u8) i64 u64] (-> i32))
 
 (const ATTR-CMN-RETURNED-ATTRS 2147483648)  ; 0x80000000
+
 (const ATTR-CMN-NAME 1)
+
 (const ATTR-CMN-OBJTYPE 8)
+
 (const VREG 1)
+
 (const VDIR 2)
+
 (const BULK-BUF-SIZE 131072)
 
 (defn enum-bulk! [(a (dyn Allocator))
@@ -650,18 +694,18 @@
              0)
            (let [al
                    (box! a
-                        AttrList
-                        (AttrList
-                          :bitmapcount (cast u16 5)
-                          :reserved (cast u16 0)
-                          :commonattr
-                            (cast u32
-                                  (+ ATTR-CMN-RETURNED-ATTRS
-                                     (+ ATTR-CMN-NAME ATTR-CMN-OBJTYPE)))
-                          :volattr (cast u32 0)
-                          :dirattr (cast u32 0)
-                          :fileattr (cast u32 0)
-                          :forkattr (cast u32 0)))]
+                         AttrList
+                         (AttrList
+                           :bitmapcount (cast u16 5)
+                           :reserved (cast u16 0)
+                           :commonattr
+                             (cast u32
+                                   (+ ATTR-CMN-RETURNED-ATTRS
+                                      (+ ATTR-CMN-NAME ATTR-CMN-OBJTYPE)))
+                           :volattr (cast u32 0)
+                           :dirattr (cast u32 0)
+                           :fileattr (cast u32 0)
+                           :forkattr (cast u32 0)))]
              (let [(mut going) true]
                (while (= going true)
                  (let [n (cast i64 (getattrlistbulk fd al buf BULK-BUF-SIZE 0))]
@@ -670,16 +714,31 @@
                        (let [(mut off) 0
                              (mut e) 0]
                          (while (< e n)
-                           (let [entlen (cast i64 (load (cast (ptr u32) (index buf off))))
-                                 q (+ off 24)  ; skip length u32 + attribute_set_t
-                                 nameoff (cast i64 (load (cast (ptr i32) (index buf q))))
-                                 rawlen (cast i64 (load (cast (ptr u32) (index buf (+ q 4)))))
-                                 objtype (cast i64 (load (cast (ptr u32) (index buf (+ q 8)))))]
+                           (let [entlen
+                                   (cast i64
+                                         (load (cast (ptr u32) (index buf off))))
+                                 q
+                                   (+ off 24)  ; skip length u32 + attribute_set_t
+                                 nameoff
+                                   (cast i64
+                                         (load (cast (ptr i32) (index buf q))))
+                                 rawlen
+                                   (cast i64
+                                         (load (cast (ptr u32)
+                                                     (index buf (+ q 4)))))
+                                 objtype
+                                   (cast i64
+                                         (load (cast (ptr u32)
+                                                     (index buf (+ q 8)))))]
                              (when (> rawlen 0)
                                (let [(mut nl) (- rawlen 1)
                                      base (index buf (+ q nameoff))]
                                  ;; some filesystems pad the name; trim trailing NULs
-                                 (while (and (> nl 0) (= (cast i64 (load (index base (- nl 1)))) 0))
+                                 (while (and (> nl 0)
+                                             (= (cast i64
+                                                      (load (index base
+                                                                   (- nl 1))))
+                                                0))
                                    (store! (mut nl) (- nl 1)))
                                  (when (or (= objtype VREG) (= objtype VDIR))
                                    (classify-entry! a
@@ -728,7 +787,14 @@
                   0)
                 0)
               0))
-          (enum-readdir! a pool (cast (ptr i8) handle) chain dir hidden use-ignore (mut names))
+          (enum-readdir! a
+                         pool
+                         (cast (ptr i8) handle)
+                         chain
+                         dir
+                         hidden
+                         use-ignore
+                         (mut names))
           ;; small dirs: read inline through the already-open fd.
           ;; big dirs: share batches of basenames with the walk queue.
           (let [nfl (al-len names)
@@ -741,7 +807,9 @@
                   (while (< o nfl)
                     (let [hi (if (< (+ o FILE-BATCH) nfl) (+ o FILE-BATCH) nfl)
                           chunk (must-alloc [(slice u8)] a (- hi o))]
-                      (mem-copy chunk (index (slice-data (al-slice (load names))) o) (- hi o))
+                      (mem-copy chunk
+                                (index (slice-data (al-slice (load names))) o)
+                                (- hi o))
                       (pool-push! pool
                                   (zeroed-with DirItem
                                                (path dir)
@@ -796,7 +864,6 @@
     (cast (ptr i8) 0)))
 
 ;; --- counter side ----------------------------------------------------------
-
 (defn counter-worker [(p (ptr i8))] (-> (ptr i8))
   (let [wa (cast (ptr WorkerArg) p)
         pool (load (field wa pool))
@@ -835,7 +902,9 @@
                 (let [(mut msg) (al-get local j)
                       bid (load (field (mut msg) buf-id))
                       rb (index (load (field pool bufs)) bid)
-                      data (slice-new (load (field rb p)) (load (field (mut msg) size)))]
+                      data
+                        (slice-new (load (field rb p))
+                                   (load (field (mut msg) size)))]
                   (when (= (binary? data) false)
                     (agg-file! a
                                r
@@ -843,7 +912,9 @@
                                (load (field (mut msg) spec-idx))
                                (load (field (mut msg) dir))
                                (load (field (mut msg) name))
-                               (reg-count-bytes r (load (field (mut msg) spec-idx)) data))
+                               (reg-count-bytes r
+                                                (load (field (mut msg) spec-idx))
+                                                data))
                     0)
                   (al-push! (mut freed) bid))
                 (store! (mut j) (+ j 1)))
@@ -893,11 +964,14 @@
         drows (load (field dst dir-rows))]
     (for [i 0 nd]
       (let [srow (index (slice-data (al-slice (load sdirs))) i)
-            key (dir-lang-key a (load (field srow label)) (load (field srow sub)))]
+            key
+              (dir-lang-key a (load (field srow label)) (load (field srow sub)))]
         (match (hm-get (load dmap) key)
           (Some [di]
                 (let [rowp (index (slice-data (al-slice (load drows))) di)]
-                  (store! (field rowp files) (+ (load (field rowp files)) (load (field srow files))))
+                  (store! (field rowp files)
+                          (+ (load (field rowp files))
+                             (load (field srow files))))
                   (counts-add! (field rowp c) (load (field srow c)))
                   0))
           (None []
@@ -997,9 +1071,13 @@
             (let [wagg (new-agg a n-specs want-files want-dirs depth wroots)
                   wa (index cargs t)]
               (set-fields! wa (pool pool) (agg wagg))
-              (thread-spawn (index cthreads t) (fnptr-of counter-worker) (cast (ptr i8) wa))))
+              (thread-spawn (index cthreads t)
+                            (fnptr-of counter-worker)
+                            (cast (ptr i8) wa))))
           (for [t 0 (load nreaders)]
-            (thread-spawn (index rthreads t) (fnptr-of reader-worker) (cast (ptr i8) pool)))
+            (thread-spawn (index rthreads t)
+                          (fnptr-of reader-worker)
+                          (cast (ptr i8) pool)))
           (for [t 0 (load nreaders)]
             (thread-join (index rthreads t)))
           (atomic-store rdone 1)

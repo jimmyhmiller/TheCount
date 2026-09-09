@@ -1,5 +1,4 @@
 (module thecount.registry-test)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.str" :use *)
@@ -7,7 +6,9 @@
 (import "thecount.registry" :use *)
 (import "thecount.counter" :use *)
 (import "coil.arraylist" :use *)
-(import "thecount.engine" :use [dir-lang-key dir-rollup-key dir-row-key dir-base-len walk-roots-of])
+(import "thecount.engine"
+        :use
+        [dir-lang-key dir-rollup-key dir-row-key dir-base-len walk-roots-of])
 
 (defn fresh [] (-> (ptr Registry))
   (let [r (reg-new (malloc-allocator))]
@@ -78,18 +79,23 @@
 ;; --dirs keeps one row per (directory, language), so the rollup key has to
 ;; separate the two halves unambiguously — otherwise a directory whose name
 ;; ends where a language name begins would merge two different rows.
-
 (deftest dir-lang-key-separates-halves
          (let [a (malloc-allocator)]
            (assert (= (dir-lang-key a "src" "C") (dir-lang-key a "src" "C")))
-           (assert (= (= (dir-lang-key a "src" "C") (dir-lang-key a "src" "C++")) false))
-           (assert (= (= (dir-lang-key a "src" "C") (dir-lang-key a "srcC" "")) false))
-           (assert (= (= (dir-lang-key a "a/b" "Go") (dir-lang-key a "a" "b/Go")) false))))
+           (assert (= (= (dir-lang-key a "src" "C")
+                         (dir-lang-key a "src" "C++"))
+                      false))
+           (assert (= (= (dir-lang-key a "src" "C") (dir-lang-key a "srcC" ""))
+                      false))
+           (assert (= (= (dir-lang-key a "a/b" "Go")
+                         (dir-lang-key a "a" "b/Go"))
+                      false))))
 
 (deftest dir-lang-key-handles-root-and-empty
          (let [a (malloc-allocator)]
            (assert (= (slice-len (dir-lang-key a "." "Markdown")) 10))
-           (assert (= (= (dir-lang-key a "." "C") (dir-lang-key a "." "D")) false))))
+           (assert (= (= (dir-lang-key a "." "C") (dir-lang-key a "." "D"))
+                      false))))
 
 (deftest dir-rollup-key-depth
          (assert (= (dir-rollup-key "a/b/c" 0 1) "a"))

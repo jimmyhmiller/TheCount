@@ -1,5 +1,4 @@
 (module thecount.lang)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -25,7 +24,9 @@
    (classes (ptr u8))])  ; 256-entry byte-class table, see rebuild-classes!
 
 (const CLS-PLAIN 0)
+
 (const CLS-WS 2)
+
 (const CLS-HOT 3)  ; byte can start a comment/string token: leave the fast path
 
 ;;; Split s on runs of spaces into freshly allocated token slices (views into s).
@@ -52,7 +53,8 @@
   (let [toks (split-tokens a s)
         n (slice-len toks)]
     (when (!= (% n 2) 0)
-      (println "thecount: block comment tokens must come in start/end pairs: {s}" s)
+      (println "thecount: block comment tokens must come in start/end pairs: {s}"
+               s)
       (os/_exit 2)
       0)
     (let [np (/ n 2)
@@ -103,7 +105,8 @@
       (for block
         (iter bls)
         (let [(mut b) block]
-          (store! (index t (cast i64 (slice-get (load (field (mut b) bstart)) 0)))
+          (store! (index t
+                         (cast i64 (slice-get (load (field (mut b) bstart)) 0)))
                   (cast u8 CLS-HOT)))))
     (let [mqs (.multi-quotes (mut l))]
       (for mq

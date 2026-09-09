@@ -9,7 +9,6 @@
 ;;
 ;; The language comes from the path, exactly as the real walk resolves it. A
 ;; file whose language has no generated scanner reports the same number twice.
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.fs" :use *)
@@ -54,7 +53,12 @@
         (let [idx (reg-lookup-path r path)]
           (if (= idx -1)
               (do (println "countbench: no language for {s}" path) 1)
-              (try (let [data (try-or! (read-file a path) (do (println "countbench: cannot read {s}" path) 1))]
+              (try (let [data
+                           (try-or! (read-file a path)
+                                    (do
+                                      (println "countbench: cannot read {s}"
+                                               path)
+                                      1))]
                      (let [spec (reg-spec r idx)]
                        (println "{s}: {d} bytes as {s}"
                                 path

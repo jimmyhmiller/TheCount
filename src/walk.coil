@@ -1,5 +1,4 @@
 (module thecount.walk)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -10,8 +9,11 @@
 (import "thecount.util" :use [must-alloc])
 
 (extern strlen :cc c [(ptr i8)] (-> i64))
+
 (extern opendir :cc c [(ptr i8)] (-> (ptr i8)))
+
 (extern readdir :cc c [(ptr i8)] (-> (ptr i8)))
+
 (extern closedir :cc c [(ptr i8)] (-> i32))
 
 ;;; struct dirent layout, selected at compile time for the target OS.
@@ -21,8 +23,11 @@
 ;;; linux (LP64 glibc): d_ino @0, d_off @8, d_reclen u16 @16,
 ;;;   d_type u8 @18, d_name @19 — and no d_namlen field at all.
 (const DIRENT-TYPE-OFF (os-pick 18 20))
+
 (const DIRENT-NAME-OFF (os-pick 19 21))
+
 (const DT-DIR 4)
+
 (const DT-REG 8)
 
 ;;; Name length of a dirent: the d_namlen field on darwin, strlen on linux.

@@ -1,5 +1,4 @@
 (module thecount.main)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -66,7 +65,16 @@
     (for root
       (iter (load roots))
       (al-push! clean-roots (strip-trailing-slashes root)))
-    (let [agg (count-all a r clean-roots want-files want-dirs depth hidden use-ignore excludes)]
+    (let [agg
+            (count-all a
+                       r
+                       clean-roots
+                       want-files
+                       want-dirs
+                       depth
+                       hidden
+                       use-ignore
+                       excludes)]
       ;; emit
       (cond (= want-files true)
               (print-table a
@@ -91,7 +99,12 @@
                                       (load (index files-per s))
                                       (load (index counts-per s))))
                     0))
-                (print-table a "Language" (al-slice (load rows)) true false (fnptr-of row-cmp)))))))
+                (print-table a
+                             "Language"
+                             (al-slice (load rows))
+                             true
+                             false
+                             (fnptr-of row-cmp)))))))
 
 (defn run-langs [(a (dyn Allocator)) (r (ptr Registry))] (-> i64)
   (let [n (reg-count r)
@@ -136,18 +149,40 @@
           (cond (= arg "--like")
                   (do
                     (when (= (reg-lookup-name r val) -1)
-                      (println "thecount add-lang: unknown base language: {s}" val)
+                      (println "thecount add-lang: unknown base language: {s}"
+                               val)
                       (os/_exit 2)
                       0)
                     (push-directive! (mut b) "like" val)
                     (store! (mut k) (+ k 2)))
-                (= arg "--ext") (do (push-directive! (mut b) "ext" val) (store! (mut k) (+ k 2)))
-                (= arg "--file") (do (push-directive! (mut b) "file" val) (store! (mut k) (+ k 2)))
-                (= arg "--line") (do (push-directive! (mut b) "line" val) (store! (mut k) (+ k 2)))
-                (= arg "--block") (do (push-directive! (mut b) "block" val) (store! (mut k) (+ k 2)))
-                (= arg "--quotes") (do (push-directive! (mut b) "quotes" val) (store! (mut k) (+ k 2)))
-                (= arg "--multi") (do (push-directive! (mut b) "multi" val) (store! (mut k) (+ k 2)))
-                (= arg "--nested") (do (sb-push-str! (mut b) "nested\n") (store! (mut k) (+ k 1)))
+                (= arg "--ext")
+                  (do
+                    (push-directive! (mut b) "ext" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--file")
+                  (do
+                    (push-directive! (mut b) "file" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--line")
+                  (do
+                    (push-directive! (mut b) "line" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--block")
+                  (do
+                    (push-directive! (mut b) "block" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--quotes")
+                  (do
+                    (push-directive! (mut b) "quotes" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--multi")
+                  (do
+                    (push-directive! (mut b) "multi" val)
+                    (store! (mut k) (+ k 2)))
+                (= arg "--nested")
+                  (do
+                    (sb-push-str! (mut b) "nested\n")
+                    (store! (mut k) (+ k 1)))
                 :else
                   (do
                     (println "thecount add-lang: unknown option: {s}" arg)
@@ -197,7 +232,8 @@
                   (if (>= (reg-lookup-name r name) 0)
                       (println "thecount remove-lang: '{s}' is a builtin, not in your config; override it with add-lang instead"
                                name)
-                      (println "thecount remove-lang: no user language named '{s}'" name))
+                      (println "thecount remove-lang: no user language named '{s}'"
+                               name))
                   (os/_exit 2)
                   0)))))))
 
@@ -227,7 +263,8 @@
                     (store! (mut k) (+ k 1))
                     0)
                   0)
-              (or (= arg "--help") (= arg "-h") (= arg "help")) (do (store! (mut mode) 3) 0)
+              (or (= arg "--help") (= arg "-h") (= arg "help"))
+                (do (store! (mut mode) 3) 0)
               (= arg "--files") (do (store! (mut want-files) true) 0)
               (= arg "--dirs") (do (store! (mut want-dirs) true) 0)
               (= arg "--hidden") (do (store! (mut hidden) true) 0)
@@ -258,4 +295,12 @@
                     (when (= (al-len (load roots)) 0)
                       (al-push! roots ".")
                       0)
-                    (run-count a r roots want-files want-dirs depth hidden use-ignore excludes)))))))
+                    (run-count a
+                               r
+                               roots
+                               want-files
+                               want-dirs
+                               depth
+                               hidden
+                               use-ignore
+                               excludes)))))))

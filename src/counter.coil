@@ -1,5 +1,4 @@
 (module thecount.counter)
-
 (import "coil.slice" :use *)
 (import "coil.primitive" :as primitive)
 (import "thecount.lang" :use *)
@@ -45,8 +44,11 @@
   (bytes-contains? quotes (cast u8 b)))
 
 (const ST-NORMAL 0)
+
 (const ST-BLOCK 1)
+
 (const ST-STRING 2)
+
 (const ST-MSTRING 3)
 
 ;;; Index of byte c within s[from..to), or `to` when absent (memchr, SIMD).
@@ -115,9 +117,16 @@
                           (mut scanning) true]
                       (while (= scanning true)
                         (let [he (find-byte bytes pos le e0)
-                              hs (if (= nested true) (find-byte bytes pos le s0) le)
+                              hs
+                                (if (= nested true)
+                                    (find-byte bytes pos le s0)
+                                    le)
                               h (if (< hs he) hs he)]
-                          (cond (>= h le) (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                          (cond (>= h le)
+                                  (do
+                                    (store! (mut pos) le)
+                                    (store! (mut scanning) false)
+                                    0)
                                 (match-at bytes h e)
                                   (do
                                     (store! (mut block-depth) (- block-depth 1))
@@ -142,7 +151,10 @@
                       (while (= scanning true)
                         (let [q (find-byte bytes pos le quote-ch)]
                           (if (>= q le)
-                              (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                              (do
+                                (store! (mut pos) le)
+                                (store! (mut scanning) false)
+                                0)
                               (if (= (% (backslashes-before bytes pos q) 2) 1)
                                   (do (store! (mut pos) (+ q 1)) 0)  ; escaped quote
                                   (do
@@ -163,9 +175,14 @@
                       (while (= scanning true)
                         (let [h (find-byte bytes pos le t0)]
                           (if (>= h le)
-                              (do (store! (mut pos) le) (store! (mut scanning) false) 0)
+                              (do
+                                (store! (mut pos) le)
+                                (store! (mut scanning) false)
+                                0)
                               (if (and (match-at bytes h tok)
-                                       (!= (% (backslashes-before bytes pos h) 2) 1))
+                                       (!= (% (backslashes-before bytes pos h)
+                                              2)
+                                           1))
                                   (do
                                     (store! (mut state) ST-NORMAL)
                                     (store! (mut pos) (+ h (slice-len tok)))
@@ -180,7 +197,11 @@
                     (let [(mut hot) false
                           (mut acc) 0]
                       (while (and (< pos le) (= hot false))
-                        (let [cls (cast i64 (load (index classes (cast i64 (load (index data pos))))))]
+                        (let [cls
+                                (cast i64
+                                      (load (index classes
+                                                   (cast i64
+                                                         (load (index data pos))))))]
                           (if (!= cls CLS-HOT)
                               (do
                                 (store! (mut acc)
@@ -199,7 +220,10 @@
                               (store! (mut block-idx) bs)
                               (store! (mut block-depth) 1)
                               (store! (mut pos)
-                                      (+ pos (slice-len (load (field (index (slice-data bls) bs) bstart)))))
+                                      (+ pos
+                                         (slice-len (load (field (index (slice-data bls)
+                                                                        bs)
+                                                                 bstart)))))
                               0)
                             (let [mq (match-any bytes pos mqs)]
                               (if (>= mq 0)
@@ -215,7 +239,9 @@
                                           0))
                                     (store! (mut state) ST-MSTRING)
                                     (store! (mut mq-idx) mq)
-                                    (store! (mut pos) (+ pos (slice-len (slice-get mqs mq))))
+                                    (store! (mut pos)
+                                            (+ pos
+                                               (slice-len (slice-get mqs mq))))
                                     0)
                                   (let [lc (match-any bytes pos lcs)]
                                     (if (>= lc 0)
@@ -223,11 +249,17 @@
                                           (store! (mut saw-comment) true)
                                           (store! (mut pos) le)
                                           0)
-                                        (if (quote-byte? (cast i64 (load (index data pos))) quotes)
+                                        (if (quote-byte? (cast i64
+                                                               (load (index data
+                                                                            pos)))
+                                                         quotes)
                                             (do
                                               (store! (mut saw-code) true)
                                               (store! (mut state) ST-STRING)
-                                              (store! (mut quote-ch) (cast i64 (load (index data pos))))
+                                              (store! (mut quote-ch)
+                                                      (cast i64
+                                                            (load (index data
+                                                                         pos))))
                                               (store! (mut pos) (+ pos 1))
                                               0)
                                             (do
@@ -241,14 +273,16 @@
         (cond (= saw-code true) (store! (mut code) (+ code 1))
               (= saw-comment true) (store! (mut comments) (+ comments 1))
               (= state ST-BLOCK) (store! (mut comments) (+ comments 1))
-              (and (= state ST-MSTRING) (= mq-doc true)) (store! (mut comments) (+ comments 1))
+              (and (= state ST-MSTRING) (= mq-doc true))
+                (store! (mut comments) (+ comments 1))
               (= state ST-MSTRING) (store! (mut code) (+ code 1))
               :else (store! (mut blank) (+ blank 1)))
         ;; A single-line string ends at the newline UNLESS the line ends with an
         ;; odd number of backslashes: that is a line continuation and the string
         ;; carries on, so a `//` on the next line is still string content.
         (when (= state ST-STRING)
-          (let [e (if (and (> le i)
+          (let [e
+                  (if (and (> le i)
                            (= (cast i64 (load (index data (- le 1)))) #\u0D))
                       (- le 1)
                       le)]

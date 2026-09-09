@@ -1,5 +1,4 @@
 (module thecount.ignore)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.arraylist" :use *)
@@ -29,11 +28,14 @@
         (= si sl)
         (let [pc (cast i64 (slice-get pat pi))]
           (cond ;; ** — matches anything, including slashes
-                (and (= pc #\*) (and (< (+ pi 1) pl) (= (cast i64 (slice-get pat (+ pi 1))) #\*)))
+                (and (= pc #\*)
+                     (and (< (+ pi 1) pl)
+                          (= (cast i64 (slice-get pat (+ pi 1))) #\*)))
                   (let [pj (+ pi 2)
                         ;; "a/**/b" — the zero-directories case skips the following '/'
                         zero
-                          (if (and (< pj pl) (= (cast i64 (slice-get pat pj)) #\/))
+                          (if (and (< pj pl)
+                                   (= (cast i64 (slice-get pat pj)) #\/))
                               (glob-rec pat s (+ pj 1) si)
                               false)]
                     (if (= zero true)
@@ -93,7 +95,8 @@
                   0))
               ;; leading slash anchors; inner slash also anchors
               (let [(mut anchored) false]
-                (when (and (> (slice-len p) 0) (= (cast i64 (slice-get p 0)) #\/))
+                (when (and (> (slice-len p) 0)
+                           (= (cast i64 (slice-get p 0)) #\/))
                   (store! (mut anchored) true)
                   (store! (mut p) (subslice p 1 (slice-len p)))
                   0)
@@ -137,7 +140,9 @@
     ctx))
 
 (defn basename-of [(path (slice u8))] (-> (slice u8))
-  (subslice path (+ (bytes-last-index-of path (cast u8 #\/)) 1) (slice-len path)))
+  (subslice path
+            (+ (bytes-last-index-of path (cast u8 #\/)) 1)
+            (slice-len path)))
 
 ;;; Is `path` (with basename `name`) ignored by the ctx stack?
 ;;; Rules apply outermost-first, in file order; the LAST matching rule wins,

@@ -1,5 +1,4 @@
 (module thecount.config-test)
-
 (import "coil.slice" :use *)
 (import "coil.alloc" :use *)
 (import "coil.str" :use *)
@@ -15,7 +14,8 @@
 
 (deftest full-stanza
          (let [r (fresh)
-               cfg "# my languages\nlang Foo Script\next foo fooz\nline ;;\nblock {- -}\nnested\nquotes \" '\n"]
+               cfg
+                 "# my languages\nlang Foo Script\next foo fooz\nline ;;\nblock {- -}\nnested\nquotes \" '\n"]
            (load-config! r cfg)
            (let [idx (reg-lookup-path r "x.foo")]
              (assert (>= idx 0))
@@ -65,7 +65,8 @@
 
 (deftest multiple-stanzas
          (let [r (fresh)
-               cfg "lang A1\nlike c\next aone\n\nlang B2\nlike python\next btwo\n"]
+               cfg
+                 "lang A1\nlike c\next aone\n\nlang B2\nlike python\next btwo\n"]
            (load-config! r cfg)
            (assert (>= (reg-lookup-path r "x.aone") 0))
            (assert (>= (reg-lookup-path r "x.btwo") 0))))
