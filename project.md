@@ -361,7 +361,88 @@ x86-64 object. Older LLVM parsers on the Linux host could not accept attributes
 emitted by LLVM 22.1.8, so optimization and object emission used that version on
 the Mac, followed by Linux linking.
 
-### Hyperfine validation — use this for the current performance claim
+### Full normal-release and Zen 5 comparison — current build-qualified results
+
+The 50% higher-throughput Linux goal holds for the Zen 5 build, **not ordinary
+release**. A full repeat measures ordinary TheCount at 55.46 ms, ordinary
+source-built Mezura at 72.83 ms (1.313×), and installed Mezura at 68.37 ms
+(1.233×). Zen 5 TheCount versus Zen 5 Mezura is 44.64 versus 72.53 ms (1.625×).
+Ordinary TheCount versus Zen 5 Mezura is 1.308×. The earlier CPU-targeted
+TheCount versus installed Mezura headline needs that explicit qualification.
+
+Built TheCount with `coil build --release --target x86_64-unknown-linux-gnu`,
+using `COIL_CC` to select `zig cc -target x86_64-linux-gnu` for cross linking
+from macOS. No CPU-specific flag. Coil's ordinary LLVM target machine uses
+CPU `generic` and no extra target features. Coil 0.1.0 commit 97163f21a842,
+LLVM 22.1.8, Zig 0.16.0. The existing Zen 5 recipe emits IR, runs `opt -O3`
+and `llc -O3 -mcpu=znver5`, then links on Linux. These are actual build recipes;
+their different optimization pipelines mean this is not a single-variable
+experiment attributing every difference solely to CPU features.
+
+For Mezura, built official v3.2.0 commit
+`6577a40fd2b29e4bb9d1cfb02a316a1932fa1708` with ordinary
+`env -u RUSTFLAGS cargo build --release --locked -p mezura` in a separate
+target directory, alongside its `RUSTFLAGS="-C target-cpu=znver5"` release.
+Rust 1.97.1 / LLVM 22.1.6. Both use the installed language definitions copied
+to the same isolated `MEZURA_DATA_DIR`. The installed binary remains a separate
+control: its build provenance is unknown, and it sometimes outperforms both
+source builds substantially. Do not silently replace it with a slower control.
+
+All 16 workloads, including all 14 shared workloads, were audited before timing.
+Every build preserves its tool's exact per-file records from the original audit;
+both tools select identical paths and physical lines on shared workloads.
+Known code/comment classification differences remain. Mezura keyword counting
+is disabled. JSON and LLVM IR remain unsupported in its installed language set.
+
+Hyperfine 1.20.0: five balanced order rotations, ten warmups per command per
+block, 40 measurements per block, **200 measurements per build per shared
+workload**. Unsupported workloads have two balanced rotations and 80 measurements
+per TheCount build. Total **14,320 timed commands**, warm cache, no shell,
+output discarded, startup and JSON totals included. Every variant uses identical
+environment wrappers and CPU affinity 0–31. Worker policies are product defaults:
+TheCount adaptive maximum 32 combined workers, Mezura 8 walkers + 64 counters.
+These build comparisons do not erase the matched-worker findings below.
+
+Mean milliseconds (lower is faster):
+
+| workload | TheCount release | TheCount Zen 5 | Mezura installed | Mezura release | Mezura Zen 5 |
+|---|---:|---:|---:|---:|---:|
+| linux-control | 55.46 | 44.64 | 68.37 | 72.83 | 72.53 |
+| llvm-mixed | 43.05 | 39.56 | 65.24 | 67.22 | 67.01 |
+| llvm-cpp | 28.63 | 25.71 | 46.39 | 48.11 | 48.27 |
+| llvm-python | 15.50 | 15.40 | 18.11 | 18.30 | 18.43 |
+| test262-javascript | 12.48 | 12.04 | 35.06 | 35.60 | 35.52 |
+| scriptc-web | 11.72 | 11.06 | 17.94 | 19.29 | 19.46 |
+| scriptc-c | 8.28 | 7.94 | 8.62 | 8.78 | 8.87 |
+| projects-rust | 3.26 | 3.17 | 6.17 | 6.21 | 6.23 |
+| projects-mixed | 42.78 | 32.11 | 42.46 | 50.88 | 50.59 |
+| abseil-cpp | 2.09 | 2.03 | 5.69 | 5.73 | 5.81 |
+| heapster-rust | 1.19 | 1.11 | 5.56 | 5.64 | 5.66 |
+| perfbot-json | 3.37 | 3.40 | unsupported | unsupported | unsupported |
+| single-large-c | 6.14 | 5.12 | 7.93 | 8.09 | 7.65 |
+| single-large-js | 4.99 | 4.36 | 10.00 | 10.72 | 10.81 |
+| llvm-fortran | 17.98 | 17.74 | 18.16 | 18.57 | 18.56 |
+| llvm-ir | 41.72 | 41.66 | unsupported | unsupported | unsupported |
+
+On this repeat both like-for-like source-build comparisons favor TheCount on
+all 14 shared workloads, but small C/Fortran margins should not supersede prior
+default parity repeats or the tuned Mezura wins. Against installed Mezura, our
+ordinary release is roughly tied on mixed personal projects (42.78 vs 42.46 ms).
+Normal/normal Linux ratios range 1.289–1.338× across blocks, all below 1.5×.
+No outlier samples or Hyperfine warnings were discarded.
+
+The normal Linux release passes `tests/check_walk.py`: coverage, hidden/ignore
+filters, custom registrations, invalid UTF-8 and worker-count parity. Production
+source is unchanged. An attempted cross-target static library build exposed an
+empty-archive success bug in Coil, reported in its `coil-bugs` pad; the measured
+executable uses ordinary release with a proper cross linker.
+
+[Full results, hashes, build provenance, commands, per-block ratios and raw timings](benchmark/results/linux-workload-build-comparison-20261001.json)
+and [reproduction runner](benchmark/compare_builds.py) retain the evidence.
+Raw per-file records and Hyperfine exports are under
+`/tmp/thecount-20260930-bench/build-comparison/` on the Linux host.
+
+### Earlier Hyperfine validation — Zen 5 TheCount versus installed Mezura
 
 These headline results compare a Zen 5 TheCount build against the installed
 Mezura release, with each tool's default worker policy. On this host TheCount
