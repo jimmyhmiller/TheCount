@@ -66,7 +66,7 @@
       (ts "TypeScript" "ts mts cts" "//" "/* */" false "\"'`" "")
       (tsx "TSX" "tsx" "//" "/* */" false "\"'`" "")
       (go "Go" "go" "//" "/* */" false "\"'`" "")
-      (rs "Rust" "rs" "// //! ///" "/* */" true "\"" "")
+      (rs "Rust" "rs" "// //! ///" "/* */" true "\"'" "")
       (swift "Swift" "swift" "//" "/* */" true "\"" "\"\"\"")
       (kt "Kotlin" "kt kts" "//" "/* */" true "\"'" "\"\"\"")
       (py "Python" "py pyw pyi" "#" "" false "\"'" "\"\"\" '''")
@@ -195,14 +195,32 @@
                                           0
                                           n-q
                                           `(cast i64 (load (index data pos)))))
-                   (do
+                   (let [ch (cast i64 (load (index data pos)))
+                         char-end
+                           (if (and (= (load (field spec
+                                                    single-scalar-char-literals))
+                                       true)
+                                    (= ch #\'))
+                               (single-scalar-char-end bytes pos le)
+                               -1)]
                      (store! (mut saw-code) true)
-                     (store! (mut state) ST-STRING)
-                     ~@(if (> n-q 1)
-                           `((store! (mut qch)
-                                     (cast i64 (load (index data pos)))))
-                           `())
-                     (store! (mut pos) (+ pos 1))
+                     (cond (>= char-end 0) (store! (mut pos) char-end)
+                           (or (and (= (load (field spec
+                                                    single-scalar-char-literals))
+                                       true)
+                                    (= ch #\'))
+                               (= (% (backslashes-before bytes i pos) 2) 1))
+                             (store! (mut pos) (+ pos 1))
+                           true
+                             (do
+                               (store! (mut state) ST-STRING)
+                               ~@(if (> n-q 1)
+                                     `((store! (mut qch)
+                                               (cast i64
+                                                     (load (index data pos)))))
+                                     `())
+                               (store! (mut pos) (+ pos 1))
+                               0))
                      0)
                    ~plain)
               plain)
@@ -384,7 +402,7 @@
           0)))
     (load hit)))
 
-;;; One `(v16-eq-mask P b)` per distinct hot byte, to be or'd together.
+;;; One vector equality mask per distinct hot byte, to be or'd together.
 (defn ct-hot-mask-calls [(lcs (slice u8))
                          (blocks (slice u8))
                          (quotes (slice u8))
@@ -394,7 +412,7 @@
   (if (>= b 256)
       `()
       (if (ct-hot-byte? lcs blocks quotes mqs b)
-          `((v16-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs
+          `((v64-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs
                                                          blocks
                                                          quotes
                                                          mqs
@@ -413,13 +431,13 @@
 ;;; The ST-NORMAL arm — where 98.8% of the bytes go, so the only loop whose cost
 ;;; really matters.
 ;;;
-;;; Both variants scan 16 bytes at a time via thecount.simd: one bitmask of the
+;;; Both variants scan vectors via thecount.simd: one bitmask of the
 ;;; language's delimiter bytes and one of whitespace, from which "is there a
 ;;; delimiter in this chunk" and "is any byte before it non-blank" are answered
 ;;; with bit arithmetic instead of a table load per byte. The scan then jumps
 ;;; straight to the delimiter with a count-trailing-zeros. A chunk that would
-;;; cross the line end falls through to the original byte-at-a-time loop, which
-;;; also keeps the two paths trivially comparable in the differential tests.
+;;; cross the line end uses a masked load when it stays within the file; the
+;;; byte-at-a-time loop handles the final file tail.
 ;;;
 ;;; With no delimiters at all there is nothing to leave the fast path for, so the
 ;;; whole delimiter half drops out and the scan stops at the line's first
@@ -432,10 +450,21 @@
                       (dispatch Code)] (-> Code)
   (if has-hot
       `(do
+         (when (all (= saw-code false) (= pos i) (< pos le))
+           (when (= (cast i64
+                          (load (index cls-tab
+                                       (cast i64 (load (index data pos))))))
+                    CLS-PLAIN)
+             (store! (mut saw-code) true)
+             0)
+           0)
          (let [(mut hot) false
                (mut acc) 0]
-           ;; --- 16 bytes per iteration while a whole chunk fits in the line ---
-           (while (all (= hot false) (<= (+ pos 16) le))
+           ;; --- 64 bytes per iteration while a whole chunk fits in the line ---
+           (while (all (= hot false)
+                       (= saw-code false)
+                       (= acc 0)
+                       (<= (+ pos 64) le))
              (let [hm
                      ~(ct-or-fold (ct-hot-mask-calls lcs
                                                      blocks
@@ -444,16 +473,64 @@
                                                      0
                                                      `(index data pos))
                                   0)
-                   nonws (^ (v16-ws-mask (index data pos)) 65535)]
+                   nonws (^ (v64-ws-mask (index data pos)) -1)]
                (if (= hm 0)
                    (do
                      (when (!= nonws 0) (store! (mut acc) 1) 0)
-                     (store! (mut pos) (+ pos 16))
+                     (store! (mut pos) (+ pos 64))
                      0)
                    (let [fh (ctz hm)]
                      ;; only the bytes BEFORE the delimiter count toward the
                      ;; line being non-blank, exactly as the scalar loop does
-                     (when (!= (& nonws (- (<< 1 fh) 1)) 0)
+                     (when (!= (& nonws (^ (<< -1 fh) -1)) 0)
+                       (store! (mut acc) 1)
+                       0)
+                     (store! (mut pos) (+ pos fh))
+                     (store! (mut hot) true)
+                     0))))
+           ;; Once a line has code, only delimiter positions matter. Keep the
+           ;; rest of its vector scan free of whitespace comparisons.
+           (while (all (= hot false) (<= (+ pos 64) le))
+             (let [hm
+                     ~(ct-or-fold (ct-hot-mask-calls lcs
+                                                     blocks
+                                                     quotes
+                                                     mqs
+                                                     0
+                                                     `(index data pos))
+                                  0)]
+               (if (= hm 0)
+                   (store! (mut pos) (+ pos 64))
+                   (do
+                     (store! (mut pos) (+ pos (ctz hm)))
+                     (store! (mut hot) true)
+                     0))))
+           ;; The last 1..63 bytes of a line may be read as a full vector when
+           ;; the file has following bytes. Mask off lanes at and beyond the
+           ;; newline, so no token from the next line enters this one.
+           (when (all (= hot false) (< pos le) (<= (+ pos 64) len))
+             (let [valid (^ (<< -1 (- le pos)) -1)
+                   hm
+                     (& ~(ct-or-fold (ct-hot-mask-calls lcs
+                                                        blocks
+                                                        quotes
+                                                        mqs
+                                                        0
+                                                        `(index data pos))
+                                     0)
+                        valid)
+                   nonws
+                     (if (or (!= acc 0) (= saw-code true))
+                         0
+                         (& (^ (v64-ws-mask (index data pos)) -1)
+                            valid))]
+               (if (= hm 0)
+                   (do
+                     (when (!= nonws 0) (store! (mut acc) 1) 0)
+                     (store! (mut pos) le)
+                     0)
+                   (let [fh (ctz hm)]
+                     (when (!= (& nonws (^ (<< -1 fh) -1)) 0)
                        (store! (mut acc) 1)
                        0)
                      (store! (mut pos) (+ pos fh))
@@ -483,7 +560,11 @@
                  (store! (mut acc) 1)))
            (while (all (< pos le) (= acc 0))
              (let [b (cast i64 (load (index data pos)))]
-               (if (any (= b #\space) (= b #\tab) (= b #\return))
+               (if (any (= b #\space)
+                        (= b #\tab)
+                        (= b #\return)
+                        (= b 11)
+                        (= b 12))
                    (store! (mut pos) (+ pos 1))
                    (store! (mut acc) 1))))
            (when (!= acc 0) (store! (mut saw-code) true) 0)
@@ -530,7 +611,7 @@
              (mut n-comments) 0
              (mut n-code) 0]
          (while (< i len)
-           (let [le (find-byte bytes i len #\newline)
+           (let [le (find-newline data i len)
                  (mut pos) (load i)
                  (mut saw-code) false
                  (mut saw-comment) false]
@@ -566,16 +647,21 @@
                          `((= state ST-BLOCK) (store! (mut n-comments)
                                                       (+ n-comments 1)))
                          `())
-                     ~@(if has-mq
-                           `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
-                                                                               (+ n-comments
-                                                                                  1))
-                               (= state ST-MSTRING)
-                               (store! (mut n-code) (+ n-code 1)))
+                     ~@(if has-q
+                           `((= state ST-STRING) (store! (mut n-code)
+                                                         (+ n-code 1)))
                            `())
-                   true (store! (mut n-blank) (+ n-blank 1)))
-             ;; A trailing odd run of backslashes continues the string onto the
-             ;; next line, so it must NOT drop back to ST-NORMAL here.
+                   ~@(if has-mq
+                         `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
+                                                                             (+ n-comments
+                                                                                1))
+                             (= state ST-MSTRING)
+                             (store! (mut n-code) (+ n-code 1)))
+                         `())
+                     true
+                   (store! (mut n-blank) (+ n-blank 1)))
+             ;; Some languages allow quoted strings across physical newlines.
+             ;; Others require a trailing continuation slash.
              ~@(if has-q
                    `((when (= state ST-STRING)
                        (let [e
@@ -585,7 +671,15 @@
                                            #\u0D))
                                    (- le 1)
                                    le)]
-                         (when (= (% (backslashes-before bytes i e) 2) 0)
+                         (when (and (= (quote-byte? ~(if (> n-q 1)
+                                                         `(load qch)
+                                                         `~(cast i64
+                                                                 (slice-get quotes
+                                                                            0)))
+                                                    (load (field spec
+                                                                 multiline-quote-chars)))
+                                       false)
+                                    (= (% (backslashes-before bytes i e) 2) 0))
                            (store! (mut state) ST-NORMAL)
                            0)
                          0)

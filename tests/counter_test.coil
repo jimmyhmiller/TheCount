@@ -110,6 +110,61 @@
            (assert-eq (load (field c lines)) 3)
            (assert-eq (load (field c blank)) 3)))
 
+(deftest form-feed-and-vertical-tab-are-whitespace
+         (let [spec-p (c-spec-ptr)
+               src "\x0C;\n\x0B;\n\x0C;/* comment */\n"
+               c (count-bytes spec-p src)]
+           (assert-eq (load (field c lines)) 3)
+           (assert-eq (load (field c blank)) 2)
+           (assert-eq (load (field c comments)) 1)
+           (assert-eq (load (field c code)) 0)))
+
+(deftest shell-heredoc-delimiter
+         (assert-eq (shell-heredoc-end "cat << EOF" 4 10) 10)
+         (assert-eq (shell-heredoc-end "cat <<< word" 4 12) -1)
+         (assert (shell-heredoc-line? "EOF"
+                                      0
+                                      3
+                                      (Heredoc :word "EOF" :strip-tabs false)))
+         (let [(mut spec)
+                 (lang-from-strings (malloc-allocator)
+                                    "Shell"
+                                    "#"
+                                    ""
+                                    false
+                                    "\"'"
+                                    "")]
+           (set! (.shell-heredocs (mut spec)) true)
+           (set! (.multiline-quote-chars (mut spec)) "\"'")
+           (rebuild-classes! (malloc-allocator) (mut spec))
+           (let [c
+                   (count-bytes (mut spec)
+                                "cat << EOF\nline with \" quote\n\n# literal data\nEOF\n# comment\n")]
+             (assert-eq (.lines c) 6)
+             (assert-eq (.code c) 4)
+             (assert-eq (.blank c) 1)
+             (assert-eq (.comments c) 1))))
+
+(deftest shell-quoted-and-tab-stripped-heredocs
+         (let [(mut spec)
+                 (lang-from-strings (malloc-allocator)
+                                    "Shell"
+                                    "#"
+                                    ""
+                                    false
+                                    "\"'"
+                                    "")]
+           (set! (.shell-heredocs (mut spec)) true)
+           (set! (.multiline-quote-chars (mut spec)) "\"'")
+           (rebuild-classes! (malloc-allocator) (mut spec))
+           (let [c
+                   (count-bytes (mut spec)
+                                "cat <<-'END'\n\t# literal text\n\tEND\necho $((1 << 2))\necho $((1 +\n 2 << 3))\n# comment\n")]
+             (assert-eq (.lines c) 7)
+             (assert-eq (.code c) 6)
+             (assert-eq (.blank c) 0)
+             (assert-eq (.comments c) 1))))
+
 ;; A trailing backslash continues a string literal onto the next line, so a
 ;; `//` there is string content, not a comment. Without this, every line of a
 ;; multi-line continued string after the first is misread.

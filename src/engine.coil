@@ -5,7 +5,7 @@
 (import "coil.hashmap" :use *)
 (import "coil.str" :use *)
 (import "coil.fs" :use *)
-(import "coil.io" :use [read])
+(import "coil.io" :use [read stderr write-line])
 (import "coil.os" :as os)
 (import "coil.thread" :use *)
 (import "coil.atomic" :use *)
@@ -16,10 +16,8 @@
 (import "thecount.counter" :use *)
 (import "thecount.walk" :use *)
 (import "thecount.ignore" :use *)
-(import "thecount.output" :use [Row mk-row])
+(import "thecount.output" :use [Row mk-row i64->str])
 (import "thecount.util" :use *)
-
-(extern lseek :cc c [i32 i64 i32] (-> i64))
 
 (extern openat :cc c [i32 (ptr i8) i32] (-> i32))
 
@@ -31,13 +29,7 @@
 
 (extern pthread_mutex_unlock :cc c [(ptr i8)] (-> i32))
 
-(extern sched_yield :cc c [] (-> i32))
-
-(extern sysconf :cc c [i32] (-> i64))
-
-(extern access :cc c [(ptr i8) i32] (-> i32))
-
-(extern usleep :cc c [i32] (-> i32))
+(extern pthread_mutex_destroy :cc c [(ptr i8)] (-> i32))
 
 (extern pthread_cond_init :cc c [(ptr i8) (ptr i8)] (-> i32))
 
@@ -47,19 +39,25 @@
 
 (extern pthread_cond_broadcast :cc c [(ptr i8)] (-> i32))
 
-(const SC-NPROCESSORS-ONLN (os-pick 84 58))
+(extern pthread_cond_destroy :cc c [(ptr i8)] (-> i32))
 
-;; ---------------------------------------------------------------------------
-;; Pipeline architecture. Syscalls and counting want opposite thread counts:
-;; macOS VFS contention grows superlinearly with concurrent open/read/readdir
-;; (measured on llvm: 16 threads spend 25s sys vs 8s at 4, and are slower in
-;; wall time), while the CPU-bound counting core wants every core it can get.
-;; So the pools are split: a small READER pool walks directories and reads
-;; file contents into a shared ring of buffers, and a COUNTER pool drains
-;; those buffers into per-thread aggregates. Free buffers flow back through
-;; a free-list, which also gives natural backpressure: at most NBUFS files
-;; are in flight, so memory stays bounded.
-;; ---------------------------------------------------------------------------
+(extern access :cc c [(ptr i8) i32] (-> i32))
+
+(extern sysconf :cc c [i32] (-> i64))
+
+(defstruct ClockTime [(seconds i64) (nanoseconds i64)])
+
+(extern clock_gettime :cc c [i32 (ptr ClockTime)] (-> i32))
+
+(defn now-ns [] (-> i64)
+  (let [(mut t) (zeroed ClockTime)]
+    (clock_gettime (cast i32 (os-pick 1 6)) (mut t))
+    (+ (* (.seconds (mut t)) 1000000000) (.nanoseconds (mut t)))))
+
+;; Workers share a directory queue. Each worker reads and counts files into a
+;; private aggregate, then the main thread merges those aggregates. Keeping
+;; the read and scan on one worker avoids a per-file handoff and lets each
+;; worker reuse its file buffer.
 
 ;;; Reusable file buffer: grows to the largest file seen.
 (defstruct ReadBuf [(p (ptr u8)) (cap i64)])
@@ -67,27 +65,24 @@
 (defn rb-new [(a (dyn Allocator))] (-> (ptr ReadBuf))
   (box! a ReadBuf (ReadBuf :p (cast (ptr u8) 0) :cap 0)))
 
-;;; Grow rb to at least newcap bytes (contents are not preserved).
+;;; Grow rb to at least newcap bytes, preserving bytes already read.
 ;;; Buffer memory ALWAYS comes from the global malloc allocator: buffers are
 ;;; shared across threads, and freeing one arena's region pointer through
 ;;; another arena's free hook aborts (libmalloc: pointer was not allocated).
 (defn rb-grow! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (newcap i64)] (-> i64)
-  (let [ma (malloc-allocator)]
-    (when (> (load (field rb cap)) 0)
-      (free [u8] ma (alloc-slice-new (.p rb) (.cap rb)))
-      0)
-    (match (alloc [u8] ma newcap)
+  (let [ma (malloc-allocator)
+        old (alloc-slice-new (.p rb) (.cap rb))]
+    (match (reallocate [u8] ma old newcap)
       (Some [memory]
             (do
               (set! (.p rb) (alloc-slice-data memory))
               (set! (.cap rb) newcap)
               0))
-      (None [] (do (set! (.cap rb) 0) 0)))
+      (None [] (oom-at c"read buffer" newcap)))
     0))
 
-;;; Read the whole file into rb's buffer. A short read from a regular file
-;;; means EOF, so anything smaller than the buffer costs exactly one read(2):
-;;; open + read + close, three syscalls per file. Returns size or -1.
+;;; Read a file into rb's buffer. Returns bytes read or -1. A short read is
+;;; allowed for regular files, so only a zero read means EOF.
 (defn read-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (cpath (ptr i8))] (-> i64)
   (read-fd-into! a rb (os/open cpath 0)))
 
@@ -97,7 +92,7 @@
                      (rb (ptr ReadBuf))
                      (dfd i32)
                      (cname (ptr i8))] (-> i64)
-  (read-fd-into! a rb (openat dfd cname 0)))
+  (read-fd-into! a rb (openat dfd cname (cast i32 (os-pick 131072 256)))))
 
 (defn read-fd-into! [(a (dyn Allocator)) (rb (ptr ReadBuf)) (fd i32)] (-> i64)
   (if (< (cast i64 fd) 0)
@@ -111,27 +106,20 @@
         (while (= done false)
           (let [want (- (load (field rb cap)) got)]
             (when (< want 65536)
-              ;; buffer full: double it and keep going (rare: file > cap).
-              ;; raw-alloc gives fresh bytes, so re-read from the start.
+              ;; buffer full: double it and continue after bytes already read.
               (rb-grow! a rb (* (load (field rb cap)) 2))
-              (lseek fd 0 0)
-              (store! (mut got) 0)
               0)
             (let [n
                     (read fd
                           (cast (ptr i8) (index (load (field rb p)) got))
                           (- (load (field rb cap)) got))]
               (cond (< (cast i64 n) 0)
-                      (do
+                      (when (!= (os/os-errno) 4)
                         (store! (mut failed) true)
                         (store! (mut done) true)
                         0)
-                    (< (cast i64 n) (- (load (field rb cap)) got))
-                      (do
-                        (store! (mut got) (+ got (cast i64 n)))
-                        (store! (mut done) true)
-                        0)
-                    :else (do (store! (mut got) (+ got (cast i64 n))) 0)))))
+                    (= (cast i64 n) 0) (store! (mut done) true)
+                    :else (store! (mut got) (+ got (cast i64 n)))))))
         (os/close fd)
         (if (= failed true) -1 got))))
 
@@ -160,34 +148,23 @@
 
 (const FILE-BATCH 16)
 
-(const NBUFS 32)
-
-;;; One filled buffer traveling from a reader to a counter.
-(defstruct CountMsg
-  [(buf-id i64)
-   (size i64)
-   (spec-idx i64)
-   (dir (slice u8))
-   (name (slice u8))])
-
 (defstruct Pool
   [(mutex (array u8 64))  ; guards queue (pthread_mutex_t is <= 64 bytes)
+   (qcond (array u8 64))
    (queue (ptr (ArrayList DirItem)))
-   (in-flight (ptr i64))  ; dirs/batches queued or being processed
-   (cmutex (array u8 64))  ; guards cqueue
-   (ccond (array u8 64))  ; signaled when cqueue gains a message / on shutdown
-   (cqueue (ptr (ArrayList CountMsg)))
-   (fmutex (array u8 64))  ; guards free-bufs
-   (fcond (array u8 64))  ; signaled when a buffer is released
-   (free-bufs (ptr (ArrayList i64)))
-   (bufs (ptr ReadBuf))  ; NBUFS slots, indexed by buf-id
-   (readers-done (ptr i64))
+   (in-flight (ptr i64))  ; guarded by mutex
    (r (ptr Registry))
    (hidden bool)
    (use-ignore bool)
-   (excludes (ptr (ArrayList (slice u8))))])
+   (excludes (ptr (ArrayList (slice u8))))
+   (timing bool)
+   (io-ns (ptr i64))
+   (scan-ns (ptr i64))
+   (walk-ns (ptr i64))
+   (worker-ns (ptr i64))])
 
-(defstruct WorkerArg [(pool (ptr Pool)) (agg (ptr Agg))])
+(defstruct WorkerArg
+  [(pool (ptr Pool)) (agg (ptr Agg)) (active-ns i64) (items i64)])
 
 (defn new-agg [(a (dyn Allocator))
                (n-specs i64)
@@ -219,7 +196,7 @@
 (defn binary? [(data (slice u8))] (-> bool)
   (let [n (slice-len data)
         lim (if (< n 8000) n 8000)]
-    (bytes-contains? (subslice data 0 lim) (cast u8 0))))
+    (< (find-byte data 0 lim 0) lim)))
 
 ;;; Length of the longest walk root `dir` sits under, or 0 for none. Depth is
 ;;; counted from there, so `thecount src --dirs` breaks src up by ITS own
@@ -410,73 +387,21 @@
 
 (defn pool-push! [(pool (ptr Pool)) (item DirItem)] (-> i64)
   (let [m (cast (ptr i8) (field pool mutex))]
-    (atomic-add (load (field pool in-flight)) 1)
     (pthread_mutex_lock m)
+    (let [inflight (load (field pool in-flight))]
+      (store! inflight (+ (load inflight) 1)))
     (al-push! (load (field pool queue)) item)
+    (pthread_cond_signal (cast (ptr i8) (field pool qcond)))
     (pthread_mutex_unlock m)
-    0))
-
-;; --- buffer ring -----------------------------------------------------------
-(defn acquire-buf! [(pool (ptr Pool))] (-> i64)
-  (let [fm (cast (ptr i8) (field pool fmutex))
-        fc (cast (ptr i8) (field pool fcond))
-        fl (load (field pool free-bufs))
-        (mut got) -1]
-    (pthread_mutex_lock fm)
-    (while (= got -1)
-      (match (al-pop! fl)
-        (Some [id] (store! (mut got) id))
-        (None [] (do (pthread_cond_wait fc fm) 0))))
-    (pthread_mutex_unlock fm)
-    got))
-
-;;; Release a batch of buffer ids in one lock.
-(defn release-bufs! [(pool (ptr Pool)) (ids (ptr (ArrayList i64)))] (-> i64)
-  (let [fm (cast (ptr i8) (field pool fmutex))
-        fc (cast (ptr i8) (field pool fcond))]
-    (pthread_mutex_lock fm)
-    (for id
-      (iter (load ids))
-      (al-push! (load (field pool free-bufs)) id))
-    (pthread_mutex_unlock fm)
-    (pthread_cond_broadcast fc)
-    0))
-
-(defn release-buf! [(pool (ptr Pool)) (id i64)] (-> i64)
-  (let [fm (cast (ptr i8) (field pool fmutex))
-        fc (cast (ptr i8) (field pool fcond))]
-    (pthread_mutex_lock fm)
-    (al-push! (load (field pool free-bufs)) id)
-    (pthread_mutex_unlock fm)
-    (pthread_cond_signal fc)
-    0))
-
-(defn push-count-msg! [(pool (ptr Pool))
-                       (bid i64)
-                       (size i64)
-                       (idx i64)
-                       (dir (slice u8))
-                       (name (slice u8))] (-> i64)
-  (let [cm (cast (ptr i8) (field pool cmutex))
-        m
-          (CountMsg
-            :buf-id bid
-            :size size
-            :spec-idx idx
-            :dir dir
-            :name name)]
-    (pthread_mutex_lock cm)
-    (al-push! (load (field pool cqueue)) m)
-    (pthread_mutex_unlock cm)
-    (pthread_cond_signal (cast (ptr i8) (field pool ccond)))
     0))
 
 ;; --- reader side -----------------------------------------------------------
 
-;;; Read one file (living in the directory open as dfd) into a pool buffer and
-;;; hand it to the counters. openat = one path component of kernel lookup.
+;;; Read and count one file using the directory's open descriptor.
 (defn reader-file! [(a (dyn Allocator))
                     (pool (ptr Pool))
+                    (agg (ptr Agg))
+                    (rb (ptr ReadBuf))
                     (dfd i32)
                     (dir (slice u8))
                     (name (slice u8))] (-> i64)
@@ -484,12 +409,29 @@
         idx (reg-lookup-path r name)]
     (if (= idx -1)
         0
-        (let [bid (acquire-buf! pool)
-              rb (index (load (field pool bufs)) bid)
-              size (read-into-at! a rb dfd (str->cstr a name))]
+        (let [t0 (if (.timing pool) (now-ns) 0)
+              size (read-into-at! a rb dfd (cast (ptr i8) (slice-data name)))]
+          (when (.timing pool)
+            (atomic-add (load (field pool io-ns)) (- (now-ns) t0))
+            0)
           (if (< size 0)
-              (release-buf! pool bid)
-              (push-count-msg! pool bid size idx dir name))))))
+              0
+              (let [data (slice-new (load (field rb p)) size)
+                    t1 (if (.timing pool) (now-ns) 0)
+                    result
+                      (if (binary? data)
+                          0
+                          (agg-file! a
+                                     r
+                                     agg
+                                     idx
+                                     dir
+                                     name
+                                     (reg-count-bytes r idx data)))]
+                (when (.timing pool)
+                  (atomic-add (load (field pool scan-ns)) (- (now-ns) t1))
+                  0)
+                result))))))
 
 ;;; Walk one directory: honor .gitignore, queue subdirectories, and either
 ;;; read the files right here through the open dir fd (small dirs) or hand
@@ -544,96 +486,24 @@
                      (hidden bool)
                      (use-ignore bool)
                      (names (mut (ArrayList (slice u8))))] (-> i64)
-  (let [(mut going) true]
+  (let [(mut going) true
+        dfd (dirfd dp)]
     (while (= going true)
       (let [ent (readdir dp)]
         (if (= (cast i64 ent) 0)
             (do (store! (mut going) false) 0)
             (let [namlen (dirent-name-len ent)
-                  dtype
+                  reported-type
                     (cast i64
                           (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
                   name
                     (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF))
-                               namlen)]
-              (if (or (= dtype DT-DIR) (= dtype DT-REG))
-                  (classify-entry! a
-                                   pool
-                                   chain
-                                   dir
-                                   hidden
-                                   use-ignore
-                                   (mut names)
-                                   name
-                                   (= dtype DT-DIR))
-                  0)))))
-    0))
-
-;;; Walk one directory: honor .gitignore, queue subdirectories, and either
-;;; read the files right here through the open dir fd (small dirs) or hand
-;;; batches of basenames to the walk queue for other readers.
-;;; Shared entry filter for both enumerators: apply the hidden/.git/dot rules
-;;; and gitignore/exclude checks, then queue directories and collect file
-;;; basenames. Callers only pass regular files and directories.
-(defn classify-entry! [(a (dyn Allocator))
-                       (pool (ptr Pool))
-                       (chain (ptr CtxNode))
-                       (dir (slice u8))
-                       (hidden bool)
-                       (use-ignore bool)
-                       (names (mut (ArrayList (slice u8))))
-                       (name (slice u8))
-                       (is-dir bool)] (-> i64)
-  (let [namlen (slice-len name)]
-    (if (= namlen 0)
-        0
-        (let [first-b (cast i64 (slice-get name 0))]
-          (cond (= name ".git") 0
-                (and (= first-b #\.) (= hidden false)) 0
-                (and (= first-b #\.)
-                     (or (= namlen 1)
-                         (and (= namlen 2)
-                              (= (cast i64 (slice-get name 1)) #\.))))
-                  0
-                (= is-dir true)
-                  (let [full (join-path a dir name)]
-                    (if (or (excluded? (load (field pool excludes)) full)
-                            (and (= use-ignore true)
-                                 (entry-ignored? chain full name true)))
-                        0
-                        (pool-push! pool
-                                    (zeroed-with DirItem
-                                                 (path full)
-                                                 (chain chain)))))
-                :else
-                  (let [full (join-path a dir name)]
-                    (if (or (excluded? (load (field pool excludes)) full)
-                            (and (= use-ignore true)
-                                 (entry-ignored? chain full name false)))
-                        0
-                        (do (al-push! (mut names) (copy-str a name)) 0))))))))
-
-;;; readdir enumerator (linux, and the portable fallback).
-(defn enum-readdir! [(a (dyn Allocator))
-                     (pool (ptr Pool))
-                     (dp (ptr i8))
-                     (chain (ptr CtxNode))
-                     (dir (slice u8))
-                     (hidden bool)
-                     (use-ignore bool)
-                     (names (mut (ArrayList (slice u8))))] (-> i64)
-  (let [(mut going) true]
-    (while (= going true)
-      (let [ent (readdir dp)]
-        (if (= (cast i64 ent) 0)
-            (do (store! (mut going) false) 0)
-            (let [namlen (dirent-name-len ent)
+                               namlen)
                   dtype
-                    (cast i64
-                          (load (cast (ptr u8) (index ent DIRENT-TYPE-OFF))))
-                  name
-                    (slice-new (cast (ptr u8) (index ent DIRENT-NAME-OFF))
-                               namlen)]
+                    (resolved-dirent-type dfd
+                                          (cast (ptr i8)
+                                                (index ent DIRENT-NAME-OFF))
+                                          reported-type)]
               (if (or (= dtype DT-DIR) (= dtype DT-REG))
                   (classify-entry! a
                                    pool
@@ -767,6 +637,8 @@
 ;;; types are needed; it only pays when it replaces per-file stat calls.
 (defn process-dir! [(a (dyn Allocator))
                     (pool (ptr Pool))
+                    (agg (ptr Agg))
+                    (rb (ptr ReadBuf))
                     (item DirItem)] (-> i64)
   (let [dir (.path item)
         (mut chain) (load (field item chain))
@@ -787,14 +659,18 @@
                   0)
                 0)
               0))
-          (enum-readdir! a
-                         pool
-                         (cast (ptr i8) handle)
-                         chain
-                         dir
-                         hidden
-                         use-ignore
-                         (mut names))
+          (let [t0 (if (.timing pool) (now-ns) 0)]
+            (enum-readdir! a
+                           pool
+                           (cast (ptr i8) handle)
+                           chain
+                           dir
+                           hidden
+                           use-ignore
+                           (mut names))
+            (when (.timing pool)
+              (atomic-add (load (field pool walk-ns)) (- (now-ns) t0))
+              0))
           ;; small dirs: read inline through the already-open fd.
           ;; big dirs: share batches of basenames with the walk queue.
           (let [nfl (al-len names)
@@ -802,7 +678,7 @@
             (if (<= nfl FILE-BATCH)
                 (for name
                   (iter names)
-                  (reader-file! a pool dfd dir name))
+                  (reader-file! a pool agg rb dfd dir name))
                 (let [(mut o) 0]
                   (while (< o nfl)
                     (let [hi (if (< (+ o FILE-BATCH) nfl) (+ o FILE-BATCH) nfl)
@@ -822,6 +698,8 @@
 ;;; Read a queued batch: open its directory once, openat each basename.
 (defn process-batch! [(a (dyn Allocator))
                       (pool (ptr Pool))
+                      (agg (ptr Agg))
+                      (rb (ptr ReadBuf))
                       (item DirItem)] (-> i64)
   (let [dir (.path item)
         fs (.files item)
@@ -832,99 +710,60 @@
         (let []
           (for name
             (iter fs)
-            (reader-file! a pool dfd dir name))
+            (reader-file! a pool agg rb dfd dir name))
           (os/close dfd)
           0))))
 
 (defn reader-worker [(p (ptr i8))] (-> (ptr i8))
-  (let [pool (cast (ptr Pool) p)
+  (let [wa (cast (ptr WorkerArg) p)
+        pool (load (field wa pool))
+        agg (load (field wa agg))
         a (overflow-arena-allocator (* 32 1048576))
+        rb (rb-new a)
         m (cast (ptr i8) (field pool mutex))
+        qc (cast (ptr i8) (field pool qcond))
         inflight (load (field pool in-flight))
         q (load (field pool queue))
+        t0 (if (.timing pool) (now-ns) 0)
+        (mut active) 0
+        (mut items) 0
         (mut going) true]
     (while (= going true)
       (let [(mut have) false
             (mut item) (zeroed DirItem)]
         (pthread_mutex_lock m)
+        (while (and (= (al-len (load q)) 0) (> (load inflight) 0))
+          (pthread_cond_wait qc m))
         (match (al-pop! q)
           (Some [it] (do (store! (mut item) it) (store! (mut have) true) 0))
           (None [] 0))
         (pthread_mutex_unlock m)
         (if (= have true)
             (do
-              (if (> (slice-len (load (field (mut item) files))) 0)
-                  (process-batch! a pool item)
-                  (process-dir! a pool item))
-              (atomic-add inflight -1)
+              (let [work-start (if (.timing pool) (now-ns) 0)]
+                (if (> (slice-len (load (field (mut item) files))) 0)
+                    (process-batch! a pool agg rb item)
+                    (process-dir! a pool agg rb item))
+                (when (.timing pool)
+                  (store! (mut active) (+ active (- (now-ns) work-start)))
+                  (store! (mut items) (+ items 1))
+                  0))
+              (pthread_mutex_lock m)
+              (store! inflight (- (load inflight) 1))
+              (when (= (load inflight) 0)
+                (pthread_cond_broadcast qc)
+                0)
+              (pthread_mutex_unlock m)
               0)
-            (if (= (atomic-load inflight) 0)
-                (do (store! (mut going) false) 0)
-                (do (sched_yield) 0)))))
+            (do (store! (mut going) false) 0))))
+    (when (.timing pool)
+      (atomic-add (load (field pool worker-ns)) (- (now-ns) t0))
+      (store! (field wa active-ns) active)
+      (store! (field wa items) items)
+      0)
     (cast (ptr i8) 0)))
 
 ;; --- counter side ----------------------------------------------------------
-(defn counter-worker [(p (ptr i8))] (-> (ptr i8))
-  (let [wa (cast (ptr WorkerArg) p)
-        pool (load (field wa pool))
-        agg (load (field wa agg))
-        a (overflow-arena-allocator (* 8 1048576))
-        r (load (field pool r))
-        cm (cast (ptr i8) (field pool cmutex))
-        cq (load (field pool cqueue))
-        done (load (field pool readers-done))
-        cc (cast (ptr i8) (field pool ccond))
-        (mut local) (al-new [CountMsg] a)
-        (mut freed) (al-new [i64] a)
-        (mut going) true]
-    (while (= going true)
-      ;; wait for work, then drain everything available under one lock
-      (al-clear! (mut local))
-      (pthread_mutex_lock cm)
-      (let [(mut waiting) true]
-        (while (= waiting true)
-          (if (> (al-len (load cq)) 0)
-              (store! (mut waiting) false)
-              (if (= (atomic-load done) 1)
-                  (store! (mut waiting) false)
-                  (do (pthread_cond_wait cc cm) 0)))))
-      (let [(mut draining) true]
-        (while (= draining true)
-          (match (al-pop! cq)
-            (Some [mm] (do (al-push! (mut local) mm) 0))
-            (None [] (store! (mut draining) false)))))
-      (pthread_mutex_unlock cm)
-      (let [nl (al-len local)]
-        (if (> nl 0)
-            (let [(mut j) 0]
-              (al-clear! (mut freed))
-              (while (< j nl)
-                (let [(mut msg) (al-get local j)
-                      bid (load (field (mut msg) buf-id))
-                      rb (index (load (field pool bufs)) bid)
-                      data
-                        (slice-new (load (field rb p))
-                                   (load (field (mut msg) size)))]
-                  (when (= (binary? data) false)
-                    (agg-file! a
-                               r
-                               agg
-                               (load (field (mut msg) spec-idx))
-                               (load (field (mut msg) dir))
-                               (load (field (mut msg) name))
-                               (reg-count-bytes r
-                                                (load (field (mut msg) spec-idx))
-                                                data))
-                    0)
-                  (al-push! (mut freed) bid))
-                (store! (mut j) (+ j 1)))
-              (release-bufs! pool (mut freed))
-              0)
-            (when (= (atomic-load done) 1)
-              (store! (mut going) false)
-              0))))
-    (cast (ptr i8) 0)))
-
 ;;; Give every --dirs row its directory's total code, which dir-row-cmp uses to
 ;;; order directories by size while keeping each directory's languages together.
 ;;; Run once, after all counter aggregates have been merged.
@@ -1001,6 +840,13 @@
                    (None [] dflt)))
            (None [] dflt)))))
 
+;;; Linux spreads this I/O-heavy workload well across its online CPUs, up to
+;;; 32 on the tested x86 host. macOS APFS instead favored four workers.
+(defn default-readers [] (-> i64)
+  (os-pick (let [online (sysconf 84)]  ; _SC_NPROCESSORS_ONLN on Linux/glibc
+             (if (> online 0) (if (< online 32) online 32) 8))
+           4))
+
 ;;; Count everything under roots. Returns the merged aggregate.
 (defn count-all [(a (dyn Allocator))
                  (r (ptr Registry))
@@ -1016,30 +862,26 @@
         agg (new-agg a n-specs want-files want-dirs depth wroots)
         pool (box! a Pool (zeroed Pool))
         queue (new-list a DirItem)
-        cqueue (new-list a CountMsg)
-        free-bufs (new-list a i64)
-        bufs (must-alloc [ReadBuf] a NBUFS)
         inflight (box! a i64 0)
-        rdone (box! a i64 0)]
-    (for [b 0 NBUFS]
-      (store! (index bufs b) (ReadBuf :p (cast (ptr u8) 0) :cap 0))
-      (al-push! free-bufs b))
+        timing (= (env-int a "THECOUNT_PHASE_TIMING" 0) 1)
+        io-ns (box! a i64 0)
+        scan-ns (box! a i64 0)
+        walk-ns (box! a i64 0)
+        worker-ns (box! a i64 0)]
     (pthread_mutex_init (cast (ptr i8) (field pool mutex)) (cast (ptr i8) 0))
-    (pthread_mutex_init (cast (ptr i8) (field pool cmutex)) (cast (ptr i8) 0))
-    (pthread_mutex_init (cast (ptr i8) (field pool fmutex)) (cast (ptr i8) 0))
-    (pthread_cond_init (cast (ptr i8) (field pool ccond)) (cast (ptr i8) 0))
-    (pthread_cond_init (cast (ptr i8) (field pool fcond)) (cast (ptr i8) 0))
+    (pthread_cond_init (cast (ptr i8) (field pool qcond)) (cast (ptr i8) 0))
     (set-fields! pool
                  (queue queue)
-                 (cqueue cqueue)
-                 (free-bufs free-bufs)
-                 (bufs bufs)
                  (in-flight inflight)
-                 (readers-done rdone)
                  (r r)
                  (hidden hidden)
                  (use-ignore use-ignore)
-                 (excludes excludes))
+                 (excludes excludes)
+                 (timing timing)
+                 (io-ns io-ns)
+                 (scan-ns scan-ns)
+                 (walk-ns walk-ns)
+                 (worker-ns worker-ns))
     ;; seed: directories enter the queue, plain-file roots count directly
     (let [nr (al-len (load roots))]
       (for [i 0 nr]
@@ -1055,36 +897,53 @@
                 (if (= (cast i64 (access (str->cstr a root) 0)) 0)
                     (process-file! a r agg (rb-new a) root)
                     (do (println "thecount: no such path: {s}" root) 0))))))
-      ;; readers: few (kernel contention); counters: the rest of the cores.
-      ;; THECOUNT_READERS / THECOUNT_COUNTERS override.
-      (let [ncpu (sysconf (cast i32 SC-NPROCESSORS-ONLN))
-            (mut nreaders) (env-int a "THECOUNT_READERS" (os-pick 8 4))
-            (mut ncounters) (env-int a "THECOUNT_COUNTERS" (- ncpu 4))]
+      ;; Each worker walks, reads, and counts into its own aggregate.
+      (let [(mut nreaders) (env-int a "THECOUNT_READERS" (default-readers))]
         (when (< nreaders 1) (store! (mut nreaders) 1))
-        (when (> nreaders 16) (store! (mut nreaders) 16))
-        (when (< ncounters 2) (store! (mut ncounters) 2))
-        (when (> ncounters 12) (store! (mut ncounters) 12))
+        (when (> nreaders 32) (store! (mut nreaders) 32))
         (let [rthreads (must-alloc [Thread] a nreaders)
-              cthreads (must-alloc [Thread] a ncounters)
-              cargs (must-alloc [WorkerArg] a ncounters)]
-          (for [t 0 (load ncounters)]
+              rargs (must-alloc [WorkerArg] a nreaders)]
+          (for [t 0 (load nreaders)]
             (let [wagg (new-agg a n-specs want-files want-dirs depth wroots)
-                  wa (index cargs t)]
+                  wa (index rargs t)]
               (set-fields! wa (pool pool) (agg wagg))
-              (thread-spawn (index cthreads t)
-                            (fnptr-of counter-worker)
+              (thread-spawn (index rthreads t)
+                            (fnptr-of reader-worker)
                             (cast (ptr i8) wa))))
           (for [t 0 (load nreaders)]
-            (thread-spawn (index rthreads t)
-                          (fnptr-of reader-worker)
-                          (cast (ptr i8) pool)))
-          (for [t 0 (load nreaders)]
-            (thread-join (index rthreads t)))
-          (atomic-store rdone 1)
-          (pthread_mutex_lock (cast (ptr i8) (field pool cmutex)))
-          (pthread_mutex_unlock (cast (ptr i8) (field pool cmutex)))
-          (pthread_cond_broadcast (cast (ptr i8) (field pool ccond)))
-          (for [t 0 (load ncounters)]
-            (thread-join (index cthreads t))
-            (agg-merge! a agg (load (field (index cargs t) agg)))))
-        agg))))
+            (thread-join (index rthreads t))
+            (agg-merge! a agg (load (field (index rargs t) agg))))
+          (when (= timing true)
+            (let [(mut b) (sb-new a)]
+              (sb-push-str! (mut b) "[phase] worker ns=")
+              (sb-push-str! (mut b) (i64->str a (atomic-load worker-ns)))
+              (sb-push-str! (mut b) " walk ns=")
+              (sb-push-str! (mut b) (i64->str a (atomic-load walk-ns)))
+              (sb-push-str! (mut b) " io ns=")
+              (sb-push-str! (mut b) (i64->str a (atomic-load io-ns)))
+              (sb-push-str! (mut b) " scan ns=")
+              (sb-push-str! (mut b) (i64->str a (atomic-load scan-ns)))
+              (sb-push-str! (mut b) " workers=[")
+              (for [t 0 (load nreaders)]
+                (let [wa (index rargs t)
+                      wagg (load (field wa agg))
+                      (mut files) 0]
+                  (for [s 0 n-specs]
+                    (store! (mut files)
+                            (+ files
+                               (load (index (slice-data (.files-per wagg)) s)))))
+                  (when (> t 0) (sb-push-str! (mut b) ",") 0)
+                  (sb-push-str! (mut b) (i64->str a t))
+                  (sb-push-str! (mut b) ":")
+                  (sb-push-str! (mut b) (i64->str a files))
+                  (sb-push-str! (mut b) "/")
+                  (sb-push-str! (mut b)
+                                (i64->str a (load (field wa active-ns))))))
+              (sb-push-str! (mut b) "]")
+              (match (write-line (stderr) (sb-str b))
+                (Ok [_] 0)
+                (Err [_] 0)))
+            0)
+          (pthread_cond_destroy (cast (ptr i8) (field pool qcond)))
+          (pthread_mutex_destroy (cast (ptr i8) (field pool mutex)))
+          agg)))))

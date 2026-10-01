@@ -1,0 +1,143 @@
+{
+  "date_utc": "2026-10-01T00:15:13.837833+00:00",
+  "machine": {
+    "hostname": "metaphysics",
+    "arch": "x86_64",
+    "loadavg_end": [
+      2.619140625,
+      0.5576171875,
+      0.19921875
+    ]
+  },
+  "corpus": {
+    "path": "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+    "commit": "0ff41df1cb268fc69e703a08a57ee14ae967d0ca"
+  },
+  "settings": {
+    "warmup_each": 3,
+    "trials_each": 30,
+    "order": "alternating AB/BA",
+    "output": "JSON totals to /dev/null"
+  },
+  "commands": {
+    "thecount": [
+      "/tmp/thecount-20260930-bench/thecount",
+      "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+      "--extensions",
+      "c,h,s,asm,py,pl,pm,rs,sh",
+      "--hidden",
+      "--no-ignore",
+      "--no-config",
+      "--output",
+      "json"
+    ],
+    "mezura": [
+      "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+      "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+      "--languages",
+      "c,h,s,asm,py,pl,pm,rs,sh",
+      "--no-gitignore",
+      "--no-ignore-files",
+      "--search-in-dotted",
+      "--no-local",
+      "--no-default-config",
+      "--hide",
+      "keywords",
+      "--count-minified",
+      "--count-generated",
+      "--count-not-code",
+      "--counting",
+      "region",
+      "--no-shebang",
+      "--output",
+      "json"
+    ]
+  },
+  "binary_sha256": {
+    "thecount": "1c9c374a86dadfb9330152491eb704a092ba15cea011b53d635477cc46bff8ad",
+    "mezura": "6250ee810676c8700f8456f0662fe4f56b5c568c6505d87defcb44600c873449"
+  },
+  "samples_s": {
+    "thecount": [
+      0.075301712,
+      0.074328871,
+      0.076738683,
+      0.074015795,
+      0.073777599,
+      0.072774361,
+      0.076039715,
+      0.072975887,
+      0.074452393,
+      0.072732622,
+      0.072557314,
+      0.07556747,
+      0.076355866,
+      0.074097237,
+      0.068592841,
+      0.075096377,
+      0.074918976,
+      0.072093866,
+      0.075005187,
+      0.07432837,
+      0.075034712,
+      0.071919781,
+      0.073641824,
+      0.072026801,
+      0.075724033,
+      0.080433451,
+      0.076239088,
+      0.075422689,
+      0.076680775,
+      0.072969596
+    ],
+    "mezura": [
+      0.072670416,
+      0.071771533,
+      0.069363875,
+      0.072303037,
+      0.068552475,
+      0.064861134,
+      0.069727936,
+      0.063634777,
+      0.071964924,
+      0.066632,
+      0.065346532,
+      0.066606892,
+      0.063573283,
+      0.064825968,
+      0.069270019,
+      0.065732435,
+      0.070851821,
+      0.064634029,
+      0.071539969,
+      0.066384867,
+      0.067954316,
+      0.068347542,
+      0.067820905,
+      0.070450018,
+      0.069976091,
+      0.065925657,
+      0.064441458,
+      0.063686926,
+      0.068973133,
+      0.065695987
+    ]
+  },
+  "summary": {
+    "thecount": {
+      "mean_s": 0.0743947964,
+      "median_s": 0.07439063200000001,
+      "stddev_s": 0.0021041802553789265,
+      "min_s": 0.068592841,
+      "max_s": 0.080433451
+    },
+    "mezura": {
+      "mean_s": 0.0677839985,
+      "median_s": 0.0678876105,
+      "stddev_s": 0.002856937139026807,
+      "min_s": 0.063573283,
+      "max_s": 0.072670416
+    }
+  },
+  "speedup_thecount_over_mezura": 0.9111389744995658
+}

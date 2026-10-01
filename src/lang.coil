@@ -20,6 +20,9 @@
    (blocks (slice BlockPair))
    (nested bool)
    (quotes (slice u8))
+   (multiline-quote-chars (slice u8))
+   (single-scalar-char-literals bool)
+   (shell-heredocs bool)
    (multi-quotes (slice (slice u8)))
    (classes (ptr u8))])  ; 256-entry byte-class table, see rebuild-classes!
 
@@ -85,6 +88,9 @@
                        (blocks (parse-blocks a blocks))
                        (nested nested)
                        (quotes quotes)
+                       (multiline-quote-chars "")
+                       (single-scalar-char-literals false)
+                       (shell-heredocs false)
                        (multi-quotes (split-tokens a mqs)))]
     (rebuild-classes! a (mut l))
     l))
@@ -97,6 +103,8 @@
     (set! (index t #\space) (cast u8 CLS-WS))
     (set! (index t #\tab) (cast u8 CLS-WS))
     (set! (index t #\return) (cast u8 CLS-WS))
+    (set! (index t 11) (cast u8 CLS-WS))  ; vertical tab
+    (set! (index t 12) (cast u8 CLS-WS))  ; form feed
     (let [lcs (.line-comments (mut l))]
       (for lc
         (iter lcs)
@@ -116,5 +124,11 @@
       (for q
         (iter qs)
         (store! (index t (cast i64 q)) (cast u8 CLS-HOT))))
+    (when (= (.shell-heredocs (mut l)) true)
+      (store! (index t #\<) (cast u8 CLS-HOT))
+      (store! (index t #\$) (cast u8 CLS-HOT))
+      (store! (index t #\() (cast u8 CLS-HOT))
+      (store! (index t #\)) (cast u8 CLS-HOT))
+      0)
     (set! (.classes (mut l)) t)
     0))

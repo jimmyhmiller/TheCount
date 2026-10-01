@@ -1,0 +1,24 @@
+(module thecount.output-test)
+(import "coil.slice" :use *)
+(import "coil.alloc" :use *)
+(import "coil.str" :use *)
+(import "thecount.output" :use [push-json-string! utf8-width])
+(import "thecount.util" :use [must-alloc])
+
+(deftest json-escapes-invalid-filename-bytes-losslessly
+         (let [a (malloc-allocator)
+               raw (must-alloc [u8] a 4)
+               (mut out) (sb-new a)]
+           (set! (index raw 0) (cast u8 195))
+           (set! (index raw 1) (cast u8 169))
+           (set! (index raw 2) (cast u8 255))
+           (set! (index raw 3) (cast u8 10))
+           (push-json-string! (mut out) (slice-new raw 4))
+           (assert (= (sb-str out) "\"é\\udcff\\n\""))))
+
+(deftest json-rejects-overlong-utf8
+         (let [a (malloc-allocator)
+               raw (must-alloc [u8] a 2)]
+           (set! (index raw 0) (cast u8 192))
+           (set! (index raw 1) (cast u8 128))
+           (assert-eq (utf8-width (slice-new raw 2) 0) 0)))

@@ -10,8 +10,6 @@
 (import "thecount.registry" :use *)
 (import "thecount.util" :use *)
 
-(extern mkdir :cc c [(ptr i8) i32] (-> i32))
-
 (defn cat [(a (dyn Allocator)) (x (slice u8)) (y (slice u8))] (-> (slice u8))
   (match (str-concat a x y)
     (Some [s] s)
@@ -53,8 +51,9 @@
            (match opt
              (Some [h]
                    (let [home (os/owned-string-slice h)]
-                     (mkdir (str->cstr a (cat a home "/.config")) 493)
-                     (mkdir (str->cstr a (cat a home "/.config/thecount")) 493)
+                     (make-dir (str->cstr a (cat a home "/.config")) 493)
+                     (make-dir (str->cstr a (cat a home "/.config/thecount"))
+                               493)
                      0))
              (None [] 0))))
     (try (let [_
@@ -94,6 +93,8 @@
    (has-nested bool)
    (quotes (slice u8))
    (has-quotes bool)
+   (multiline-quote-chars (slice u8))
+   (has-multiline-quote-chars bool)
    (mqs (slice u8))
    (has-mqs bool)])
 
@@ -124,6 +125,9 @@
             (store! (field (mut spec) nested) (load (field p nested))))
           (when (= (load (field p has-quotes)) true)
             (store! (field (mut spec) quotes) (load (field p quotes))))
+          (when (= (load (field p has-multiline-quote-chars)) true)
+            (store! (field (mut spec) multiline-quote-chars)
+                    (load (field p multiline-quote-chars))))
           (when (= (load (field p has-mqs)) true)
             (store! (field (mut spec) multi-quotes)
                     (split-tokens a (load (field p mqs)))))
@@ -143,6 +147,7 @@
 ;;;   block /* */ (* *)     block comment start/end pairs
 ;;;   nested                block comments nest
 ;;;   quotes " '            single-char string delimiters
+;;;   multiline-quotes " '  quote characters allowed across newlines
 ;;;   multi """ '''         multiline string delimiters
 (defn load-config! [(r (ptr Registry)) (src (slice u8))] (-> i64)
   (let [a (.arena r)
@@ -191,6 +196,12 @@
                       (set-fields! pend
                                    (quotes (strip-spaces a rest))
                                    (has-quotes true))
+                      0)
+                  (= d "multiline-quotes")
+                    (do
+                      (set-fields! pend
+                                   (multiline-quote-chars (strip-spaces a rest))
+                                   (has-multiline-quote-chars true))
                       0)
                   (= d "multi")
                     (do

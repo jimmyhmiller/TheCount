@@ -1,0 +1,17 @@
+name         = "thecount"
+repository   = "https://github.com/jimmyhmiller/TheCount"
+version-flag = "--version"
+
+[run]
+args           = ["{target}"]
+json           = ["--output", "json"]
+languages      = ["--extensions", "{extensions}"]
+same-work      = ["--hidden", "--no-ignore", "--no-config"]
+same-work-note = "dotted directories entered, .gitignore disabled, and user language config disabled; extension filtering excludes exact filenames without the selected extensions"
+
+[read]
+files    = "total.files"
+lines    = "total.lines"
+code     = "total.code"
+comments = "total.comments"
+blanks   = "total.blanks"

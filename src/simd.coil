@@ -1,13 +1,13 @@
 (module thecount.simd)
 
-;; 16-byte-at-a-time byte classification, simdjson-style.
+;; Vector byte classification, simdjson-style.
 ;;
 ;; The scalar scan in count-bytes costs one byte-class table load per byte, and
 ;; that load is the whole cost of counting: on a 4.2 MB C++ corpus only 1.24% of
 ;; bytes are delimiters, so 98.8% of the work is "is this byte interesting, and
 ;; is it whitespace" — one byte at a time, as a serial dependency chain.
 ;;
-;; The answer to both questions is a BITMASK. Load 16 bytes, compare against a
+;; The answer to both questions is a BITMASK. Load a vector, compare against a
 ;; delimiter, extract one bit per lane, and the whole chunk is answered in a
 ;; couple of instructions; the scan then jumps straight to the next set bit
 ;; instead of walking to it. This is the core trick behind simdjson's structural
@@ -17,10 +17,10 @@
 ;; support, same approach as coil.simd. Two notes on the IR:
 ;;
 ;;   * the load is `align 1`: these pointers are arbitrary offsets into a file
-;;     buffer, never 16-byte aligned;
-;;   * mask extraction is `bitcast <16 x i1> to i16`. x86 has movemask for this;
-;;     arm64 has no such instruction, but LLVM knows the NEON sequence, so
-;;     writing it at the IR level gets the right code on both.
+;;     buffer, never guaranteed to be vector aligned;
+;;   * mask extraction bitcasts lane comparisons to an integer. x86 has mask
+;;     instructions for this; arm64 has no such instruction, but LLVM knows the
+;;     NEON sequence, so writing it at the IR level gets the right code on both.
 ;;
 ;; The byte operands are compile-time literals at every call site
 ;; (thecount.specialize generates them), so -O3 inlines these bodies and folds
@@ -40,8 +40,8 @@
 %r = zext i16 %m to i64
 ret i64 %r"))
 
-;;; Bit i is set iff p[i] is a space, tab or carriage return — the three bytes
-;;; count-bytes classifies as CLS-WS. One load, three compares, two ors.
+;;; Bit i is set iff p[i] is horizontal whitespace: space, tab, carriage
+;;; return, vertical tab, or form feed. Newline terminates a scanned line.
 (defn v16-ws-mask [(p (ptr u8))] (-> i64)
   (primitive/llvm-ir i64
                      [p]
@@ -49,11 +49,68 @@ ret i64 %r"))
 %c1 = icmp eq <16 x i8> %v, <i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32>
 %c2 = icmp eq <16 x i8> %v, <i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9>
 %c3 = icmp eq <16 x i8> %v, <i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13>
+%c4 = icmp eq <16 x i8> %v, <i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11>
+%c5 = icmp eq <16 x i8> %v, <i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12>
 %o1 = or <16 x i1> %c1, %c2
 %o2 = or <16 x i1> %o1, %c3
-%m = bitcast <16 x i1> %o2 to i16
+%o3 = or <16 x i1> %o2, %c4
+%o4 = or <16 x i1> %o3, %c5
+%m = bitcast <16 x i1> %o4 to i16
 %r = zext i16 %m to i64
 ret i64 %r"))
+
+(defn v32-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [p b]
+                     "%bt = trunc $t1 $1 to i8
+%s0 = insertelement <32 x i8> undef, i8 %bt, i32 0
+%sv = shufflevector <32 x i8> %s0, <32 x i8> undef, <32 x i32> zeroinitializer
+%v = load <32 x i8>, ptr $0, align 1
+%c = icmp eq <32 x i8> %v, %sv
+%m = bitcast <32 x i1> %c to i32
+%r = zext i32 %m to i64
+ret i64 %r"))
+
+(defn v32-ws-mask [(p (ptr u8))] (-> i64)
+  (| (v16-ws-mask p)
+     (<< (v16-ws-mask (index p 16)) 16)))
+
+(defn v64-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [p b]
+                     "%bt = trunc $t1 $1 to i8
+%s0 = insertelement <64 x i8> undef, i8 %bt, i32 0
+%sv = shufflevector <64 x i8> %s0, <64 x i8> undef, <64 x i32> zeroinitializer
+%v = load <64 x i8>, ptr $0, align 1
+%c = icmp eq <64 x i8> %v, %sv
+%m = bitcast <64 x i1> %c to i64
+ret i64 %m"))
+
+(defn v64-ws-mask [(p (ptr u8))] (-> i64)
+  (primitive/llvm-ir i64
+                     [p]
+                     "%v = load <64 x i8>, ptr $0, align 1
+%s0 = insertelement <64 x i8> undef, i8 32, i32 0
+%sp = shufflevector <64 x i8> %s0, <64 x i8> undef, <64 x i32> zeroinitializer
+%t0 = insertelement <64 x i8> undef, i8 9, i32 0
+%tb = shufflevector <64 x i8> %t0, <64 x i8> undef, <64 x i32> zeroinitializer
+%r0 = insertelement <64 x i8> undef, i8 13, i32 0
+%cr = shufflevector <64 x i8> %r0, <64 x i8> undef, <64 x i32> zeroinitializer
+%v0 = insertelement <64 x i8> undef, i8 11, i32 0
+%vt = shufflevector <64 x i8> %v0, <64 x i8> undef, <64 x i32> zeroinitializer
+%f0 = insertelement <64 x i8> undef, i8 12, i32 0
+%ff = shufflevector <64 x i8> %f0, <64 x i8> undef, <64 x i32> zeroinitializer
+%c1 = icmp eq <64 x i8> %v, %sp
+%c2 = icmp eq <64 x i8> %v, %tb
+%c3 = icmp eq <64 x i8> %v, %cr
+%c4 = icmp eq <64 x i8> %v, %vt
+%c5 = icmp eq <64 x i8> %v, %ff
+%o1 = or <64 x i1> %c1, %c2
+%o2 = or <64 x i1> %o1, %c3
+%o3 = or <64 x i1> %o2, %c4
+%o4 = or <64 x i1> %o3, %c5
+%m = bitcast <64 x i1> %o4 to i64
+ret i64 %m"))
 
 ;;; Index of the lowest set bit. Only called on a non-zero mask, so the
 ;;; is_zero_poison flag is safe and saves a branch.
@@ -63,3 +120,28 @@ ret i64 %r"))
                      "declare i64 @llvm.cttz.i64(i64, i1)
 %r = call i64 @llvm.cttz.i64(i64 $0, i1 true)
 ret i64 %r"))
+
+;;; Find the next physical newline without a libc call for each source line.
+(defn find-newline [(data (ptr u8)) (start i64) (len i64)] (-> i64)
+  (let [(mut p) start]
+    (block :found
+           (while (<= (+ p 64) len)
+             (let [mask (v64-eq-mask (index data p) #\newline)]
+               (when (!= mask 0)
+                 (return-from :found (+ p (ctz mask))))
+               (store! (mut p) (+ p 64))))
+           (while (<= (+ p 32) len)
+             (let [mask (v32-eq-mask (index data p) #\newline)]
+               (when (!= mask 0)
+                 (return-from :found (+ p (ctz mask))))
+               (store! (mut p) (+ p 32))))
+           (while (<= (+ p 16) len)
+             (let [mask (v16-eq-mask (index data p) #\newline)]
+               (when (!= mask 0)
+                 (return-from :found (+ p (ctz mask))))
+               (store! (mut p) (+ p 16))))
+           (while (< p len)
+             (when (= (cast i64 (load (index data p))) #\newline)
+               (return-from :found p))
+             (store! (mut p) (+ p 1)))
+           len)))

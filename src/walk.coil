@@ -16,6 +16,8 @@
 
 (extern closedir :cc c [(ptr i8)] (-> i32))
 
+(extern fstatat :cc c [i32 (ptr i8) (ptr i8) i32] (-> i32))
+
 ;;; struct dirent layout, selected at compile time for the target OS.
 ;;; darwin (64-bit inode; plain readdir IS the 64-bit variant on arm64):
 ;;;   d_ino u64 @0, d_seekoff u64 @8, d_reclen u16 @16,
@@ -30,16 +32,45 @@
 
 (const DT-REG 8)
 
+(const DT-UNKNOWN 0)
+
+(defn linux-stat-mode-offset [] (-> Code)
+  (if (primitive/code-eq (primitive/target-arch) `x86_64) `24 `16))
+
+(defn stat-mode [(raw (ptr u8))] (-> i64)
+  (os-pick (cast i64
+                 (load (cast (ptr u32)
+                             (index raw (linux-stat-mode-offset)))))
+           (cast i64 (load (cast (ptr u16) (index raw 4))))))
+
+;;; Filesystems may leave d_type unknown. Resolve only those entries without
+;;; following symlinks, preserving the walker's regular-file/directory policy.
+;;; `struct stat` differs across operating systems and Linux architectures;
+;;; reserve more than either ABI needs and read st_mode at its target offset.
+(defn resolved-dirent-type [(dfd i32) (cname (ptr i8)) (dtype i64)] (-> i64)
+  (if (!= dtype DT-UNKNOWN)
+      dtype
+      (let [(mut raw) (zeroed (array u64 32))
+            nofollow (cast i32 (os-pick 256 32))]
+        (if (< (fstatat dfd cname (cast (ptr i8) (mut raw)) nofollow) 0)
+            DT-UNKNOWN
+            (let [kind (& (stat-mode (cast (ptr u8) (mut raw))) 61440)]
+              (cond (= kind 16384) DT-DIR
+                    (= kind 32768) DT-REG
+                    :else DT-UNKNOWN))))))
+
 ;;; Name length of a dirent: the d_namlen field on darwin, strlen on linux.
 (defn dirent-name-len [(ent (ptr i8))] (-> i64)
   (os-pick (strlen (cast (ptr i8) (index ent DIRENT-NAME-OFF)))
            (cast i64 (load (cast (ptr u16) (index ent 18))))))
 
-;;; Copy s into allocator-owned storage (dirent name buffers are reused).
+;;; Copy s into allocator-owned, NUL-terminated storage (dirent name buffers
+;;; are reused). The slice excludes the terminator; openat can use its data.
 (defn copy-str [(a (dyn Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (slice-len s)
-        p (must-alloc [u8] a n)]
+        p (must-alloc [u8] a (+ n 1))]
     (mem-copy p (slice-data s) n)
+    (set! (index p n) (cast u8 0))
     (slice-new p n)))
 
 ;;; dir + "/" + name, allocator-owned. A dir of "" yields just name.

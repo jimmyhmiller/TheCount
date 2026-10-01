@@ -16,6 +16,7 @@
 (import "thecount.lang" :use *)
 (import "thecount.counter" :use *)
 (import "thecount.specialize" :use *)
+(import "thecount.util" :use [must-alloc])
 
 ;;; Index of the table row named `name`, or -1.
 (defn row-of [(name (slice u8))] (-> i64)
@@ -54,6 +55,20 @@
                  (load (field generic comments)))
       (assert-eq (load (field special code)) (load (field generic code)))
       0)))
+
+;;; Exercise hot-token positions at both sides of a 64-byte vector boundary.
+(defn spaces-then [(n i64) (suffix (slice u8))] (-> (slice u8))
+  (let [a (malloc-allocator)
+        total (+ n (slice-len suffix))
+        p (must-alloc [u8] a total)]
+    (for [k 0 n] (store! (index p k) (cast u8 #\space)))
+    (for [k 0 (slice-len suffix)]
+      (store! (index p (+ n k)) (slice-get suffix k)))
+    (slice-new p total)))
+
+(deftest c-hot-token-around-64-byte-boundary
+         (for [n 62 67]
+           (same? "C" (spaces-then n "// comment\nint x;\n"))))
 
 ;; --- C: one line comment, one block pair, two quote chars -------------------
 (deftest c-matches-interpreter
@@ -103,6 +118,10 @@
 
 (deftest rust-block-markers-in-string
          (same? "Rust" "let s = \"/* not a comment */\";\nlet t = 1;\n"))
+
+(deftest rust-character-literals-and-multiline-string
+         (same? "Rust"
+                "let c = '\"';\nlet s = \"one\n/// string data\ntwo\";\n// comment\n"))
 
 ;; --- Python: no block comments, two multiline-string delimiters -------------
 (deftest python-docstring

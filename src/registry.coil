@@ -103,6 +103,24 @@
 (defn reg-count [(r (ptr Registry))] (-> i64)
   (al-len (load (field r specs))))
 
+;;; Restrict path lookup to a comma-separated set of extensions. Rebuild the
+;;; lookup map once, before workers start, so filtering adds no per-file work.
+;;; Exact filename registrations have no extension and are excluded.
+(defn reg-restrict-extensions! [(r (ptr Registry)) (csv (slice u8))] (-> i64)
+  (let [a (.arena r)
+        old (load (field r by-ext))
+        keep (new-map a (slice u8) i64 (str-keyops))
+        pieces (str-split a csv ",")]
+    (for ext
+      (iter pieces)
+      (let [key (lower a (str-trim ext))]
+        (match (hm-get (load old) key)
+          (Some [idx] (hm-put! keep key idx))
+          (None [] 0))))
+    (set! (.by-ext r) keep)
+    (set! (.by-file r) (new-map a (slice u8) i64 (str-keyops)))
+    0))
+
 ;;; Spec index for a language name (case-insensitive), or -1.
 (defn reg-lookup-name [(r (ptr Registry)) (name (slice u8))] (-> i64)
   (match (hm-get (load (load (field r by-name))) (lower (.arena r) name))
@@ -114,16 +132,26 @@
 (defn reg-lookup-path [(r (ptr Registry)) (path (slice u8))] (-> i64)
   (let [n (slice-len path)]
     (let [base (subslice path (+ (bytes-last-index-of path (cast u8 #\/)) 1) n)]
-      (match (hm-get (load (load (field r by-file))) base)
+      (match (if (= (hm-len (load (load (field r by-file)))) 0)
+                 (None [i64])
+                 (hm-get (load (load (field r by-file))) base))
         (Some [v] v)
         (None []
               (let [bn (slice-len base)
                     dot (bytes-last-index-of base (cast u8 #\.))]
                 (if (<= dot 0)
                     -1
-                    (let [ext (subslice base (+ dot 1) bn)]
+                    (let [ext (subslice base (+ dot 1) bn)
+                          (mut upper) false]
+                      (for [k 0 (slice-len ext)]
+                        (let [b (cast i64 (slice-get ext k))]
+                          (when (and (>= b #\A) (<= b #\Z))
+                            (store! (mut upper) true)
+                            0)))
                       (match (hm-get (load (load (field r by-ext)))
-                                     (lower (.arena r) ext))
+                                     (if (= upper true)
+                                         (lower (.arena r) ext)
+                                         ext))
                         (Some [v] v)
                         (None [] -1))))))))))
 
@@ -164,6 +192,11 @@
   ;; First: the languages thecount.specialize generated a scanner for. Their
   ;; token strings live in that table, not here, so the two can never drift.
   (add-specialized! r)
+  (store! (field (reg-spec r (reg-lookup-name r "Rust")) multiline-quote-chars)
+          "\"")
+  (store! (field (reg-spec r (reg-lookup-name r "Rust"))
+                 single-scalar-char-literals)
+          true)
   (add-builtin! r "Objective-C" "m" "//" "/* */" false "\"'" "")
   (add-builtin! r "Objective-C++" "mm" "//" "/* */" false "\"'" "")
   (add-builtin! r "Scala" "scala sc" "//" "/* */" true "\"'" "\"\"\"")
@@ -189,11 +222,14 @@
   (add-builtin! r "R" "r" "#" "" false "\"'" "")
   (add-builtin! r "Julia" "jl" "#" "#= =#" true "\"'" "\"\"\"")
   (let [sh (add-builtin! r "Shell" "sh bash zsh ksh" "#" "" false "\"'" "")]
+    (store! (field (reg-spec r sh) multiline-quote-chars) "\"'")
+    (store! (field (reg-spec r sh) shell-heredocs) true)
+    (rebuild-classes! (.arena r) (reg-spec r sh))
     (reg-add-files! r sh ".bashrc .zshrc .profile"))
   (add-builtin! r "Fish" "fish" "#" "" false "\"'" "")
   (add-builtin! r "PowerShell" "ps1 psm1 psd1" "#" "<# #>" false "\"'" "")
   (add-builtin! r "Batch" "bat cmd" "rem REM ::" "" false "" "")
-  (add-builtin! r "Assembly" "s asm" "; #" "/* */" false "\"" "")
+  (add-builtin! r "Assembly" "s asm" "; # //" "/* */" false "\"" "")
   (add-builtin! r "Vim Script" "vim" "\"" "" false "'" "")
   (add-builtin! r "Tcl" "tcl" "#" "" false "\"" "")
   (add-builtin! r "Fortran" "f f90 f95 f03" "!" "" false "\"'" "")
