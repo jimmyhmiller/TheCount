@@ -202,3 +202,10 @@
            (assert-eq (slice-len (al-get (load w) 0)) 0)
            (assert (= (al-get (load w) 1) "src"))
            (assert-eq (dir-base-len w "anything/here") 0)))
+
+(deftest fortran-2008-extension
+         (let [r (fresh)
+               idx (reg-lookup-path r "fixture.f08")]
+           (assert (>= idx 0))
+           (assert (= (.name (reg-spec r idx)) "Fortran"))
+           (assert-eq idx (reg-lookup-path r "fixture.F08"))))

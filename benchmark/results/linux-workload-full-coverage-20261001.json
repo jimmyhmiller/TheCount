@@ -1,0 +1,442 @@
+{
+  "binary_sha256": {
+    "thecount": "63a34a4af91c63670bd96434336e419fe78230693375275a6eaf4bec97f20b24",
+    "baseline": "6af98abcd3e428414df31ba50e7dd03f696331cac1624367970e9a9a922b9069"
+  },
+  "roots": [
+    {
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "counters": {
+        "thecount": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-updated",
+            "/home/jimmyhmiller/llvm22/src",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 137111,
+            "lines": 35825880,
+            "code": 16357938,
+            "comments": 15809497,
+            "blanks": 3658445
+          },
+          "sha256": "7d3c3f805b6c9c50c3a26b4d7351833a5bd1477d8d437a90a1c023e8b7f9a659",
+          "files_by_language": {
+            "Plain Text": 1733,
+            "Python": 2639,
+            "Dockerfile": 12,
+            "Shell": 111,
+            "YAML": 1427,
+            "Markdown": 283,
+            "CMake": 2491,
+            "reStructuredText": 2071,
+            "C Header": 14865,
+            "C++": 34772,
+            "Assembly": 12436,
+            "C": 12718,
+            "INI": 796,
+            "LLVM IR": 41539,
+            "HTML": 86,
+            "CSS": 27,
+            "Mustache": 6,
+            "JavaScript": 25,
+            "Protocol Buffers": 5,
+            "JSON": 145,
+            "Batch": 71,
+            "C++ Header": 105,
+            "OpenCL": 808,
+            "Objective-C": 1909,
+            "Objective-C++": 571,
+            "XML": 133,
+            "HLSL": 461,
+            "CUDA": 280,
+            "Fortran": 3141,
+            "Makefile": 959,
+            "Perl": 8,
+            "Expect": 13,
+            "AWK": 2,
+            "Starlark": 97,
+            "Julia": 1,
+            "CSV": 58,
+            "Diff": 2,
+            "Rust": 1,
+            "Lua": 6,
+            "D": 1,
+            "TypeScript": 21,
+            "OCaml": 38,
+            "Swift": 2,
+            "TOML": 4,
+            "Vim Script": 16,
+            "Scheme": 3,
+            "LaTeX": 4,
+            "BibTeX": 1,
+            "m4": 1,
+            "Smalltalk": 189,
+            "Scala": 18
+          }
+        },
+        "baseline": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+            "/home/jimmyhmiller/llvm22/src",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 137110,
+            "lines": 35825875,
+            "code": 16357936,
+            "comments": 15809495,
+            "blanks": 3658444
+          },
+          "sha256": "a9bf08a57cc0246115051f1d8404ca25998cac1bd0451d2e1907570e8a3f78b2",
+          "files_by_language": {
+            "Plain Text": 1733,
+            "Python": 2639,
+            "Dockerfile": 12,
+            "Shell": 111,
+            "YAML": 1427,
+            "Markdown": 283,
+            "CMake": 2491,
+            "reStructuredText": 2071,
+            "C Header": 14865,
+            "C++": 34772,
+            "Assembly": 12436,
+            "C": 12718,
+            "INI": 796,
+            "LLVM IR": 41539,
+            "HTML": 86,
+            "CSS": 27,
+            "Mustache": 6,
+            "JavaScript": 25,
+            "Protocol Buffers": 5,
+            "JSON": 145,
+            "Batch": 71,
+            "C++ Header": 105,
+            "OpenCL": 808,
+            "Objective-C": 1909,
+            "Objective-C++": 571,
+            "XML": 133,
+            "HLSL": 461,
+            "CUDA": 280,
+            "Fortran": 3140,
+            "Makefile": 959,
+            "Perl": 8,
+            "Expect": 13,
+            "AWK": 2,
+            "Starlark": 97,
+            "Julia": 1,
+            "CSV": 58,
+            "Diff": 2,
+            "Rust": 1,
+            "Lua": 6,
+            "D": 1,
+            "TypeScript": 21,
+            "OCaml": 38,
+            "Swift": 2,
+            "TOML": 4,
+            "Vim Script": 16,
+            "Scheme": 3,
+            "LaTeX": 4,
+            "BibTeX": 1,
+            "m4": 1,
+            "Smalltalk": 189,
+            "Scala": 18
+          }
+        }
+      },
+      "only_current": [
+        "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08"
+      ],
+      "only_baseline": [],
+      "differing_rows": []
+    },
+    {
+      "path": "/home/jimmyhmiller/scriptc-corpus",
+      "counters": {
+        "thecount": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-updated",
+            "/home/jimmyhmiller/scriptc-corpus",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 14068,
+            "lines": 4520220,
+            "code": 3602371,
+            "comments": 704874,
+            "blanks": 212975
+          },
+          "sha256": "c9ba68e8677d7b86d147431c762997d854ccdee821fd183bd48cf2c4e0ef0d67",
+          "files_by_language": {
+            "YAML": 45,
+            "Markdown": 635,
+            "JavaScript": 4917,
+            "JSON": 1708,
+            "TSX": 24,
+            "CSS": 1,
+            "TypeScript": 5079,
+            "C": 1280,
+            "Plain Text": 143,
+            "Batch": 1,
+            "HTML": 1,
+            "Standard ML": 1,
+            "Go": 7,
+            "Python": 7,
+            "JSX": 2,
+            "Ruby": 3,
+            "PHP": 1,
+            "Makefile": 1,
+            "C Header": 210,
+            "CMake": 2
+          }
+        },
+        "baseline": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+            "/home/jimmyhmiller/scriptc-corpus",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 14068,
+            "lines": 4520220,
+            "code": 3602371,
+            "comments": 704874,
+            "blanks": 212975
+          },
+          "sha256": "c9ba68e8677d7b86d147431c762997d854ccdee821fd183bd48cf2c4e0ef0d67",
+          "files_by_language": {
+            "YAML": 45,
+            "Markdown": 635,
+            "JavaScript": 4917,
+            "JSON": 1708,
+            "TSX": 24,
+            "CSS": 1,
+            "TypeScript": 5079,
+            "C": 1280,
+            "Plain Text": 143,
+            "Batch": 1,
+            "HTML": 1,
+            "Standard ML": 1,
+            "Go": 7,
+            "Python": 7,
+            "JSX": 2,
+            "Ruby": 3,
+            "PHP": 1,
+            "Makefile": 1,
+            "C Header": 210,
+            "CMake": 2
+          }
+        }
+      },
+      "only_current": [],
+      "only_baseline": [],
+      "differing_rows": []
+    },
+    {
+      "path": "/home/jimmyhmiller/apps/perfbot",
+      "counters": {
+        "thecount": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-updated",
+            "/home/jimmyhmiller/apps/perfbot",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 3227,
+            "lines": 32342,
+            "code": 28176,
+            "comments": 0,
+            "blanks": 4166
+          },
+          "sha256": "d123e1f11b165f041119e61c1068a32e607ffee7070c25a081003101be531221",
+          "files_by_language": {
+            "Markdown": 8,
+            "JSON": 1669,
+            "D": 1526,
+            "Rust": 24
+          }
+        },
+        "baseline": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+            "/home/jimmyhmiller/apps/perfbot",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 3227,
+            "lines": 32342,
+            "code": 28176,
+            "comments": 0,
+            "blanks": 4166
+          },
+          "sha256": "d123e1f11b165f041119e61c1068a32e607ffee7070c25a081003101be531221",
+          "files_by_language": {
+            "Markdown": 8,
+            "JSON": 1669,
+            "D": 1526,
+            "Rust": 24
+          }
+        }
+      },
+      "only_current": [],
+      "only_baseline": [],
+      "differing_rows": []
+    },
+    {
+      "path": "/home/jimmyhmiller/Documents/Code/projects",
+      "counters": {
+        "thecount": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-updated",
+            "/home/jimmyhmiller/Documents/Code/projects",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 4905,
+            "lines": 2958093,
+            "code": 2762357,
+            "comments": 109628,
+            "blanks": 86108
+          },
+          "sha256": "86a62231cf0764ab46a341b2d99df47574fedbb3f592114181cac71bf2399baa",
+          "files_by_language": {
+            "TOML": 144,
+            "Markdown": 462,
+            "Coil": 1292,
+            "Plain Text": 72,
+            "Go": 11,
+            "Shell": 79,
+            "Rust": 685,
+            "Dockerfile": 2,
+            "Python": 79,
+            "JSON": 714,
+            "YAML": 11,
+            "TypeScript": 194,
+            "JavaScript": 144,
+            "C": 70,
+            "C Header": 28,
+            "Assembly": 3,
+            "TSX": 30,
+            "CSS": 8,
+            "HTML": 22,
+            "XML": 28,
+            "Svelte": 7,
+            "Swift": 90,
+            "Objective-C": 1,
+            "Scheme": 54,
+            "Zig": 8,
+            "WebAssembly": 2,
+            "Perl": 92,
+            "INI": 1,
+            "WGSL": 11,
+            "PHP": 1,
+            "D": 490,
+            "Java": 4,
+            "Agda": 14,
+            "Racket": 4,
+            "Clojure": 3,
+            "Common Lisp": 44,
+            "C++": 1
+          }
+        },
+        "baseline": {
+          "command": [
+            "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+            "/home/jimmyhmiller/Documents/Code/projects",
+            "--hidden",
+            "--no-ignore",
+            "--no-config",
+            "--files",
+            "--output",
+            "json"
+          ],
+          "total": {
+            "files": 4905,
+            "lines": 2958093,
+            "code": 2762357,
+            "comments": 109628,
+            "blanks": 86108
+          },
+          "sha256": "86a62231cf0764ab46a341b2d99df47574fedbb3f592114181cac71bf2399baa",
+          "files_by_language": {
+            "TOML": 144,
+            "Markdown": 462,
+            "Coil": 1292,
+            "Plain Text": 72,
+            "Go": 11,
+            "Shell": 79,
+            "Rust": 685,
+            "Dockerfile": 2,
+            "Python": 79,
+            "JSON": 714,
+            "YAML": 11,
+            "TypeScript": 194,
+            "JavaScript": 144,
+            "C": 70,
+            "C Header": 28,
+            "Assembly": 3,
+            "TSX": 30,
+            "CSS": 8,
+            "HTML": 22,
+            "XML": 28,
+            "Svelte": 7,
+            "Swift": 90,
+            "Objective-C": 1,
+            "Scheme": 54,
+            "Zig": 8,
+            "WebAssembly": 2,
+            "Perl": 92,
+            "INI": 1,
+            "WGSL": 11,
+            "PHP": 1,
+            "D": 490,
+            "Java": 4,
+            "Agda": 14,
+            "Racket": 4,
+            "Clojure": 3,
+            "Common Lisp": 44,
+            "C++": 1
+          }
+        }
+      },
+      "only_current": [],
+      "only_baseline": [],
+      "differing_rows": []
+    }
+  ]
+}

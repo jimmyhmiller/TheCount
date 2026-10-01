@@ -98,6 +98,8 @@ def audit(cmds, directory):
         "diagnostics": diagnostics,
         "current_vs_baseline": {
             "same_paths": rows["thecount"].keys() == rows["baseline"].keys(),
+            "only_current": sorted(rows["thecount"].keys() - rows["baseline"].keys()),
+            "only_baseline": sorted(rows["baseline"].keys() - rows["thecount"].keys()),
             "differing_rows": len(baseline_diffs), "examples": baseline_diffs[:5]},
         "selected_bytes": sum(selected_sizes),
         "median_file_bytes": statistics.median(selected_sizes) if selected_sizes else 0,

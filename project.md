@@ -197,8 +197,8 @@ carry-less-multiply prefix XOR, replacing `backslashes-before` and the ST-STRING
 arm outright. Nested block comments still need a real counter, so those
 languages keep a sequential pass over the candidate positions. The architecture (informed by scc/ripgrep/dumac writeups):
 
-- **Combined workers.** Four workers on macOS and up to 32 online CPUs on
-  Linux by default
+- **Combined workers.** Four workers on macOS; Linux starts up to eight and grows
+  toward its online CPU count (maximum 32) as selected file batches accumulate
   (`THECOUNT_READERS` overrides) walk directories, read files, and count them
   into private aggregates. This removes the per-file transfer between reader
   and counter pools. A condition variable wakes workers when a directory or
@@ -361,66 +361,100 @@ x86-64 object. Older LLVM parsers on the Linux host could not accept attributes
 emitted by LLVM 22.1.8, so optimization and object emission used that version on
 the Mac, followed by Linux linking.
 
-### Varied real Linux workloads
+### Varied real Linux workloads — optimized follow-up
 
-A 2026-10-01 survey measured 16 workloads on the same host and optimized
-binaries: 30 rotating warm-cache trials per binary, three warmups, and per-file
-audits before timing. TheCount won **12 of 14 comparisons** with Mezura, and
-**7 of 14** showed at least 1.5× throughput by their sample means. The advantage
-varies substantially with the workload.
+The final 2026-10-01 build wins **all 14 supported Mezura comparisons** on
+`computer.jimmyhmiller.com`. JSON and LLVM IR, unsupported by this Mezura
+installation, also beat the older TheCount (`thecount-v17-znver5`). These are
+60 rotating warm-cache trials per binary, three warmups, and per-file audits
+before timing, using the same LLVM 22.1.8 / Zen 5 build pipeline.
 
-| workload | counted files | TheCount | Mezura | throughput ratio |
+| workload | files | TheCount | reference | throughput ratio |
 |---|---:|---:|---:|---:|
-| Linux control | 63,738 | 44.60 ms | 67.43 ms | 1.51× |
-| LLVM mixed code | 77,565 | 43.39 ms | 64.23 ms | 1.48× |
-| LLVM C++ / headers | 49,727 | 34.86 ms | 46.75 ms | 1.34× |
-| LLVM Python only | 2,631 | 25.64 ms | 19.00 ms | 0.74× |
-| Test262 JavaScript | 53,711 | 12.05 ms | 35.76 ms | 2.97× |
-| JS/TS dependency corpus | 9,763 | 11.13 ms | 17.91 ms | 1.61× |
-| C corpus | 1,490 | 7.52 ms | 8.83 ms | 1.17× |
-| Personal Rust projects | 685 | 3.24 ms | 6.24 ms | 1.92× |
-| Personal mixed projects | 1,310 | 32.77 ms | 41.58 ms | 1.27× |
-| Abseil C++ | 1,171 | 1.80 ms | 5.72 ms | 3.18× |
-| Heapster Rust | 67 | 1.09 ms | 4.75 ms | 4.34× |
-| Perfbot JSON metadata | 1,669 | 5.45 ms | unsupported | — |
-| Single 16.1 MB C file | 1 | 5.48 ms | 7.00 ms | 1.28× |
-| Single 9.7 MB JS bundle | 1 | 5.26 ms | 10.32 ms | 1.96× |
-| LLVM Fortran only | 3,060 | 25.69 ms | 19.38 ms | 0.75× |
-| LLVM IR | 41,539 | 45.10 ms | unsupported | — |
+| linux-control | 63,738 | 44.57 ms | 67.61 ms (Mezura) | 1.52× |
+| llvm-mixed | 77,565 | 39.56 ms | 63.81 ms (Mezura) | 1.61× |
+| llvm-cpp | 49,727 | 25.35 ms | 47.59 ms (Mezura) | 1.88× |
+| llvm-python | 2,631 | 16.48 ms | 18.39 ms (Mezura) | 1.12× |
+| test262-javascript | 53,711 | 12.08 ms | 35.39 ms (Mezura) | 2.93× |
+| scriptc-web | 9,763 | 10.68 ms | 18.39 ms (Mezura) | 1.72× |
+| scriptc-c | 1,490 | 7.46 ms | 8.61 ms (Mezura) | 1.15× |
+| projects-rust | 685 | 3.08 ms | 6.22 ms (Mezura) | 2.02× |
+| projects-mixed | 1,310 | 32.20 ms | 43.38 ms (Mezura) | 1.35× |
+| abseil-cpp | 1,171 | 1.77 ms | 5.70 ms (Mezura) | 3.23× |
+| heapster-rust | 67 | 0.69 ms | 4.75 ms (Mezura) | 6.87× |
+| perfbot-json | 1,669 | 2.76 ms | 4.39 ms (older TheCount) | 1.59× |
+| single-large-c | 1 | 4.46 ms | 7.07 ms (Mezura) | 1.58× |
+| single-large-js | 1 | 4.11 ms | 10.38 ms (Mezura) | 2.52× |
+| llvm-fortran | 3,061 | 17.16 ms | 18.70 ms (Mezura) | 1.09× |
+| llvm-ir | 41,539 | 41.46 ms | 52.05 ms (older TheCount) | 1.26× |
 
-Ratios below 1× mean Mezura wins. This Mezura installation has no JSON or LLVM
-IR definition, so those rows compare only against the previous TheCount binary.
-Large-directory Python/Fortran filtering is the clear weakness: enumeration
-accounted for about 94% and 93%, respectively, of accumulated walk/I/O/scan time
-in separate instrumented samples. Test262 is the largest relative improvement
-over our previous build: 32.40 → 12.05 ms, with identical per-file output.
+Ratios measure throughput, reference elapsed time divided by TheCount elapsed
+time. The original 50% throughput target is met on the Linux control by its
+sample mean (1.52×); ten of fourteen supported comparisons reach 1.5×. Every
+supported comparison's paired bootstrap 95% interval exceeds 1×, including
+Python and Fortran. This does not establish a 50% advantage on every workload
+or predict cold-cache performance.
 
-A JSON build-tree regression was confirmed independently over 90 paired
-trials: **6.71 ± 0.95 ms current versus 5.31 ± 1.36 ms previous**, or 26.4% longer
-elapsed time. Its paired bootstrap 95% elapsed-time-ratio interval is
-1.192–1.340. The cause has not been isolated.
+The previous Python and Fortran losses came from sparse language selection
+through a large tree. The walker now resolves language selection before name
+allocation, path allocation, and file-batch scheduling, then carries that
+immutable registry index to the reader. This also avoids a second lookup.
 
-The comparison uses explicit code extension sets common to both installations.
-Mezura expands extension aliases into entire languages, so extra extensions
-were excluded explicitly. Six comparisons also exclude asymmetric fixtures
-symmetrically: 32 unique paths across the survey, comprising 14 NUL-containing
-UTF-8 fixtures, 17 invalid-UTF-8 fixtures, and one unsupported TheCount `.f08`
-file. Full-selection audits and exact exclusions are retained. All 14 timed
-comparisons have identical paths and physical line counts. Code/comment/blank
-policy differences remain; **current and previous TheCount output agrees on all
-16 workloads**, including every bucket.
+The JSON regression was caused by excess worker overhead in its small-file,
+sparse tree. A controlled worker sweep of the same early-filter binary measured
+JSON at 4.69 ms with 32 workers versus 2.44 ms with eight, whereas Linux and
+Test262 benefited from larger pools. Linux therefore begins with up to eight
+workers and grows toward the online-CPU limit (maximum 32) when selected file
+batches accumulate. Explicit `THECOUNT_READERS` preserves fixed sizing, and
+plain-file roots start no unnecessary threads. There are no language-specific
+or benchmark-path-specific scheduling rules.
 
-New findings are recorded in the project bug pad: JSON performance regression,
-missing Fortran `.f08` registration, and source-fixture coverage gaps.
+Coverage remains broader than this Mezura installation. Full default-language
+audits of LLVM, the web corpus, Perfbot, and personal projects preserve all
+previous paths and every code/comment/blank bucket across 159,310 previously
+counted files. The missing `.f08` registration adds one Fortran file, for 159,311
+files now. These full audits contain 4,236 JSON files, 1,388 Markdown files, and
+41,539 LLVM IR files. Invalid UTF-8 source bytes remain supported.
 
-[Raw survey](benchmark/results/linux-workload-survey-20261001.json),
-[JSON confirmation](benchmark/results/linux-workload-json-confirm-20261001.json),
-[phase samples](benchmark/results/linux-workload-phases-20261001.json), and
-[coverage details](benchmark/results/linux-workload-coverage-20261001.json)
-include commands, hashes, audits, and every timing. Reproduce with
-`benchmark/measure_workloads.py` and `benchmark/workloads_linux_20261001.json`.
-The per-file audit JSON stays on the host under
-`/tmp/thecount-20260930-bench/workload-survey-matched-audits/`.
+Timing comparisons still restrict both counters to identical paths and physical
+line counts. Mezura's language aliases include related extensions, so its extras
+are explicitly excluded. Asymmetric fixtures are excluded symmetrically only
+by the benchmark harness: 31 unique paths (14 NUL-containing fixtures skipped
+by TheCount's documented binary heuristic and 17 invalid-UTF-8 fixtures omitted
+by Mezura). The `.f08` exclusion is no longer needed. Parser classification
+policy differences remain separate from workload parity; no count rules were
+changed to copy Mezura's output.
+
+Validation: `coil verify` and all **101 tests** pass. The Linux CLI suite
+(`python3 tests/check_walk.py <binary>`) checks sparse and batched directories,
+ignores, hidden paths, exclusions, custom registrations, uppercase `.F08`,
+invalid UTF-8, direct files, empty trees, and repeated agreement between adaptive
+and 1/8/32-worker runs. The same suite passes under ThreadSanitizer on macOS:
+
+    coil build --release --sanitize=thread -o /tmp/thecount-walk-tsan
+    python3 tests/check_walk.py /tmp/thecount-walk-tsan
+
+That check found two shared-library initialization races. TheCount now snapshots
+its string-map capability table before worker startup and resolves the lazy errno
+accessor on the coordinator before concurrent I/O. Both underlying Coil issues
+are recorded in its `coil-bugs` pad; no sanitizer suppression was used.
+
+[Final timings, audits, hashes, commands, and samples](benchmark/results/linux-workload-updated-20261001.json),
+[full coverage audit](benchmark/results/linux-workload-full-coverage-20261001.json),
+[early filtering experiment](benchmark/results/linux-workload-early-filter-20261001.json),
+[worker sweep](benchmark/results/linux-workload-worker-sweep-20261001.json), and
+[first adaptive sweep](benchmark/results/linux-workload-adaptive-20261001.json)
+retain the evidence. The experimental sweeps predate the initialization fixes.
+Reproduce with `benchmark/measure_workloads.py` and
+`benchmark/workloads_linux_20261001.json`; use `benchmark/audit_coverage.py`
+for coverage without selection filters or fairness exclusions. Raw final per-file
+JSON remains on the host under
+`/tmp/thecount-20260930-bench/updated-safe-survey-audits/` and
+`/tmp/thecount-20260930-bench/updated-safe-coverage-audits/`.
+
+The tested Linux binary is
+`/tmp/thecount-20260930-bench/thecount-updated`. The original survey and JSON
+regression confirmation remain under `benchmark/results/` as historical evidence.
 
 ## Known divergences from scc
 

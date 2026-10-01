@@ -145,16 +145,22 @@
 
 ;;; A walk item: a directory to walk (files empty), or a batch of
 ;;; already-filtered file basenames within dir `path` (files non-empty).
+(defstruct FileItem [(name (slice u8)) (spec-index i64)])
+
 (defstruct DirItem
   [(path (slice u8))
    (chain (ptr CtxNode))
-   (files (slice (slice u8)))])
+   (files (slice FileItem))])
 
 (const FILE-BATCH 16)
 
 (defstruct Pool
   [(mutex (array u8 64))  ; guards queue (pthread_mutex_t is <= 64 bytes)
    (qcond (array u8 64))
+   (scond (array u8 64))  ; wakes the thread-creation coordinator
+   (max-workers i64)
+   (wanted-workers i64)  ; guarded by mutex
+   (file-tasks i64)  ; queued or active batches, guarded by mutex
    (queue (ptr (ArrayList DirItem)))
    (in-flight (ptr i64))  ; guarded by mutex
    (r (ptr Registry))
@@ -171,6 +177,7 @@
   [(pool (ptr Pool)) (agg (ptr Agg)) (active-ns i64) (items i64)])
 
 (defn new-agg [(a (dyn Allocator))
+               (keyops (ptr KeyOps))
                (n-specs i64)
                (want-files bool)
                (want-dirs bool)
@@ -180,7 +187,7 @@
         counts-per (must-alloc [Counts] a n-specs)
         file-rows (new-list a Row)
         dir-rows (new-list a Row)
-        dir-idx (new-map a (slice u8) i64 (str-keyops))]
+        dir-idx (new-map a (slice u8) i64 keyops)]
     (mem-zero files-per n-specs)
     (mem-zero counts-per n-specs)
     (box! a
@@ -395,6 +402,14 @@
     (let [inflight (load (field pool in-flight))]
       (store! inflight (+ (load inflight) 1)))
     (al-push! (load (field pool queue)) item)
+    (when (> (slice-len (.files item)) 0)
+      (set! (.file-tasks pool) (+ (.file-tasks pool) 1))
+      (let [demand (* (.file-tasks pool) 2)
+            target
+              (if (< demand (.max-workers pool)) demand (.max-workers pool))]
+        (when (> target (.wanted-workers pool))
+          (set! (.wanted-workers pool) target)
+          (pthread_cond_signal (cast (ptr i8) (field pool scond))))))
     (pthread_cond_signal (cast (ptr i8) (field pool qcond)))
     (pthread_mutex_unlock m)
     0))
@@ -408,9 +423,10 @@
                     (rb (ptr ReadBuf))
                     (dfd i32)
                     (dir (slice u8))
-                    (name (slice u8))] (-> i64)
+                    (file FileItem)] (-> i64)
   (let [r (load (field pool r))
-        idx (reg-lookup-path r name)]
+        name (.name file)
+        idx (.spec-index file)]
     (if (= idx -1)
         0
         (let [t0 (if (.timing pool) (now-ns) 0)
@@ -449,7 +465,7 @@
                        (dir (slice u8))
                        (hidden bool)
                        (use-ignore bool)
-                       (names (mut (ArrayList (slice u8))))
+                       (names (mut (ArrayList FileItem)))
                        (name (slice u8))
                        (is-dir bool)] (-> i64)
   (let [namlen (slice-len name)]
@@ -474,12 +490,27 @@
                                                  (path full)
                                                  (chain chain)))))
                 :else
-                  (let [full (join-path a dir name)]
-                    (if (or (excluded? (load (field pool excludes)) full)
-                            (and (= use-ignore true)
-                                 (entry-ignored? chain full name false)))
-                        0
-                        (do (al-push! (mut names) (copy-str a name)) 0))))))))
+                  (let [idx (reg-lookup-path (load (field pool r)) name)]
+                    (when (>= idx 0)
+                      ;; Language selection precedes allocation and scheduling.
+                      ;; The registry is immutable during the walk; carry its
+                      ;; index so readers do not repeat the lookup.
+                      (let [needs-path
+                              (or use-ignore
+                                  (> (al-len (load (load (field pool excludes))))
+                                     0))
+                            full (if needs-path (join-path a dir name) "")]
+                        (when (and (= (excluded? (load (field pool excludes))
+                                                 full)
+                                      false)
+                                   (or (= use-ignore false)
+                                       (= (entry-ignored? chain full name false)
+                                          false)))
+                          (al-push! (mut names)
+                                    (FileItem :name (copy-str a name)
+                                      :spec-index idx))
+                          0)))
+                    0))))))
 
 ;;; readdir enumerator (linux, and the portable fallback).
 (defn enum-readdir! [(a (dyn Allocator))
@@ -489,7 +520,7 @@
                      (dir (slice u8))
                      (hidden bool)
                      (use-ignore bool)
-                     (names (mut (ArrayList (slice u8))))] (-> i64)
+                     (names (mut (ArrayList FileItem)))] (-> i64)
   (let [(mut going) true
         dfd (dirfd dp)]
     (while (= going true)
@@ -557,7 +588,7 @@
                   (dir (slice u8))
                   (hidden bool)
                   (use-ignore bool)
-                  (names (mut (ArrayList (slice u8))))
+                  (names (mut (ArrayList FileItem)))
                   (buf (ptr u8))] (-> i64)
   (os-pick
            ;; linux: never called (readdir path is selected at compile time), and a
@@ -652,7 +683,7 @@
         handle (cast i64 (opendir cdir))]
     (if (= handle 0)
         0
-        (let [(mut names) (al-new [(slice u8)] a)]
+        (let [(mut names) (al-new [FileItem] a)]
           (when (= use-ignore true)
             (let [ctx (load-ignore-ctx a dir)
                   rules (load (field ctx rules))
@@ -686,7 +717,7 @@
                 (let [(mut o) 0]
                   (while (< o nfl)
                     (let [hi (if (< (+ o FILE-BATCH) nfl) (+ o FILE-BATCH) nfl)
-                          chunk (must-alloc [(slice u8)] a (- hi o))]
+                          chunk (must-alloc [FileItem] a (- hi o))]
                       (mem-copy chunk
                                 (index (slice-data (al-slice (load names))) o)
                                 (- hi o))
@@ -758,8 +789,11 @@
                   0))
               (pthread_mutex_lock m)
               (store! inflight (- (load inflight) 1))
+              (when (> (slice-len (.files item)) 0)
+                (set! (.file-tasks pool) (- (.file-tasks pool) 1)))
               (when (= (load inflight) 0)
                 (pthread_cond_broadcast qc)
+                (pthread_cond_signal (cast (ptr i8) (field pool scond)))
                 0)
               (pthread_mutex_unlock m)
               0)
@@ -855,7 +889,15 @@
              (if (> online 0) (if (< online 32) online 32) 8))
            4))
 
+;;; Whether the user explicitly configured the worker count.
+(defn env-present? [(a (dyn Allocator)) (name (slice u8))] (-> bool)
+  (try (let [opt (try-or! (os/env-get a name) false)]
+         (match opt (Some [_] true) (None [] false)))))
+
 ;;; Count everything under roots. Returns the merged aggregate.
+;;; An explicit worker setting keeps its fixed-size semantics. Otherwise Linux
+;;; begins with a modest traversal pool and grows when selected file batches
+;;; build up, rather than paying for 32 readers in a sparse directory walk.
 (defn count-all [(a (dyn Allocator))
                  (r (ptr Registry))
                  (roots (ptr (ArrayList (slice u8))))
@@ -867,7 +909,11 @@
                  (excludes (ptr (ArrayList (slice u8))))] (-> (ptr Agg))
   (let [n-specs (reg-count r)
         wroots (walk-roots-of a roots)
-        agg (new-agg a n-specs want-files want-dirs depth wroots)
+        ;; str-keyops initializes shared static storage on every call. Snapshot
+        ;; its capability table before starting workers; creating later worker
+        ;; maps must not rewrite the table used by the registry's readers.
+        keyops (box! a KeyOps (load (str-keyops)))
+        agg (new-agg a keyops n-specs want-files want-dirs depth wroots)
         pool (box! a Pool (zeroed Pool))
         queue (new-list a DirItem)
         inflight (box! a i64 0)
@@ -878,6 +924,7 @@
         worker-ns (box! a i64 0)]
     (pthread_mutex_init (cast (ptr i8) (field pool mutex)) (cast (ptr i8) 0))
     (pthread_cond_init (cast (ptr i8) (field pool qcond)) (cast (ptr i8) 0))
+    (pthread_cond_init (cast (ptr i8) (field pool scond)) (cast (ptr i8) 0))
     (set-fields! pool
                  (queue queue)
                  (in-flight inflight)
@@ -890,6 +937,9 @@
                  (scan-ns scan-ns)
                  (walk-ns walk-ns)
                  (worker-ns worker-ns))
+    ;; Resolve the stdlib's lazy libc errno accessor before concurrent I/O.
+    ;; Its published function pointer is immutable after this first call.
+    (os/os-errno)
     ;; seed: directories enter the queue, plain-file roots count directly
     (let [nr (al-len (load roots))]
       (for [i 0 nr]
@@ -910,14 +960,46 @@
         (when (< nreaders 1) (store! (mut nreaders) 1))
         (when (> nreaders 32) (store! (mut nreaders) 32))
         (let [rthreads (must-alloc [Thread] a nreaders)
-              rargs (must-alloc [WorkerArg] a nreaders)]
-          (for [t 0 (load nreaders)]
-            (let [wagg (new-agg a n-specs want-files want-dirs depth wroots)
-                  wa (index rargs t)]
-              (set-fields! wa (pool pool) (agg wagg))
-              (thread-spawn (index rthreads t)
-                            (fnptr-of reader-worker)
-                            (cast (ptr i8) wa))))
+              rargs (must-alloc [WorkerArg] a nreaders)
+              adaptive
+                (os-pick (= (env-present? a "THECOUNT_READERS") false) false)
+              initial (if (and adaptive (> nreaders 8)) 8 (load nreaders))
+              (mut started) 0
+              m (cast (ptr i8) (field pool mutex))
+              sc (cast (ptr i8) (field pool scond))]
+          (set! (.max-workers pool) nreaders)
+          (set! (.wanted-workers pool) initial)
+          ;; Plain-file roots have already been counted, so an empty directory
+          ;; queue needs no threads. For directories, wait only for completion
+          ;; or an increase in measured ready-file demand.
+          (let [(mut scheduling) (> (load inflight) 0)]
+            (while scheduling
+              (pthread_mutex_lock m)
+              (while (and (> (load inflight) 0)
+                          (>= started (.wanted-workers pool)))
+                (pthread_cond_wait sc m))
+              (let [target
+                      (if (> (load inflight) 0)
+                          (.wanted-workers pool)
+                          (load started))]
+                (when (= (load inflight) 0) (set! scheduling false))
+                (pthread_mutex_unlock m)
+                (while (< started target)
+                  (let [wagg
+                          (new-agg a
+                                   keyops
+                                   n-specs
+                                   want-files
+                                   want-dirs
+                                   depth
+                                   wroots)
+                        wa (index rargs started)]
+                    (set-fields! wa (pool pool) (agg wagg))
+                    (thread-spawn (index rthreads started)
+                                  (fnptr-of reader-worker)
+                                  (cast (ptr i8) wa)))
+                  (set! started (+ started 1))))))
+          (set! nreaders started)
           (for [t 0 (load nreaders)]
             (thread-join (index rthreads t))
             (agg-merge! a agg (load (field (index rargs t) agg))))
@@ -953,5 +1035,6 @@
                 (Err [_] 0)))
             0)
           (pthread_cond_destroy (cast (ptr i8) (field pool qcond)))
+          (pthread_cond_destroy (cast (ptr i8) (field pool scond)))
           (pthread_mutex_destroy (cast (ptr i8) (field pool mutex)))
           agg)))))

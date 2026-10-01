@@ -232,7 +232,7 @@
   (add-builtin! r "Assembly" "s asm" "; # //" "/* */" false "\"" "")
   (add-builtin! r "Vim Script" "vim" "\"" "" false "'" "")
   (add-builtin! r "Tcl" "tcl" "#" "" false "\"" "")
-  (add-builtin! r "Fortran" "f f90 f95 f03" "!" "" false "\"'" "")
+  (add-builtin! r "Fortran" "f f90 f95 f03 f08" "!" "" false "\"'" "")
   (add-builtin! r "Ada" "adb ads" "--" "" false "\"" "")
   (add-builtin! r "Pascal" "pas pp" "//" "{ } (* *)" false "'" "")
   (add-builtin! r "Solidity" "sol" "//" "/* */" false "\"'" "")
