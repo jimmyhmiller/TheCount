@@ -1,0 +1,225 @@
+[
+  {
+    "name": "linux-control",
+    "path": "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+    "extensions": "asm,c,h,pl,pm,py,rs,s,sh",
+    "description": "Pinned Linux kernel; previous target workload",
+    "mezura_exclude_extensions": [
+      "bash",
+      "bats",
+      "gyp",
+      "gypi",
+      "h++",
+      "hh",
+      "hpp",
+      "hxx",
+      "inl",
+      "ipp",
+      "ksh",
+      "nasm",
+      "pyi",
+      "pyw",
+      "tcc",
+      "tpp",
+      "zsh"
+    ]
+  },
+  {
+    "name": "llvm-mixed",
+    "path": "/home/jimmyhmiller/llvm22/src",
+    "extensions": "c,cc,cpp,cxx,h,hpp,hxx,js,py,rs,s,sh",
+    "description": "Large mixed compiler tree, including source and tests; code extensions common to both installations",
+    "mezura_exclude_extensions": [
+      "asm",
+      "bash",
+      "bats",
+      "c++",
+      "cjs",
+      "cppm",
+      "gyp",
+      "gypi",
+      "h++",
+      "hh",
+      "inl",
+      "ino",
+      "ipp",
+      "ixx",
+      "ksh",
+      "mjs",
+      "nasm",
+      "pyi",
+      "pyw",
+      "tcc",
+      "tpp",
+      "zsh"
+    ]
+  },
+  {
+    "name": "llvm-cpp",
+    "path": "/home/jimmyhmiller/llvm22/src",
+    "extensions": "cc,cpp,cxx,h,hpp,hxx",
+    "description": "C++ and headers across LLVM",
+    "mezura_exclude_extensions": [
+      "c++",
+      "cppm",
+      "h++",
+      "hh",
+      "inl",
+      "ino",
+      "ipp",
+      "ixx",
+      "tcc",
+      "tpp"
+    ]
+  },
+  {
+    "name": "llvm-python",
+    "path": "/home/jimmyhmiller/llvm22/src",
+    "extensions": "py",
+    "description": "Python scripts amid a large unrelated file tree",
+    "mezura_exclude_extensions": [
+      "gyp",
+      "gypi",
+      "pyi",
+      "pyw"
+    ]
+  },
+  {
+    "name": "test262-javascript",
+    "path": "/home/jimmyhmiller/test262",
+    "extensions": "js,mjs",
+    "description": "Many small JavaScript conformance tests",
+    "mezura_exclude_extensions": [
+      "cjs"
+    ]
+  },
+  {
+    "name": "scriptc-web",
+    "path": "/home/jimmyhmiller/scriptc-corpus",
+    "extensions": "cjs,js,jsx,mjs,ts,tsx",
+    "description": "JS/TS corpus including dependencies and generated bundles; code extensions common to both installations",
+    "mezura_exclude_extensions": [
+      "cts",
+      "mts"
+    ]
+  },
+  {
+    "name": "scriptc-c",
+    "path": "/home/jimmyhmiller/scriptc-corpus",
+    "extensions": "c,h",
+    "description": "C sources and generated output",
+    "mezura_exclude_extensions": [
+      "h++",
+      "hh",
+      "hpp",
+      "hxx",
+      "inl",
+      "ipp",
+      "tcc",
+      "tpp"
+    ]
+  },
+  {
+    "name": "projects-rust",
+    "path": "/home/jimmyhmiller/Documents/Code/projects",
+    "extensions": "rs",
+    "description": "Rust across personal projects and generated build trees",
+    "mezura_exclude_extensions": []
+  },
+  {
+    "name": "projects-mixed",
+    "path": "/home/jimmyhmiller/Documents/Code/projects",
+    "extensions": "c,cc,cjs,cpp,h,js,jsx,mjs,py,rs,sh,ts,tsx",
+    "description": "Mixed personal projects including metadata and build outputs; code extensions common to both installations",
+    "mezura_exclude_extensions": [
+      "bash",
+      "bats",
+      "c++",
+      "cppm",
+      "cts",
+      "cxx",
+      "gyp",
+      "gypi",
+      "h++",
+      "hh",
+      "hpp",
+      "hxx",
+      "inl",
+      "ino",
+      "ipp",
+      "ixx",
+      "ksh",
+      "mts",
+      "pyi",
+      "pyw",
+      "tcc",
+      "tpp",
+      "zsh"
+    ]
+  },
+  {
+    "name": "abseil-cpp",
+    "path": "/home/jimmyhmiller/absl",
+    "extensions": "cc,cpp,h",
+    "description": "Medium C++ library with build output nearby",
+    "mezura_exclude_extensions": [
+      "c++",
+      "cppm",
+      "cxx",
+      "h++",
+      "hh",
+      "hpp",
+      "hxx",
+      "inl",
+      "ino",
+      "ipp",
+      "ixx",
+      "tcc",
+      "tpp"
+    ]
+  },
+  {
+    "name": "heapster-rust",
+    "path": "/home/jimmyhmiller/apps/heapster",
+    "extensions": "rs",
+    "description": "Small Rust project",
+    "mezura_exclude_extensions": []
+  },
+  {
+    "name": "perfbot-json",
+    "path": "/home/jimmyhmiller/apps/perfbot",
+    "extensions": "json",
+    "description": "Many small JSON files in a large build tree",
+    "mezura_supported": false
+  },
+  {
+    "name": "single-large-c",
+    "path": "/home/jimmyhmiller/llvm22/src/compiler-rt/test/builtins/Unit/udivmodti4_test.c",
+    "extensions": "c",
+    "description": "Single 16 MB generated C test",
+    "mezura_exclude_extensions": []
+  },
+  {
+    "name": "single-large-js",
+    "path": "/home/jimmyhmiller/scriptc-corpus/node_modules/.pnpm/@ts-morph+common@0.11.1/node_modules/@ts-morph/common/dist/typescript.js",
+    "extensions": "js",
+    "description": "Single 9.7 MB bundled TypeScript implementation",
+    "mezura_exclude_extensions": [
+      "cjs",
+      "mjs"
+    ]
+  },
+  {
+    "name": "llvm-fortran",
+    "path": "/home/jimmyhmiller/llvm22/src",
+    "extensions": "f90,f95,f03,f08",
+    "description": "Fortran source and compiler tests"
+  },
+  {
+    "name": "llvm-ir",
+    "path": "/home/jimmyhmiller/llvm22/src",
+    "extensions": "ll",
+    "description": "Many LLVM IR tests; Mezura installation has no LLVM IR language",
+    "mezura_supported": false
+  }
+]

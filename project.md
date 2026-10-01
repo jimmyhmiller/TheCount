@@ -361,6 +361,67 @@ x86-64 object. Older LLVM parsers on the Linux host could not accept attributes
 emitted by LLVM 22.1.8, so optimization and object emission used that version on
 the Mac, followed by Linux linking.
 
+### Varied real Linux workloads
+
+A 2026-10-01 survey measured 16 workloads on the same host and optimized
+binaries: 30 rotating warm-cache trials per binary, three warmups, and per-file
+audits before timing. TheCount won **12 of 14 comparisons** with Mezura, and
+**7 of 14** showed at least 1.5× throughput by their sample means. The advantage
+varies substantially with the workload.
+
+| workload | counted files | TheCount | Mezura | throughput ratio |
+|---|---:|---:|---:|---:|
+| Linux control | 63,738 | 44.60 ms | 67.43 ms | 1.51× |
+| LLVM mixed code | 77,565 | 43.39 ms | 64.23 ms | 1.48× |
+| LLVM C++ / headers | 49,727 | 34.86 ms | 46.75 ms | 1.34× |
+| LLVM Python only | 2,631 | 25.64 ms | 19.00 ms | 0.74× |
+| Test262 JavaScript | 53,711 | 12.05 ms | 35.76 ms | 2.97× |
+| JS/TS dependency corpus | 9,763 | 11.13 ms | 17.91 ms | 1.61× |
+| C corpus | 1,490 | 7.52 ms | 8.83 ms | 1.17× |
+| Personal Rust projects | 685 | 3.24 ms | 6.24 ms | 1.92× |
+| Personal mixed projects | 1,310 | 32.77 ms | 41.58 ms | 1.27× |
+| Abseil C++ | 1,171 | 1.80 ms | 5.72 ms | 3.18× |
+| Heapster Rust | 67 | 1.09 ms | 4.75 ms | 4.34× |
+| Perfbot JSON metadata | 1,669 | 5.45 ms | unsupported | — |
+| Single 16.1 MB C file | 1 | 5.48 ms | 7.00 ms | 1.28× |
+| Single 9.7 MB JS bundle | 1 | 5.26 ms | 10.32 ms | 1.96× |
+| LLVM Fortran only | 3,060 | 25.69 ms | 19.38 ms | 0.75× |
+| LLVM IR | 41,539 | 45.10 ms | unsupported | — |
+
+Ratios below 1× mean Mezura wins. This Mezura installation has no JSON or LLVM
+IR definition, so those rows compare only against the previous TheCount binary.
+Large-directory Python/Fortran filtering is the clear weakness: enumeration
+accounted for about 94% and 93%, respectively, of accumulated walk/I/O/scan time
+in separate instrumented samples. Test262 is the largest relative improvement
+over our previous build: 32.40 → 12.05 ms, with identical per-file output.
+
+A JSON build-tree regression was confirmed independently over 90 paired
+trials: **6.71 ± 0.95 ms current versus 5.31 ± 1.36 ms previous**, or 26.4% longer
+elapsed time. Its paired bootstrap 95% elapsed-time-ratio interval is
+1.192–1.340. The cause has not been isolated.
+
+The comparison uses explicit code extension sets common to both installations.
+Mezura expands extension aliases into entire languages, so extra extensions
+were excluded explicitly. Six comparisons also exclude asymmetric fixtures
+symmetrically: 32 unique paths across the survey, comprising 14 NUL-containing
+UTF-8 fixtures, 17 invalid-UTF-8 fixtures, and one unsupported TheCount `.f08`
+file. Full-selection audits and exact exclusions are retained. All 14 timed
+comparisons have identical paths and physical line counts. Code/comment/blank
+policy differences remain; **current and previous TheCount output agrees on all
+16 workloads**, including every bucket.
+
+New findings are recorded in the project bug pad: JSON performance regression,
+missing Fortran `.f08` registration, and source-fixture coverage gaps.
+
+[Raw survey](benchmark/results/linux-workload-survey-20261001.json),
+[JSON confirmation](benchmark/results/linux-workload-json-confirm-20261001.json),
+[phase samples](benchmark/results/linux-workload-phases-20261001.json), and
+[coverage details](benchmark/results/linux-workload-coverage-20261001.json)
+include commands, hashes, audits, and every timing. Reproduce with
+`benchmark/measure_workloads.py` and `benchmark/workloads_linux_20261001.json`.
+The per-file audit JSON stays on the host under
+`/tmp/thecount-20260930-bench/workload-survey-matched-audits/`.
+
 ## Known divergences from scc
 
 - Python docstrings: counted as comments consistently (scc miscounts

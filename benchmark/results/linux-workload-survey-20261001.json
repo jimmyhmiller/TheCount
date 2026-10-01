@@ -1,0 +1,5985 @@
+{
+  "started_utc": "2026-10-01T15:51:06.782626+00:00",
+  "machine": {
+    "hostname": "metaphysics",
+    "arch": "x86_64",
+    "kernel": "7.0.0-34-generic",
+    "loadavg_start": [
+      0.103515625,
+      0.80908203125,
+      0.61181640625
+    ],
+    "loadavg_end": [
+      11.875,
+      4.03564453125,
+      1.724609375
+    ]
+  },
+  "binary_sha256": {
+    "thecount": "f55c5e72d12d3f01da2d2f57a7b2d87e32df40c0ec857583db097d3f770624b4",
+    "mezura": "6250ee810676c8700f8456f0662fe4f56b5c568c6505d87defcb44600c873449",
+    "baseline": "6af98abcd3e428414df31ba50e7dd03f696331cac1624367970e9a9a922b9069"
+  },
+  "settings": {
+    "warmup_each": 3,
+    "trials_each": 30,
+    "order": "rotating",
+    "cache": "warm",
+    "readers": "default"
+  },
+  "workloads": [
+    {
+      "name": "linux-control",
+      "path": "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+      "extensions": "asm,c,h,pl,pm,py,rs,s,sh",
+      "description": "Pinned Linux kernel; previous target workload",
+      "mezura_exclude_extensions": [
+        "bash",
+        "bats",
+        "gyp",
+        "gypi",
+        "h++",
+        "hh",
+        "hpp",
+        "hxx",
+        "inl",
+        "ipp",
+        "ksh",
+        "nasm",
+        "pyi",
+        "pyw",
+        "tcc",
+        "tpp",
+        "zsh"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+          "--extensions",
+          "asm,c,h,pl,pm,py,rs,s,sh",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+          "--languages",
+          "asm,c,h,pl,pm,py,rs,s,sh",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.bash,*.bats,*.gyp,*.gypi,*.h++,*.hh,*.hpp,*.hxx,*.inl,*.ipp,*.ksh,*.nasm,*.pyi,*.pyw,*.tcc,*.tpp,*.zsh"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/.local/share/linebench/corpora/linux",
+          "--extensions",
+          "asm,c,h,pl,pm,py,rs,s,sh",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27089697,
+            "comments": 4451233,
+            "blanks": 4477871
+          },
+          "mezura": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27094267,
+            "comments": 4447588,
+            "blanks": 4476946,
+            "bytes": 1369515380,
+            "classes": {
+              "words_in_code": 24060538,
+              "string_content": 243717,
+              "comment_words_beside_code": 9865,
+              "words_in_comment": 3280725,
+              "punctuation_in_code": 2778479,
+              "punctuation_in_comment": 1160204,
+              "blank": 4476946,
+              "blank_in_comment": 6659,
+              "blank_in_string": 1668
+            }
+          },
+          "baseline": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27089697,
+            "comments": 4451233,
+            "blanks": 4477871
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 213,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 160,
+              ".sh": 45,
+              ".pl": 8
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 213,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 160,
+              ".sh": 45,
+              ".pl": 8
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "ccfbb93f27bdbd58417f897a1c65624bac878bd7eaf7bc8305701c573441a3eb",
+          "mezura": "154d0844b1cbf0534483a5e2b499377c30e19e12cfc0817ea70c11e0586d265c",
+          "baseline": "ccfbb93f27bdbd58417f897a1c65624bac878bd7eaf7bc8305701c573441a3eb"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1369515380,
+        "median_file_bytes": 5413.5
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27089697,
+            "comments": 4451233,
+            "blanks": 4477871
+          },
+          "mezura": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27094267,
+            "comments": 4447588,
+            "blanks": 4476946,
+            "bytes": 1369515380,
+            "classes": {
+              "words_in_code": 24060538,
+              "string_content": 243717,
+              "comment_words_beside_code": 9865,
+              "words_in_comment": 3280725,
+              "punctuation_in_code": 2778479,
+              "punctuation_in_comment": 1160204,
+              "blank": 4476946,
+              "blank_in_comment": 6659,
+              "blank_in_string": 1668
+            }
+          },
+          "baseline": {
+            "files": 63738,
+            "lines": 36018801,
+            "code": 27089697,
+            "comments": 4451233,
+            "blanks": 4477871
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 213,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 160,
+              ".sh": 45,
+              ".pl": 8
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 213,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 160,
+              ".sh": 45,
+              ".pl": 8
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "ccfbb93f27bdbd58417f897a1c65624bac878bd7eaf7bc8305701c573441a3eb",
+          "mezura": "154d0844b1cbf0534483a5e2b499377c30e19e12cfc0817ea70c11e0586d265c",
+          "baseline": "ccfbb93f27bdbd58417f897a1c65624bac878bd7eaf7bc8305701c573441a3eb"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1369515380,
+        "median_file_bytes": 5413.5
+      },
+      "samples_s": {
+        "thecount": [
+          0.045857461,
+          0.044679561,
+          0.044966209,
+          0.043169627,
+          0.043662302,
+          0.040994003,
+          0.043476232,
+          0.04606469,
+          0.041083732,
+          0.04346963,
+          0.042085852,
+          0.04316051,
+          0.045513115,
+          0.045204616,
+          0.046778059,
+          0.043009616,
+          0.05020947,
+          0.04303838,
+          0.045926602,
+          0.0440661,
+          0.04587294,
+          0.046488125,
+          0.050320017,
+          0.044729234,
+          0.045855048,
+          0.04034279,
+          0.043413335,
+          0.045844107,
+          0.044115562,
+          0.044490175
+        ],
+        "mezura": [
+          0.072897514,
+          0.065890682,
+          0.065397958,
+          0.064307621,
+          0.062093486,
+          0.068483159,
+          0.069900949,
+          0.07285812,
+          0.066106137,
+          0.075859133,
+          0.064564163,
+          0.063494065,
+          0.06558591,
+          0.067884655,
+          0.062050485,
+          0.06659239,
+          0.072389331,
+          0.069193492,
+          0.06811623,
+          0.062717337,
+          0.073075268,
+          0.072721273,
+          0.068792299,
+          0.063289731,
+          0.069211205,
+          0.067423539,
+          0.065139542,
+          0.063669744,
+          0.066819095,
+          0.066385532
+        ],
+        "baseline": [
+          0.056205885,
+          0.056272249,
+          0.056511578,
+          0.056088014,
+          0.061732878,
+          0.055347284,
+          0.057273389,
+          0.055845519,
+          0.055645262,
+          0.053773269,
+          0.052425921,
+          0.056830367,
+          0.049944382,
+          0.055045677,
+          0.054029009,
+          0.054885317,
+          0.056146413,
+          0.054880187,
+          0.057592778,
+          0.054283126,
+          0.057608006,
+          0.057650907,
+          0.059088736,
+          0.054922216,
+          0.053782556,
+          0.059010559,
+          0.053881813,
+          0.054475447,
+          0.060067413,
+          0.054751515
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.044596236666666664,
+          "median_s": 0.044584868,
+          "stddev_s": 0.0022616558167804055,
+          "min_s": 0.04034279,
+          "max_s": 0.050320017
+        },
+        "mezura": {
+          "mean_s": 0.06743033483333333,
+          "median_s": 0.0667057425,
+          "stddev_s": 0.0036874753503400937,
+          "min_s": 0.062050485,
+          "max_s": 0.075859133
+        },
+        "baseline": {
+          "mean_s": 0.055866589066666666,
+          "median_s": 0.055745390500000006,
+          "stddev_s": 0.0023320316471386045,
+          "min_s": 0.049944382,
+          "max_s": 0.061732878
+        }
+      },
+      "speedup_over_mezura": 1.5120184991693244,
+      "speedup_over_baseline": 1.252719808719286,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.4790307833788783,
+          "upper": 1.5457228540386163
+        },
+        "baseline": {
+          "lower": 1.2251246281614148,
+          "upper": 1.2805232960342652
+        }
+      }
+    },
+    {
+      "name": "llvm-mixed",
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "extensions": "c,cc,cpp,cxx,h,hpp,hxx,js,py,rs,s,sh",
+      "description": "Large mixed compiler tree, including source and tests; code extensions common to both installations",
+      "mezura_exclude_extensions": [
+        "asm",
+        "bash",
+        "bats",
+        "c++",
+        "cjs",
+        "cppm",
+        "gyp",
+        "gypi",
+        "h++",
+        "hh",
+        "inl",
+        "ino",
+        "ipp",
+        "ixx",
+        "ksh",
+        "mjs",
+        "nasm",
+        "pyi",
+        "pyw",
+        "tcc",
+        "tpp",
+        "zsh"
+      ],
+      "exclude_paths": [
+        "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+        "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c",
+        "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js",
+        "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js",
+        "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s",
+        "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s",
+        "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py",
+        "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "c,cc,cpp,cxx,h,hpp,hxx,js,py,rs,s,sh",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/llvm22/src",
+          "--languages",
+          "c,cc,cpp,cxx,h,hpp,hxx,js,py,rs,s,sh",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.asm,*.bash,*.bats,*.c++,*.cjs,*.cppm,*.gyp,*.gypi,*.h++,*.hh,*.inl,*.ino,*.ipp,*.ixx,*.ksh,*.mjs,*.nasm,*.pyi,*.pyw,*.tcc,*.tpp,*.zsh,/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c,/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c,/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp,/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c,/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c,/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c,/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c,/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js,/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js,/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s,/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s,/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py,/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c,/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c,/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "c,cc,cpp,cxx,h,hpp,hxx,js,py,rs,s,sh",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 77565,
+            "lines": 18610531,
+            "code": 10416922,
+            "comments": 5749657,
+            "blanks": 2443952
+          },
+          "mezura": {
+            "files": 77565,
+            "lines": 18610531,
+            "code": 10442097,
+            "comments": 5727250,
+            "blanks": 2441184,
+            "bytes": 839446855,
+            "classes": {
+              "words_in_code": 8947461,
+              "string_content": 270036,
+              "comment_words_beside_code": 37003,
+              "words_in_comment": 5236722,
+              "punctuation_in_code": 1182248,
+              "punctuation_in_comment": 488511,
+              "blank": 2441184,
+              "blank_in_comment": 2017,
+              "blank_in_string": 5349
+            }
+          },
+          "baseline": {
+            "files": 77565,
+            "lines": 18610531,
+            "code": 10416922,
+            "comments": 5749657,
+            "blanks": 2443952
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 2119,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 1650,
+              ".cpp": 361,
+              ".h": 2,
+              ".c": 98,
+              ".sh": 7,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 2119,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 1650,
+              ".cpp": 361,
+              ".h": 2,
+              ".c": 98,
+              ".sh": 7,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "0c3c6cc6b43a34d63de07bb8c0154ae6b215d8aa466ec1e73eb53f245dc03c58",
+          "mezura": "4a5ced20d4c8f4ec79cd8c416b539862263139d5cd1b1536549b1a8c0b534c34",
+          "baseline": "0c3c6cc6b43a34d63de07bb8c0154ae6b215d8aa466ec1e73eb53f245dc03c58"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 839446855,
+        "median_file_bytes": 1972
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 77581,
+            "lines": 18612349,
+            "code": 10418054,
+            "comments": 5750109,
+            "blanks": 2444186
+          },
+          "mezura": {
+            "files": 77569,
+            "lines": 18610606,
+            "code": 10442123,
+            "comments": 5727284,
+            "blanks": 2441199,
+            "bytes": 839449988,
+            "classes": {
+              "words_in_code": 8947484,
+              "string_content": 270036,
+              "comment_words_beside_code": 37003,
+              "words_in_comment": 5236755,
+              "punctuation_in_code": 1182251,
+              "punctuation_in_comment": 488512,
+              "blank": 2441199,
+              "blank_in_comment": 2017,
+              "blank_in_string": 5349
+            }
+          },
+          "baseline": {
+            "files": 77581,
+            "lines": 18612349,
+            "code": 10418054,
+            "comments": 5750109,
+            "blanks": 2444186
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 16,
+            "only_mezura": 4,
+            "line_differences": 0,
+            "classification_differences": 2119,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c",
+              "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js",
+              "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js",
+              "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s",
+              "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s",
+              "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py",
+              "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+            ],
+            "classification_extensions": {
+              ".py": 1650,
+              ".cpp": 361,
+              ".h": 2,
+              ".c": 98,
+              ".sh": 7,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+              ],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 16,
+            "only_mezura": 4,
+            "line_differences": 0,
+            "classification_differences": 2119,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/comment-invalid-utf8.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/string-literal-encoding.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/utf8-invalid.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/unprintable.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/wrong-encoding2.c",
+              "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build-py/libscanbuild/resources/sorttable.js",
+              "/home/jimmyhmiller/llvm22/src/clang/tools/scan-build/share/scan-build/sorttable.js",
+              "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-comments.s",
+              "/home/jimmyhmiller/llvm22/src/llvm/test/MC/AsmParser/Inputs/non-english-characters-section-name.s",
+              "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py",
+              "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+            ],
+            "classification_extensions": {
+              ".py": 1650,
+              ".cpp": 361,
+              ".h": 2,
+              ".c": 98,
+              ".sh": 7,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n2927.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/C/C23/n3017.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/CodeGen/string-literal-unicode-conversion.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/char-literal-encoding-error.c"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/newline-nul.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Lexer/null-character-in-literal.c",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+              ],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "3824f072255923d5425187d8c8814f9ae7b5fe29e72663707d2a4666df93fde8",
+          "mezura": "b1c029484f05c19c3fe92e5cf92970540ac747e46eda92023064bad590ee57da",
+          "baseline": "3824f072255923d5425187d8c8814f9ae7b5fe29e72663707d2a4666df93fde8"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "16 files could not be parsed, so they are in no figure below.\n\nRun with '--show-faulty-files' for the paths and the reasons.\n\n",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 839509400,
+        "median_file_bytes": 1972
+      },
+      "samples_s": {
+        "thecount": [
+          0.044029501,
+          0.043021459,
+          0.043035535,
+          0.041776842,
+          0.042057248,
+          0.042047491,
+          0.043272399,
+          0.044084223,
+          0.043343242,
+          0.044396169,
+          0.042933473,
+          0.045332356,
+          0.044372765,
+          0.042138361,
+          0.043125444,
+          0.044567881,
+          0.044113799,
+          0.042960925,
+          0.045269769,
+          0.042237127,
+          0.042117782,
+          0.043667983,
+          0.04326699,
+          0.042640063,
+          0.042578146,
+          0.042945305,
+          0.04450351,
+          0.042954493,
+          0.044091998,
+          0.044916185
+        ],
+        "mezura": [
+          0.061361201,
+          0.063035103,
+          0.064811217,
+          0.061623404,
+          0.066921718,
+          0.063784349,
+          0.062279715,
+          0.063028691,
+          0.064196924,
+          0.065101802,
+          0.065587183,
+          0.060676356,
+          0.063593301,
+          0.061905433,
+          0.062259146,
+          0.06165308,
+          0.065876967,
+          0.067558273,
+          0.077127975,
+          0.063477524,
+          0.063270385,
+          0.06587324,
+          0.062435217,
+          0.063834122,
+          0.063478125,
+          0.062806434,
+          0.071691521,
+          0.061458424,
+          0.063064499,
+          0.063170056
+        ],
+        "baseline": [
+          0.065080512,
+          0.064904652,
+          0.064603226,
+          0.06509514,
+          0.06495154,
+          0.065036119,
+          0.063320629,
+          0.06349154,
+          0.064488931,
+          0.061970815,
+          0.064025722,
+          0.064726117,
+          0.063604702,
+          0.065620976,
+          0.073072282,
+          0.066257682,
+          0.065488808,
+          0.069210103,
+          0.065595639,
+          0.06338493,
+          0.064415874,
+          0.06308165,
+          0.063287828,
+          0.065357261,
+          0.064511384,
+          0.068665421,
+          0.063040994,
+          0.065254598,
+          0.065509738,
+          0.065651724
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.043393282133333336,
+          "median_s": 0.043196216999999995,
+          "stddev_s": 0.0010048970980422694,
+          "min_s": 0.041776842,
+          "max_s": 0.045332356
+        },
+        "mezura": {
+          "mean_s": 0.0642313795,
+          "median_s": 0.0633739545,
+          "stddev_s": 0.003307194031270688,
+          "min_s": 0.060676356,
+          "max_s": 0.077127975
+        },
+        "baseline": {
+          "mean_s": 0.0650902179,
+          "median_s": 0.06492809599999999,
+          "stddev_s": 0.0021241091710728073,
+          "min_s": 0.061970815,
+          "max_s": 0.073072282
+        }
+      },
+      "speedup_over_mezura": 1.4802148245582814,
+      "speedup_over_baseline": 1.5000067913738142,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.4545171034905366,
+          "upper": 1.507332628144129
+        },
+        "baseline": {
+          "lower": 1.4793871132997043,
+          "upper": 1.523168527877514
+        }
+      }
+    },
+    {
+      "name": "llvm-cpp",
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "extensions": "cc,cpp,cxx,h,hpp,hxx",
+      "description": "C++ and headers across LLVM",
+      "mezura_exclude_extensions": [
+        "c++",
+        "cppm",
+        "h++",
+        "hh",
+        "inl",
+        "ino",
+        "ipp",
+        "ixx",
+        "tcc",
+        "tpp"
+      ],
+      "exclude_paths": [
+        "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+        "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+        "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "cc,cpp,cxx,h,hpp,hxx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/llvm22/src",
+          "--languages",
+          "cc,cpp,cxx,h,hpp,hxx",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.c++,*.cppm,*.h++,*.hh,*.inl,*.ino,*.ipp,*.ixx,*.tcc,*.tpp,/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp,/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp,/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "cc,cpp,cxx,h,hpp,hxx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 49727,
+            "lines": 12115578,
+            "code": 7984150,
+            "comments": 2658409,
+            "blanks": 1473019
+          },
+          "mezura": {
+            "files": 49727,
+            "lines": 12115578,
+            "code": 7987058,
+            "comments": 2658240,
+            "blanks": 1470280,
+            "bytes": 484521301,
+            "classes": {
+              "words_in_code": 6813583,
+              "string_content": 217473,
+              "comment_words_beside_code": 36132,
+              "words_in_comment": 2373036,
+              "punctuation_in_code": 917130,
+              "punctuation_in_comment": 283741,
+              "blank": 1470280,
+              "blank_in_comment": 1463,
+              "blank_in_string": 2740
+            }
+          },
+          "baseline": {
+            "files": 49727,
+            "lines": 12115578,
+            "code": 7984150,
+            "comments": 2658409,
+            "blanks": 1473019
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 364,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cpp": 361,
+              ".h": 2,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 364,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cpp": 361,
+              ".h": 2,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "b7b8c92b1a6812feb8579eb29b2302d5a8eb36ddcc2432b070f266c5f908be73",
+          "mezura": "161917628f93f1fbedbaac605f43e0bc34c1277fc68d953dc1371654673b2ee3",
+          "baseline": "b7b8c92b1a6812feb8579eb29b2302d5a8eb36ddcc2432b070f266c5f908be73"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 484521301,
+        "median_file_bytes": 2058
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 49728,
+            "lines": 12115825,
+            "code": 7984300,
+            "comments": 2658473,
+            "blanks": 1473052
+          },
+          "mezura": {
+            "files": 49729,
+            "lines": 12115628,
+            "code": 7987074,
+            "comments": 2658264,
+            "blanks": 1470290,
+            "bytes": 484523178,
+            "classes": {
+              "words_in_code": 6813596,
+              "string_content": 217473,
+              "comment_words_beside_code": 36132,
+              "words_in_comment": 2373059,
+              "punctuation_in_code": 917133,
+              "punctuation_in_comment": 283742,
+              "blank": 1470290,
+              "blank_in_comment": 1463,
+              "blank_in_string": 2740
+            }
+          },
+          "baseline": {
+            "files": 49728,
+            "lines": 12115825,
+            "code": 7984300,
+            "comments": 2658473,
+            "blanks": 1473052
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 364,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+            ],
+            "classification_extensions": {
+              ".cpp": 361,
+              ".h": 2,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+              ],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 364,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+              "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+            ],
+            "classification_extensions": {
+              ".cpp": 361,
+              ".h": 2,
+              ".hpp": 1
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/clang/test/CXX/temp/temp.spec/func.spec.cpp"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/clang-tools-extra/test/clang-tidy/checkers/misc/misleading-bidirectional.cpp",
+                "/home/jimmyhmiller/llvm22/src/clang/test/Misc/diag-null-bytes-in-line.cpp"
+              ],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "a88b67253b91b50fcef4def151c6635a81c03db872e1bdf8cfc9a803514af881",
+          "mezura": "3c851124537e4fe071b0bf91f6f665fbd6827f8a971a76cd0775582019ee654c",
+          "baseline": "a88b67253b91b50fcef4def151c6635a81c03db872e1bdf8cfc9a803514af881"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "1 file could not be parsed, so it is in no figure below.\n\nRun with '--show-faulty-files' for the paths and the reasons.\n\n",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 484530214,
+        "median_file_bytes": 2058.0
+      },
+      "samples_s": {
+        "thecount": [
+          0.036797788,
+          0.035327037,
+          0.030070731,
+          0.033974488,
+          0.03598408,
+          0.034978091,
+          0.034143355,
+          0.031244113,
+          0.037941594,
+          0.035785417,
+          0.036079709,
+          0.036162786,
+          0.035440389,
+          0.035526501,
+          0.035801046,
+          0.030638426,
+          0.035145917,
+          0.035769707,
+          0.034667509,
+          0.035357384,
+          0.038280971,
+          0.029717618,
+          0.031755773,
+          0.036076864,
+          0.03578164,
+          0.035732548,
+          0.036717155,
+          0.034306862,
+          0.035901335,
+          0.034616343
+        ],
+        "mezura": [
+          0.044410015,
+          0.047507979,
+          0.044026776,
+          0.045652567,
+          0.046308408,
+          0.048091455,
+          0.047571459,
+          0.045762263,
+          0.047437327,
+          0.049737695,
+          0.0486806,
+          0.046183704,
+          0.046765305,
+          0.049206688,
+          0.046967144,
+          0.047846916,
+          0.05182345,
+          0.044866011,
+          0.044709617,
+          0.047824284,
+          0.045457882,
+          0.04751905,
+          0.046863069,
+          0.04539833,
+          0.045862952,
+          0.04581956,
+          0.045392299,
+          0.048532202,
+          0.045236095,
+          0.045134434
+        ],
+        "baseline": [
+          0.047776313,
+          0.048670892,
+          0.048938274,
+          0.048644112,
+          0.048778846,
+          0.048710958,
+          0.046091772,
+          0.049511149,
+          0.048932894,
+          0.049618491,
+          0.049576472,
+          0.050421949,
+          0.048456851,
+          0.048214476,
+          0.048285289,
+          0.050408223,
+          0.048000043,
+          0.050943909,
+          0.04842943,
+          0.048336975,
+          0.050894526,
+          0.049274896,
+          0.047210371,
+          0.05008179,
+          0.054828169,
+          0.050757288,
+          0.050709358,
+          0.049986081,
+          0.04897895,
+          0.0500391
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.034857439233333336,
+          "median_s": 0.035483445,
+          "stddev_s": 0.0021379426061338,
+          "min_s": 0.029717618,
+          "max_s": 0.038280971
+        },
+        "mezura": {
+          "mean_s": 0.04675318453333333,
+          "median_s": 0.0465368565,
+          "stddev_s": 0.0017550818433747296,
+          "min_s": 0.044026776,
+          "max_s": 0.05182345
+        },
+        "baseline": {
+          "mean_s": 0.049316928233333335,
+          "median_s": 0.048958612,
+          "stddev_s": 0.0015462233284266338,
+          "min_s": 0.046091772,
+          "max_s": 0.054828169
+        }
+      },
+      "speedup_over_mezura": 1.3412684798894916,
+      "speedup_over_baseline": 1.4148178787090229,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.3088351826914013,
+          "upper": 1.376917805247295
+        },
+        "baseline": {
+          "lower": 1.3851298828548562,
+          "upper": 1.4492650057002956
+        }
+      }
+    },
+    {
+      "name": "llvm-python",
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "extensions": "py",
+      "description": "Python scripts amid a large unrelated file tree",
+      "mezura_exclude_extensions": [
+        "gyp",
+        "gypi",
+        "pyi",
+        "pyw"
+      ],
+      "exclude_paths": [
+        "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "py",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/llvm22/src",
+          "--languages",
+          "py",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.gyp,*.gypi,*.pyi,*.pyw,/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "py",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 2631,
+            "lines": 367377,
+            "code": 253393,
+            "comments": 60089,
+            "blanks": 53895
+          },
+          "mezura": {
+            "files": 2631,
+            "lines": 367377,
+            "code": 276497,
+            "comments": 36985,
+            "blanks": 53895,
+            "bytes": 12863175,
+            "classes": {
+              "words_in_code": 205761,
+              "string_content": 45533,
+              "comment_words_beside_code": 98,
+              "words_in_comment": 35133,
+              "punctuation_in_code": 22518,
+              "punctuation_in_comment": 1852,
+              "blank": 53895,
+              "blank_in_comment": 0,
+              "blank_in_string": 2587
+            }
+          },
+          "baseline": {
+            "files": 2631,
+            "lines": 367377,
+            "code": 253393,
+            "comments": 60089,
+            "blanks": 53895
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1650,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 1650
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1650,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 1650
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "ae9c45fe475205a8e583e04dbb4dd7415a449bcef2282bf0d671b95846ab5b35",
+          "mezura": "2d0560caf9b19d11aa2404306d88e5239b699ff92ca5f361d73025ae8b518386",
+          "baseline": "ae9c45fe475205a8e583e04dbb4dd7415a449bcef2282bf0d671b95846ab5b35"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 12863175,
+        "median_file_bytes": 2269
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 2632,
+            "lines": 367380,
+            "code": 253393,
+            "comments": 60091,
+            "blanks": 53896
+          },
+          "mezura": {
+            "files": 2631,
+            "lines": 367377,
+            "code": 276497,
+            "comments": 36985,
+            "blanks": 53895,
+            "bytes": 12863175,
+            "classes": {
+              "words_in_code": 205761,
+              "string_content": 45533,
+              "comment_words_beside_code": 98,
+              "words_in_comment": 35133,
+              "punctuation_in_code": 22518,
+              "punctuation_in_comment": 1852,
+              "blank": 53895,
+              "blank_in_comment": 0,
+              "blank_in_string": 2587
+            }
+          },
+          "baseline": {
+            "files": 2632,
+            "lines": 367380,
+            "code": 253393,
+            "comments": 60091,
+            "blanks": 53896
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1650,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+            ],
+            "classification_extensions": {
+              ".py": 1650
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+              ],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1650,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+            ],
+            "classification_extensions": {
+              ".py": 1650
+            },
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/llvm/utils/lit/tests/shtest-encoding.py"
+              ],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "b162f7c7586ad7e0724fb6593287d2bc59874f180bf69f19a574bb3d8b9403c8",
+          "mezura": "d669f1a23ba1d66d853189d3d0f4f775b993bcd9bedcc83b75d168db22e76d0b",
+          "baseline": "b162f7c7586ad7e0724fb6593287d2bc59874f180bf69f19a574bb3d8b9403c8"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "1 file could not be parsed, so it is in no figure below.\n\nRun with '--show-faulty-files' for the paths and the reasons.\n\n",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 12863247,
+        "median_file_bytes": 2266.0
+      },
+      "samples_s": {
+        "thecount": [
+          0.026504818,
+          0.025735885,
+          0.025922756,
+          0.024795139,
+          0.025934788,
+          0.025998397,
+          0.024689992,
+          0.026019888,
+          0.02620207,
+          0.025062831,
+          0.025628444,
+          0.026056276,
+          0.024636972,
+          0.025740754,
+          0.026554592,
+          0.024433831,
+          0.025976546,
+          0.025890154,
+          0.02453995,
+          0.02777407,
+          0.025795897,
+          0.024368419,
+          0.026040276,
+          0.026112281,
+          0.024988752,
+          0.025816926,
+          0.02556313,
+          0.02460379,
+          0.025927525,
+          0.02598912
+        ],
+        "mezura": [
+          0.018736558,
+          0.018382302,
+          0.018674431,
+          0.018629947,
+          0.018459457,
+          0.019926912,
+          0.020634991,
+          0.018357096,
+          0.018363718,
+          0.018518629,
+          0.018310949,
+          0.020625443,
+          0.018559645,
+          0.019701609,
+          0.01750752,
+          0.018560146,
+          0.018710399,
+          0.020956534,
+          0.018931163,
+          0.018412449,
+          0.018629497,
+          0.018468404,
+          0.020178534,
+          0.020112851,
+          0.018390678,
+          0.019750912,
+          0.01936625,
+          0.018950679,
+          0.018690451,
+          0.018548635
+        ],
+        "baseline": [
+          0.024644296,
+          0.024654716,
+          0.027439673,
+          0.025188768,
+          0.024957273,
+          0.026003928,
+          0.024955851,
+          0.024984034,
+          0.025945248,
+          0.024934791,
+          0.025201842,
+          0.02567475,
+          0.02487565,
+          0.024727382,
+          0.02566381,
+          0.024787845,
+          0.024478635,
+          0.025788463,
+          0.024745426,
+          0.024565308,
+          0.0258881,
+          0.024815257,
+          0.024675004,
+          0.025876869,
+          0.024606094,
+          0.025580954,
+          0.02603711,
+          0.024409856,
+          0.024335937,
+          0.025723292
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.025643475633333333,
+          "median_s": 0.02585354,
+          "stddev_s": 0.0007576503062257901,
+          "min_s": 0.024368419,
+          "max_s": 0.02777407
+        },
+        "mezura": {
+          "mean_s": 0.019001559633333335,
+          "median_s": 0.018652189,
+          "stddev_s": 0.0008402095892402119,
+          "min_s": 0.01750752,
+          "max_s": 0.020956534
+        },
+        "baseline": {
+          "mean_s": 0.025205538733333335,
+          "median_s": 0.024956562,
+          "stddev_s": 0.000686631255515322,
+          "min_s": 0.024335937,
+          "max_s": 0.027439673
+        }
+      },
+      "speedup_over_mezura": 0.7409900243254728,
+      "speedup_over_baseline": 0.9829220926889203,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 0.7272661484049099,
+          "upper": 0.7547004123876201
+        },
+        "baseline": {
+          "lower": 0.9705663632243732,
+          "upper": 0.9945828019922874
+        }
+      }
+    },
+    {
+      "name": "test262-javascript",
+      "path": "/home/jimmyhmiller/test262",
+      "extensions": "js,mjs",
+      "description": "Many small JavaScript conformance tests",
+      "mezura_exclude_extensions": [
+        "cjs"
+      ],
+      "exclude_paths": [
+        "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+        "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+        "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+        "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+        "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+        "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+        "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/test262",
+          "--extensions",
+          "js,mjs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/test262",
+          "--languages",
+          "js,mjs",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.cjs,/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js,/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js,/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js,/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js,/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js,/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js,/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/test262",
+          "--extensions",
+          "js,mjs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+          "--exclude",
+          "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 53711,
+            "lines": 2849613,
+            "code": 1341880,
+            "comments": 1250595,
+            "blanks": 257138
+          },
+          "mezura": {
+            "files": 53711,
+            "lines": 2849613,
+            "code": 1342364,
+            "comments": 1250480,
+            "blanks": 256769,
+            "bytes": 86460120,
+            "classes": {
+              "words_in_code": 1013402,
+              "string_content": 143056,
+              "comment_words_beside_code": 15,
+              "words_in_comment": 876205,
+              "punctuation_in_code": 185519,
+              "punctuation_in_comment": 210418,
+              "blank": 256769,
+              "blank_in_comment": 163857,
+              "blank_in_string": 372
+            }
+          },
+          "baseline": {
+            "files": 53711,
+            "lines": 2849613,
+            "code": 1341880,
+            "comments": 1250595,
+            "blanks": 257138
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 175,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 173,
+              ".mjs": 2
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 175,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 173,
+              ".mjs": 2
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "404876c20c05dd178c5cb807090a3eed2210a2039936e083f0b88add03178fcc",
+          "mezura": "feefdb834e049878f11569359c758ca3b965260a1f27d3337853554e7851d2fc",
+          "baseline": "404876c20c05dd178c5cb807090a3eed2210a2039936e083f0b88add03178fcc"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 86460120,
+        "median_file_bytes": 1077
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 53711,
+            "lines": 2849613,
+            "code": 1341880,
+            "comments": 1250595,
+            "blanks": 257138
+          },
+          "mezura": {
+            "files": 53718,
+            "lines": 2849737,
+            "code": 1342386,
+            "comments": 1250565,
+            "blanks": 256786,
+            "bytes": 86464783,
+            "classes": {
+              "words_in_code": 1013420,
+              "string_content": 143060,
+              "comment_words_beside_code": 15,
+              "words_in_comment": 876266,
+              "punctuation_in_code": 185519,
+              "punctuation_in_comment": 210436,
+              "blank": 256786,
+              "blank_in_comment": 163863,
+              "blank_in_string": 372
+            }
+          },
+          "baseline": {
+            "files": 53711,
+            "lines": 2849613,
+            "code": 1341880,
+            "comments": 1250595,
+            "blanks": 257138
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 0,
+            "only_mezura": 7,
+            "line_differences": 0,
+            "classification_differences": 175,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+            ],
+            "classification_extensions": {
+              ".js": 173,
+              ".mjs": 2
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+                "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js"
+              ],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 0,
+            "only_mezura": 7,
+            "line_differences": 0,
+            "classification_differences": 175,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+              "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-modifiers-other-code-point-non-display-1.js"
+            ],
+            "classification_extensions": {
+              ".js": 173,
+              ".mjs": 2
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/early-err-modifiers-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/built-ins/RegExp/syntax-err-arithmetic-modifiers-reverse-other-code-point-non-display-1.js",
+                "/home/jimmyhmiller/test262/test/language/expressions/template-literal/tv-null-character-escape-sequence.js",
+                "/home/jimmyhmiller/test262/test/language/literals/regexp/early-err-arithmetic-modifiers-other-code-point-non-display-1.js"
+              ],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "404876c20c05dd178c5cb807090a3eed2210a2039936e083f0b88add03178fcc",
+          "mezura": "3e4ca7211ab48d144b64b80566b398f5bbbaeced4569bffe6d4dd4e2837cb6ad",
+          "baseline": "404876c20c05dd178c5cb807090a3eed2210a2039936e083f0b88add03178fcc"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 86460120,
+        "median_file_bytes": 1077
+      },
+      "samples_s": {
+        "thecount": [
+          0.013192171,
+          0.011760203,
+          0.011649786,
+          0.012345902,
+          0.012636559,
+          0.012202073,
+          0.012422646,
+          0.012012086,
+          0.012489131,
+          0.012523286,
+          0.011893674,
+          0.012359428,
+          0.015152971,
+          0.01208326,
+          0.011760053,
+          0.01131598,
+          0.012119107,
+          0.012157799,
+          0.01222204,
+          0.011498051,
+          0.013654028,
+          0.010861637,
+          0.010252373,
+          0.011886129,
+          0.011622194,
+          0.012634624,
+          0.011517317,
+          0.012457382,
+          0.010327284,
+          0.010573946
+        ],
+        "mezura": [
+          0.041708385,
+          0.035852072,
+          0.035122372,
+          0.033752221,
+          0.035902697,
+          0.036387898,
+          0.035191833,
+          0.035146859,
+          0.035501975,
+          0.035708273,
+          0.035351182,
+          0.035385727,
+          0.03638371,
+          0.035162729,
+          0.034821708,
+          0.036784753,
+          0.03583991,
+          0.036166202,
+          0.035054005,
+          0.036236524,
+          0.035049075,
+          0.035510842,
+          0.037084606,
+          0.034946362,
+          0.035217351,
+          0.035236968,
+          0.037122817,
+          0.034372505,
+          0.035042854,
+          0.035806587
+        ],
+        "baseline": [
+          0.035220056,
+          0.031361333,
+          0.030987101,
+          0.032605318,
+          0.031351074,
+          0.032931411,
+          0.031480367,
+          0.031620389,
+          0.030991119,
+          0.033322665,
+          0.031921345,
+          0.031669712,
+          0.033978566,
+          0.031312011,
+          0.032846581,
+          0.03107715,
+          0.032656704,
+          0.032642148,
+          0.033350467,
+          0.033699332,
+          0.032146066,
+          0.033088665,
+          0.033196718,
+          0.033039843,
+          0.031325827,
+          0.033451747,
+          0.032205669,
+          0.033271439,
+          0.031781281,
+          0.031596365
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.012052770666666667,
+          "median_s": 0.012101183500000001,
+          "stddev_s": 0.0009585908515573994,
+          "min_s": 0.010252373,
+          "max_s": 0.015152971
+        },
+        "mezura": {
+          "mean_s": 0.035761700066666666,
+          "median_s": 0.035443851,
+          "stddev_s": 0.0013486059258697083,
+          "min_s": 0.033752221,
+          "max_s": 0.041708385
+        },
+        "baseline": {
+          "mean_s": 0.032404282300000004,
+          "median_s": 0.0324054935,
+          "stddev_s": 0.001042446675008372,
+          "min_s": 0.030987101,
+          "max_s": 0.035220056
+        }
+      },
+      "speedup_over_mezura": 2.967093712781725,
+      "speedup_over_baseline": 2.6885338812276416,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 2.8805155096764907,
+          "upper": 3.0564974860000778
+        },
+        "baseline": {
+          "lower": 2.614823293005393,
+          "upper": 2.7618849295111785
+        }
+      }
+    },
+    {
+      "name": "scriptc-web",
+      "path": "/home/jimmyhmiller/scriptc-corpus",
+      "extensions": "cjs,js,jsx,mjs,ts,tsx",
+      "description": "JS/TS corpus including dependencies and generated bundles; code extensions common to both installations",
+      "mezura_exclude_extensions": [
+        "cts",
+        "mts"
+      ],
+      "exclude_paths": [
+        "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+        "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--extensions",
+          "cjs,js,jsx,mjs,ts,tsx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+          "--exclude",
+          "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--languages",
+          "cjs,js,jsx,mjs,ts,tsx",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.cts,*.mts,/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs,/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--extensions",
+          "cjs,js,jsx,mjs,ts,tsx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+          "--exclude",
+          "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 9763,
+            "lines": 3069656,
+            "code": 2361564,
+            "comments": 595183,
+            "blanks": 112909
+          },
+          "mezura": {
+            "files": 9763,
+            "lines": 3069656,
+            "code": 2368675,
+            "comments": 591163,
+            "blanks": 109818,
+            "bytes": 131974444,
+            "classes": {
+              "words_in_code": 1775472,
+              "string_content": 141508,
+              "comment_words_beside_code": 205,
+              "words_in_comment": 420015,
+              "punctuation_in_code": 448400,
+              "punctuation_in_comment": 169627,
+              "blank": 109818,
+              "blank_in_comment": 1521,
+              "blank_in_string": 3090
+            }
+          },
+          "baseline": {
+            "files": 9763,
+            "lines": 3069656,
+            "code": 2361564,
+            "comments": 595183,
+            "blanks": 112909
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 140,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".tsx": 1,
+              ".js": 103,
+              ".mjs": 20,
+              ".cjs": 7,
+              ".ts": 9
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 140,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".tsx": 1,
+              ".js": 103,
+              ".mjs": 20,
+              ".cjs": 7,
+              ".ts": 9
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "64c38c02fbd6b426060f2b960ad28e407c2082bf82941fccf520030ea19709a5",
+          "mezura": "9275540b263b1cb6989ede1fb18bcaa1caa7dfc2fbeb2ac670854c17e5defbdb",
+          "baseline": "64c38c02fbd6b426060f2b960ad28e407c2082bf82941fccf520030ea19709a5"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 131974444,
+        "median_file_bytes": 1469
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 9763,
+            "lines": 3069656,
+            "code": 2361564,
+            "comments": 595183,
+            "blanks": 112909
+          },
+          "mezura": {
+            "files": 9765,
+            "lines": 3070066,
+            "code": 2368992,
+            "comments": 591235,
+            "blanks": 109839,
+            "bytes": 131990404,
+            "classes": {
+              "words_in_code": 1775671,
+              "string_content": 141586,
+              "comment_words_beside_code": 205,
+              "words_in_comment": 420083,
+              "punctuation_in_code": 448440,
+              "punctuation_in_comment": 169631,
+              "blank": 109839,
+              "blank_in_comment": 1521,
+              "blank_in_string": 3090
+            }
+          },
+          "baseline": {
+            "files": 9763,
+            "lines": 3069656,
+            "code": 2361564,
+            "comments": 595183,
+            "blanks": 112909
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 0,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 140,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+              "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+            ],
+            "classification_extensions": {
+              ".tsx": 1,
+              ".js": 103,
+              ".mjs": 20,
+              ".cjs": 7,
+              ".ts": 9
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [
+                "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+                "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+              ],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 0,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 140,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+              "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+            ],
+            "classification_extensions": {
+              ".tsx": 1,
+              ".js": 103,
+              ".mjs": 20,
+              ".cjs": 7,
+              ".ts": 9
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [
+                "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-string-cases.mjs",
+                "/home/jimmyhmiller/scriptc-corpus/packages/runtime/test/gen-tonumber-cases.mjs"
+              ],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "64c38c02fbd6b426060f2b960ad28e407c2082bf82941fccf520030ea19709a5",
+          "mezura": "23ce3a5b62eee5737205d2b62bdc377f36532936ff157651a7a1d93620d23728",
+          "baseline": "64c38c02fbd6b426060f2b960ad28e407c2082bf82941fccf520030ea19709a5"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 131974444,
+        "median_file_bytes": 1469
+      },
+      "samples_s": {
+        "thecount": [
+          0.009915351,
+          0.012668007,
+          0.010047739,
+          0.010259887,
+          0.010554491,
+          0.011368858,
+          0.010498104,
+          0.011547024,
+          0.010864282,
+          0.011289049,
+          0.010245901,
+          0.010889749,
+          0.012588909,
+          0.01043174,
+          0.01443308,
+          0.010847501,
+          0.010483436,
+          0.011723134,
+          0.01037877,
+          0.010760718,
+          0.011366675,
+          0.011406639,
+          0.011279822,
+          0.010773802,
+          0.010587192,
+          0.011057283,
+          0.011530883,
+          0.010705083,
+          0.011527507,
+          0.012007377
+        ],
+        "mezura": [
+          0.019441541,
+          0.017229579,
+          0.01785896,
+          0.016609275,
+          0.022884343,
+          0.017393647,
+          0.018763949,
+          0.01859969,
+          0.018139437,
+          0.015953113,
+          0.019489962,
+          0.017606877,
+          0.016449445,
+          0.016876466,
+          0.015766873,
+          0.017967624,
+          0.019639021,
+          0.018164604,
+          0.018787693,
+          0.016659709,
+          0.020197219,
+          0.016045757,
+          0.015716068,
+          0.016464063,
+          0.021274061,
+          0.018071509,
+          0.017863359,
+          0.015409533,
+          0.016223771,
+          0.019775267
+        ],
+        "baseline": [
+          0.010498686,
+          0.012722921,
+          0.012775358,
+          0.010562295,
+          0.012899281,
+          0.013207921,
+          0.011713035,
+          0.012882389,
+          0.012961147,
+          0.012601141,
+          0.012048253,
+          0.016432162,
+          0.014390821,
+          0.012210358,
+          0.011770833,
+          0.013452039,
+          0.012531551,
+          0.012378384,
+          0.011652961,
+          0.012471438,
+          0.013583486,
+          0.011962082,
+          0.01461946,
+          0.012842906,
+          0.012528245,
+          0.013709883,
+          0.013309591,
+          0.011792734,
+          0.011099443,
+          0.013785534
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.011134599766666666,
+          "median_s": 0.0108770155,
+          "stddev_s": 0.0009208853001924076,
+          "min_s": 0.009915351,
+          "max_s": 0.01443308
+        },
+        "mezura": {
+          "mean_s": 0.017910747166666668,
+          "median_s": 0.0178611595,
+          "stddev_s": 0.0017607351335661707,
+          "min_s": 0.015409533,
+          "max_s": 0.022884343
+        },
+        "baseline": {
+          "mean_s": 0.012713211266666666,
+          "median_s": 0.012662031,
+          "stddev_s": 0.0012030899726875402,
+          "min_s": 0.010498686,
+          "max_s": 0.016432162
+        }
+      },
+      "speedup_over_mezura": 1.6085667686310163,
+      "speedup_over_baseline": 1.141775324940358,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.5258307955660677,
+          "upper": 1.6934829137765672
+        },
+        "baseline": {
+          "lower": 1.0949392731022247,
+          "upper": 1.1868935907439802
+        }
+      }
+    },
+    {
+      "name": "scriptc-c",
+      "path": "/home/jimmyhmiller/scriptc-corpus",
+      "extensions": "c,h",
+      "description": "C sources and generated output",
+      "mezura_exclude_extensions": [
+        "h++",
+        "hh",
+        "hpp",
+        "hxx",
+        "inl",
+        "ipp",
+        "tcc",
+        "tpp"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--extensions",
+          "c,h",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--languages",
+          "c,h",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.h++,*.hh,*.hpp,*.hxx,*.inl,*.ipp,*.tcc,*.tpp"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/scriptc-corpus",
+          "--extensions",
+          "c,h",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609
+          },
+          "mezura": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609,
+            "bytes": 40924743,
+            "classes": {
+              "words_in_code": 760677,
+              "string_content": 10500,
+              "comment_words_beside_code": 890,
+              "words_in_comment": 73303,
+              "punctuation_in_code": 88231,
+              "punctuation_in_comment": 19349,
+              "blank": 59609,
+              "blank_in_comment": 247,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "79b5e91c40928ef5c60ee30f3e37b0d6c99bba28cdd4d44e2c87e0146c7b88c1",
+          "mezura": "c253cce7b60c96cc08df9db6a85381ccb89fe1f2573ba7620873e370707655ef",
+          "baseline": "79b5e91c40928ef5c60ee30f3e37b0d6c99bba28cdd4d44e2c87e0146c7b88c1"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 40924743,
+        "median_file_bytes": 18302.5
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609
+          },
+          "mezura": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609,
+            "bytes": 40924743,
+            "classes": {
+              "words_in_code": 760677,
+              "string_content": 10500,
+              "comment_words_beside_code": 890,
+              "words_in_comment": 73303,
+              "punctuation_in_code": 88231,
+              "punctuation_in_comment": 19349,
+              "blank": 59609,
+              "blank_in_comment": 247,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1490,
+            "lines": 1012806,
+            "code": 860298,
+            "comments": 92899,
+            "blanks": 59609
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "79b5e91c40928ef5c60ee30f3e37b0d6c99bba28cdd4d44e2c87e0146c7b88c1",
+          "mezura": "c253cce7b60c96cc08df9db6a85381ccb89fe1f2573ba7620873e370707655ef",
+          "baseline": "79b5e91c40928ef5c60ee30f3e37b0d6c99bba28cdd4d44e2c87e0146c7b88c1"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 40924743,
+        "median_file_bytes": 18302.5
+      },
+      "samples_s": {
+        "thecount": [
+          0.010543359,
+          0.007180357,
+          0.007119543,
+          0.005328651,
+          0.005725106,
+          0.00854038,
+          0.007507781,
+          0.005739512,
+          0.008312162,
+          0.010493165,
+          0.008552192,
+          0.00783734,
+          0.005315907,
+          0.007099034,
+          0.00635059,
+          0.009203905,
+          0.007501009,
+          0.008713084,
+          0.005480196,
+          0.005597356,
+          0.008717582,
+          0.009321175,
+          0.009264849,
+          0.006454565,
+          0.006669578,
+          0.006119727,
+          0.007901531,
+          0.00760291,
+          0.010130384,
+          0.005394365
+        ],
+        "mezura": [
+          0.008871852,
+          0.008725808,
+          0.010612929,
+          0.008957813,
+          0.008371072,
+          0.008372204,
+          0.008308344,
+          0.009312359,
+          0.008623515,
+          0.008692575,
+          0.00871099,
+          0.010421129,
+          0.008310939,
+          0.009257235,
+          0.009071006,
+          0.008384216,
+          0.008568062,
+          0.008604431,
+          0.00892911,
+          0.007579216,
+          0.009008449,
+          0.008361514,
+          0.008486479,
+          0.008896529,
+          0.009658649,
+          0.00872175,
+          0.008931033,
+          0.008482722,
+          0.008824112,
+          0.008978652
+        ],
+        "baseline": [
+          0.00761361,
+          0.007382957,
+          0.007519314,
+          0.008088251,
+          0.005769789,
+          0.009684728,
+          0.005970707,
+          0.005901687,
+          0.008554266,
+          0.008775081,
+          0.007313507,
+          0.006449977,
+          0.007685054,
+          0.008431224,
+          0.006172806,
+          0.007655199,
+          0.007141203,
+          0.009591443,
+          0.006549954,
+          0.005741677,
+          0.006189017,
+          0.00885521,
+          0.006492426,
+          0.008869428,
+          0.006325052,
+          0.008251457,
+          0.00762918,
+          0.00814649,
+          0.00911603,
+          0.005939328
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.007523909833333333,
+          "median_s": 0.0075043950000000005,
+          "stddev_s": 0.0015955848151815702,
+          "min_s": 0.005315907,
+          "max_s": 0.010543359
+        },
+        "mezura": {
+          "mean_s": 0.0088344898,
+          "median_s": 0.008723779000000001,
+          "stddev_s": 0.0005979029794743487,
+          "min_s": 0.007579216,
+          "max_s": 0.010612929
+        },
+        "baseline": {
+          "mean_s": 0.007460201733333333,
+          "median_s": 0.0075664619999999995,
+          "stddev_s": 0.0012022556697178371,
+          "min_s": 0.005741677,
+          "max_s": 0.009684728
+        }
+      },
+      "speedup_over_mezura": 1.1741886858957795,
+      "speedup_over_baseline": 0.9915325806115123,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.0868857125887794,
+          "upper": 1.2721599619448773
+        },
+        "baseline": {
+          "lower": 0.9271344582961272,
+          "upper": 1.0645663866239696
+        }
+      }
+    },
+    {
+      "name": "projects-rust",
+      "path": "/home/jimmyhmiller/Documents/Code/projects",
+      "extensions": "rs",
+      "description": "Rust across personal projects and generated build trees",
+      "mezura_exclude_extensions": [],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--extensions",
+          "rs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--languages",
+          "rs",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--extensions",
+          "rs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262570,
+            "comments": 52617,
+            "blanks": 25245
+          },
+          "mezura": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262384,
+            "comments": 52627,
+            "blanks": 25421,
+            "bytes": 13320149,
+            "classes": {
+              "words_in_code": 195003,
+              "string_content": 18105,
+              "comment_words_beside_code": 18,
+              "words_in_comment": 49047,
+              "punctuation_in_code": 48588,
+              "punctuation_in_comment": 3573,
+              "blank": 25421,
+              "blank_in_comment": 7,
+              "blank_in_string": 670
+            }
+          },
+          "baseline": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262570,
+            "comments": 52617,
+            "blanks": 25245
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 5,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".rs": 5
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 5,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".rs": 5
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "c92db3413cdd8fea0395b3a066a688c48d18b5bac46a693f9fd81ae640421bed",
+          "mezura": "a8e0eac298e2517b61762ad706df96110ee12bf4bbcd3980502bdcf5e29323bf",
+          "baseline": "c92db3413cdd8fea0395b3a066a688c48d18b5bac46a693f9fd81ae640421bed"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 13320149,
+        "median_file_bytes": 7478
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262570,
+            "comments": 52617,
+            "blanks": 25245
+          },
+          "mezura": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262384,
+            "comments": 52627,
+            "blanks": 25421,
+            "bytes": 13320149,
+            "classes": {
+              "words_in_code": 195003,
+              "string_content": 18105,
+              "comment_words_beside_code": 18,
+              "words_in_comment": 49047,
+              "punctuation_in_code": 48588,
+              "punctuation_in_comment": 3573,
+              "blank": 25421,
+              "blank_in_comment": 7,
+              "blank_in_string": 670
+            }
+          },
+          "baseline": {
+            "files": 685,
+            "lines": 340432,
+            "code": 262570,
+            "comments": 52617,
+            "blanks": 25245
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 5,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".rs": 5
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 5,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".rs": 5
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "c92db3413cdd8fea0395b3a066a688c48d18b5bac46a693f9fd81ae640421bed",
+          "mezura": "a8e0eac298e2517b61762ad706df96110ee12bf4bbcd3980502bdcf5e29323bf",
+          "baseline": "c92db3413cdd8fea0395b3a066a688c48d18b5bac46a693f9fd81ae640421bed"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 13320149,
+        "median_file_bytes": 7478
+      },
+      "samples_s": {
+        "thecount": [
+          0.003041158,
+          0.003236865,
+          0.003394331,
+          0.003243097,
+          0.003192803,
+          0.003825841,
+          0.003296026,
+          0.003239139,
+          0.003046919,
+          0.003223531,
+          0.00300997,
+          0.003460756,
+          0.003220885,
+          0.003215756,
+          0.003193444,
+          0.003198293,
+          0.003174979,
+          0.003865966,
+          0.003060233,
+          0.003019518,
+          0.003244409,
+          0.003227527,
+          0.003202581,
+          0.003172845,
+          0.003198854,
+          0.003104006,
+          0.003172314,
+          0.003502815,
+          0.003171443,
+          0.003111881
+        ],
+        "mezura": [
+          0.005942213,
+          0.006458112,
+          0.005987338,
+          0.005969986,
+          0.006870837,
+          0.007189985,
+          0.005731388,
+          0.006236235,
+          0.006254128,
+          0.006049435,
+          0.006018035,
+          0.006376538,
+          0.005965156,
+          0.006129024,
+          0.006758515,
+          0.005656977,
+          0.007847529,
+          0.005665554,
+          0.005965597,
+          0.005542273,
+          0.00722988,
+          0.00604182,
+          0.006620526,
+          0.006522062,
+          0.006309993,
+          0.006570071,
+          0.006091935,
+          0.005674281,
+          0.00541305,
+          0.0060627
+        ],
+        "baseline": [
+          0.003101551,
+          0.00338329,
+          0.003173827,
+          0.00309011,
+          0.003235492,
+          0.003114706,
+          0.004122398,
+          0.003149742,
+          0.003417123,
+          0.003696418,
+          0.003354146,
+          0.003385344,
+          0.003450416,
+          0.003238629,
+          0.003757062,
+          0.003364244,
+          0.003248237,
+          0.002987477,
+          0.003256863,
+          0.003431571,
+          0.003207921,
+          0.003333176,
+          0.003272733,
+          0.003116119,
+          0.003257965,
+          0.003316666,
+          0.004160299,
+          0.003391896,
+          0.003111029,
+          0.003450055
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.0032422728333333334,
+          "median_s": 0.0032007175000000002,
+          "stddev_s": 0.00019947221716476319,
+          "min_s": 0.00300997,
+          "max_s": 0.003865966
+        },
+        "mezura": {
+          "mean_s": 0.0062383724333333335,
+          "median_s": 0.0060773175,
+          "stddev_s": 0.0005421521805205801,
+          "min_s": 0.00541305,
+          "max_s": 0.007847529
+        },
+        "baseline": {
+          "mean_s": 0.0033525501666666667,
+          "median_s": 0.0032946994999999996,
+          "stddev_s": 0.0002725264966756106,
+          "min_s": 0.002987477,
+          "max_s": 0.004160299
+        }
+      },
+      "speedup_over_mezura": 1.924073868552189,
+      "speedup_over_baseline": 1.0340123546049513,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.8546181206447672,
+          "upper": 1.9918030316171527
+        },
+        "baseline": {
+          "lower": 0.9928716421897247,
+          "upper": 1.072933684297121
+        }
+      }
+    },
+    {
+      "name": "projects-mixed",
+      "path": "/home/jimmyhmiller/Documents/Code/projects",
+      "extensions": "c,cc,cjs,cpp,h,js,jsx,mjs,py,rs,sh,ts,tsx",
+      "description": "Mixed personal projects including metadata and build outputs; code extensions common to both installations",
+      "mezura_exclude_extensions": [
+        "bash",
+        "bats",
+        "c++",
+        "cppm",
+        "cts",
+        "cxx",
+        "gyp",
+        "gypi",
+        "h++",
+        "hh",
+        "hpp",
+        "hxx",
+        "inl",
+        "ino",
+        "ipp",
+        "ixx",
+        "ksh",
+        "mts",
+        "pyi",
+        "pyw",
+        "tcc",
+        "tpp",
+        "zsh"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--extensions",
+          "c,cc,cjs,cpp,h,js,jsx,mjs,py,rs,sh,ts,tsx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--languages",
+          "c,cc,cjs,cpp,h,js,jsx,mjs,py,rs,sh,ts,tsx",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.bash,*.bats,*.c++,*.cppm,*.cts,*.cxx,*.gyp,*.gypi,*.h++,*.hh,*.hpp,*.hxx,*.inl,*.ino,*.ipp,*.ixx,*.ksh,*.mts,*.pyi,*.pyw,*.tcc,*.tpp,*.zsh"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/Documents/Code/projects",
+          "--extensions",
+          "c,cc,cjs,cpp,h,js,jsx,mjs,py,rs,sh,ts,tsx",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1743198,
+            "comments": 66169,
+            "blanks": 40233
+          },
+          "mezura": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1744344,
+            "comments": 64922,
+            "blanks": 40334,
+            "bytes": 126790223,
+            "classes": {
+              "words_in_code": 1600784,
+              "string_content": 36193,
+              "comment_words_beside_code": 43,
+              "words_in_comment": 59685,
+              "punctuation_in_code": 106359,
+              "punctuation_in_comment": 5166,
+              "blank": 40334,
+              "blank_in_comment": 71,
+              "blank_in_string": 965
+            }
+          },
+          "baseline": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1743198,
+            "comments": 66169,
+            "blanks": 40233
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 87,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 70,
+              ".rs": 5,
+              ".ts": 3,
+              ".sh": 5,
+              ".mjs": 3,
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 87,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 70,
+              ".rs": 5,
+              ".ts": 3,
+              ".sh": 5,
+              ".mjs": 3,
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "80266e0e2ae4d5a50d55f99d1a4045e26870d5f02066b27b78bec4d8494f48e9",
+          "mezura": "85afddd0bb0a9021d18ef4bb4e5fc55c6568b3dfa0b6ee40e7239fbc16bf5562",
+          "baseline": "80266e0e2ae4d5a50d55f99d1a4045e26870d5f02066b27b78bec4d8494f48e9"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 126790223,
+        "median_file_bytes": 4331.0
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1743198,
+            "comments": 66169,
+            "blanks": 40233
+          },
+          "mezura": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1744344,
+            "comments": 64922,
+            "blanks": 40334,
+            "bytes": 126790223,
+            "classes": {
+              "words_in_code": 1600784,
+              "string_content": 36193,
+              "comment_words_beside_code": 43,
+              "words_in_comment": 59685,
+              "punctuation_in_code": 106359,
+              "punctuation_in_comment": 5166,
+              "blank": 40334,
+              "blank_in_comment": 71,
+              "blank_in_string": 965
+            }
+          },
+          "baseline": {
+            "files": 1310,
+            "lines": 1849600,
+            "code": 1743198,
+            "comments": 66169,
+            "blanks": 40233
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 87,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 70,
+              ".rs": 5,
+              ".ts": 3,
+              ".sh": 5,
+              ".mjs": 3,
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 87,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".py": 70,
+              ".rs": 5,
+              ".ts": 3,
+              ".sh": 5,
+              ".mjs": 3,
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "80266e0e2ae4d5a50d55f99d1a4045e26870d5f02066b27b78bec4d8494f48e9",
+          "mezura": "85afddd0bb0a9021d18ef4bb4e5fc55c6568b3dfa0b6ee40e7239fbc16bf5562",
+          "baseline": "80266e0e2ae4d5a50d55f99d1a4045e26870d5f02066b27b78bec4d8494f48e9"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 126790223,
+        "median_file_bytes": 4331.0
+      },
+      "samples_s": {
+        "thecount": [
+          0.037169214,
+          0.032057991,
+          0.037319376,
+          0.032868202,
+          0.031907048,
+          0.033308639,
+          0.031147022,
+          0.038517967,
+          0.03052258,
+          0.035721537,
+          0.031167309,
+          0.036112501,
+          0.030074689,
+          0.031888393,
+          0.031154235,
+          0.031346956,
+          0.032957059,
+          0.033877517,
+          0.030817583,
+          0.031683568,
+          0.030477214,
+          0.032786128,
+          0.034577981,
+          0.031086678,
+          0.030476874,
+          0.031165476,
+          0.029574079,
+          0.037178672,
+          0.032677573,
+          0.031628795
+        ],
+        "mezura": [
+          0.043537918,
+          0.039849756,
+          0.040948618,
+          0.041153282,
+          0.044253201,
+          0.03953198,
+          0.041314065,
+          0.039465605,
+          0.041224807,
+          0.038585163,
+          0.044932005,
+          0.04119485,
+          0.043237875,
+          0.041685721,
+          0.048426473,
+          0.039277281,
+          0.03878146,
+          0.039000322,
+          0.038751003,
+          0.042507043,
+          0.043199382,
+          0.045130548,
+          0.039215926,
+          0.039941588,
+          0.041456692,
+          0.044310478,
+          0.041086698,
+          0.04098694,
+          0.041433548,
+          0.043035014
+        ],
+        "baseline": [
+          0.042597153,
+          0.039792358,
+          0.033532449,
+          0.041955207,
+          0.040338313,
+          0.033118512,
+          0.033360947,
+          0.03493997,
+          0.03295252,
+          0.034536603,
+          0.042897606,
+          0.040401832,
+          0.036094186,
+          0.033699051,
+          0.034887832,
+          0.034239045,
+          0.034203478,
+          0.032555325,
+          0.039034996,
+          0.038059216,
+          0.032769256,
+          0.034505094,
+          0.033987622,
+          0.036636925,
+          0.041308634,
+          0.035063903,
+          0.032126359,
+          0.033797275,
+          0.036661181,
+          0.038993379
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.03277496186666667,
+          "median_s": 0.031897720500000004,
+          "stddev_s": 0.0024485204041903054,
+          "min_s": 0.029574079,
+          "max_s": 0.038517967
+        },
+        "mezura": {
+          "mean_s": 0.0415818414,
+          "median_s": 0.041209828500000004,
+          "stddev_s": 0.0023175569699346024,
+          "min_s": 0.038585163,
+          "max_s": 0.048426473
+        },
+        "baseline": {
+          "mean_s": 0.0363015409,
+          "median_s": 0.034913901,
+          "stddev_s": 0.003342258433070579,
+          "min_s": 0.032126359,
+          "max_s": 0.042897606
+        }
+      },
+      "speedup_over_mezura": 1.2687075447764364,
+      "speedup_over_baseline": 1.107599790586484,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.2225725754068444,
+          "upper": 1.3173370053175482
+        },
+        "baseline": {
+          "lower": 1.0614062462305935,
+          "upper": 1.15482184173132
+        }
+      }
+    },
+    {
+      "name": "abseil-cpp",
+      "path": "/home/jimmyhmiller/absl",
+      "extensions": "cc,cpp,h",
+      "description": "Medium C++ library with build output nearby",
+      "mezura_exclude_extensions": [
+        "c++",
+        "cppm",
+        "cxx",
+        "h++",
+        "hh",
+        "hpp",
+        "hxx",
+        "inl",
+        "ino",
+        "ipp",
+        "ixx",
+        "tcc",
+        "tpp"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/absl",
+          "--extensions",
+          "cc,cpp,h",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/absl",
+          "--languages",
+          "cc,cpp,h",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.c++,*.cppm,*.cxx,*.h++,*.hh,*.hpp,*.hxx,*.inl,*.ino,*.ipp,*.ixx,*.tcc,*.tpp"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/absl",
+          "--extensions",
+          "cc,cpp,h",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219506,
+            "comments": 91491,
+            "blanks": 43116
+          },
+          "mezura": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219525,
+            "comments": 91491,
+            "blanks": 43097,
+            "bytes": 13002572,
+            "classes": {
+              "words_in_code": 186573,
+              "string_content": 4127,
+              "comment_words_beside_code": 2511,
+              "words_in_comment": 74252,
+              "punctuation_in_code": 26295,
+              "punctuation_in_comment": 17213,
+              "blank": 43097,
+              "blank_in_comment": 26,
+              "blank_in_string": 19
+            }
+          },
+          "baseline": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219506,
+            "comments": 91491,
+            "blanks": 43116
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cc": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cc": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "db32b8eaecdec96338434f306fe5182a208c83dba433f20fb2cb5a0789171734",
+          "mezura": "2427c31033053479e3681ed749ed5e37ee9f2344819a5dc641b7e605eac09cd6",
+          "baseline": "db32b8eaecdec96338434f306fe5182a208c83dba433f20fb2cb5a0789171734"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 13002572,
+        "median_file_bytes": 5487
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219506,
+            "comments": 91491,
+            "blanks": 43116
+          },
+          "mezura": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219525,
+            "comments": 91491,
+            "blanks": 43097,
+            "bytes": 13002572,
+            "classes": {
+              "words_in_code": 186573,
+              "string_content": 4127,
+              "comment_words_beside_code": 2511,
+              "words_in_comment": 74252,
+              "punctuation_in_code": 26295,
+              "punctuation_in_comment": 17213,
+              "blank": 43097,
+              "blank_in_comment": 26,
+              "blank_in_string": 19
+            }
+          },
+          "baseline": {
+            "files": 1171,
+            "lines": 354113,
+            "code": 219506,
+            "comments": 91491,
+            "blanks": 43116
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cc": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".cc": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "db32b8eaecdec96338434f306fe5182a208c83dba433f20fb2cb5a0789171734",
+          "mezura": "2427c31033053479e3681ed749ed5e37ee9f2344819a5dc641b7e605eac09cd6",
+          "baseline": "db32b8eaecdec96338434f306fe5182a208c83dba433f20fb2cb5a0789171734"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 13002572,
+        "median_file_bytes": 5487
+      },
+      "samples_s": {
+        "thecount": [
+          0.001902981,
+          0.001752109,
+          0.001709298,
+          0.001855072,
+          0.001863448,
+          0.002681854,
+          0.001729256,
+          0.001724286,
+          0.00181177,
+          0.001723124,
+          0.00159304,
+          0.001757669,
+          0.001680464,
+          0.001623448,
+          0.001627014,
+          0.001851335,
+          0.001827319,
+          0.001824354,
+          0.001995696,
+          0.001830215,
+          0.001739945,
+          0.001973344,
+          0.001735186,
+          0.001668802,
+          0.001792544,
+          0.001738783,
+          0.001769221,
+          0.001615903,
+          0.00174766,
+          0.00179009
+        ],
+        "mezura": [
+          0.005545689,
+          0.005516063,
+          0.00616445,
+          0.005449569,
+          0.007168254,
+          0.005845842,
+          0.005385168,
+          0.005363747,
+          0.0055625,
+          0.005861682,
+          0.005502608,
+          0.00553024,
+          0.005617794,
+          0.005413862,
+          0.00537054,
+          0.005441162,
+          0.005616492,
+          0.005821576,
+          0.006455336,
+          0.005401819,
+          0.005511545,
+          0.005468374,
+          0.005485636,
+          0.005454608,
+          0.005404534,
+          0.005395437,
+          0.006071636,
+          0.005500164,
+          0.007897653,
+          0.005392031
+        ],
+        "baseline": [
+          0.002042083,
+          0.001950471,
+          0.002111393,
+          0.00221112,
+          0.00209925,
+          0.002682054,
+          0.001977201,
+          0.003826261,
+          0.001952375,
+          0.002044187,
+          0.001931876,
+          0.002290529,
+          0.001884257,
+          0.001900186,
+          0.001763139,
+          0.001878236,
+          0.004046976,
+          0.001808966,
+          0.002682164,
+          0.001993962,
+          0.001800139,
+          0.001938608,
+          0.001860853,
+          0.0019445,
+          0.001900597,
+          0.001842137,
+          0.00187553,
+          0.001895157,
+          0.001943819,
+          0.001829484
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.0017978410000000001,
+          "median_s": 0.001754889,
+          "stddev_s": 0.00019318004937898987,
+          "min_s": 0.00159304,
+          "max_s": 0.002681854
+        },
+        "mezura": {
+          "mean_s": 0.0057205337,
+          "median_s": 0.005507076499999999,
+          "stddev_s": 0.0005647342130641481,
+          "min_s": 0.005363747,
+          "max_s": 0.007897653
+        },
+        "baseline": {
+          "mean_s": 0.0021302503333333334,
+          "median_s": 0.0019441595000000002,
+          "stddev_s": 0.0005382688535512094,
+          "min_s": 0.001763139,
+          "max_s": 0.004046976
+        }
+      },
+      "speedup_over_mezura": 3.1818907789954727,
+      "speedup_over_baseline": 1.1848936214789478,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 3.0392574972878275,
+          "upper": 3.3342011444366695
+        },
+        "baseline": {
+          "lower": 1.0971017461422503,
+          "upper": 1.2997810455591312
+        }
+      }
+    },
+    {
+      "name": "heapster-rust",
+      "path": "/home/jimmyhmiller/apps/heapster",
+      "extensions": "rs",
+      "description": "Small Rust project",
+      "mezura_exclude_extensions": [],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/apps/heapster",
+          "--extensions",
+          "rs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/apps/heapster",
+          "--languages",
+          "rs",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/apps/heapster",
+          "--extensions",
+          "rs",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956
+          },
+          "mezura": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956,
+            "bytes": 1113560,
+            "classes": {
+              "words_in_code": 18942,
+              "string_content": 741,
+              "comment_words_beside_code": 5,
+              "words_in_comment": 2811,
+              "punctuation_in_code": 4749,
+              "punctuation_in_comment": 332,
+              "blank": 2956,
+              "blank_in_comment": 0,
+              "blank_in_string": 87
+            }
+          },
+          "baseline": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "0674ee06fa725ccb5bb4d929dd6c8d10e00b20bd3ec9761819773e58502b8c73",
+          "mezura": "183b4be8e4d4aab2e049d7e60bff9db5428f0fa9689828f033f441fb91585e83",
+          "baseline": "0674ee06fa725ccb5bb4d929dd6c8d10e00b20bd3ec9761819773e58502b8c73"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1113560,
+        "median_file_bytes": 8504
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956
+          },
+          "mezura": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956,
+            "bytes": 1113560,
+            "classes": {
+              "words_in_code": 18942,
+              "string_content": 741,
+              "comment_words_beside_code": 5,
+              "words_in_comment": 2811,
+              "punctuation_in_code": 4749,
+              "punctuation_in_comment": 332,
+              "blank": 2956,
+              "blank_in_comment": 0,
+              "blank_in_string": 87
+            }
+          },
+          "baseline": {
+            "files": 67,
+            "lines": 30623,
+            "code": 24524,
+            "comments": 3143,
+            "blanks": 2956
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "0674ee06fa725ccb5bb4d929dd6c8d10e00b20bd3ec9761819773e58502b8c73",
+          "mezura": "183b4be8e4d4aab2e049d7e60bff9db5428f0fa9689828f033f441fb91585e83",
+          "baseline": "0674ee06fa725ccb5bb4d929dd6c8d10e00b20bd3ec9761819773e58502b8c73"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1113560,
+        "median_file_bytes": 8504
+      },
+      "samples_s": {
+        "thecount": [
+          0.001176218,
+          0.001150148,
+          0.001112398,
+          0.001168053,
+          0.001197858,
+          0.001078313,
+          0.001139839,
+          0.001078244,
+          0.001038039,
+          0.001136713,
+          0.001076891,
+          0.001094895,
+          0.001040062,
+          0.001039441,
+          0.001056052,
+          0.001045663,
+          0.001066873,
+          0.001133748,
+          0.001167341,
+          0.001154998,
+          0.001120003,
+          0.001023471,
+          0.001106217,
+          0.00102819,
+          0.001088743,
+          0.001048969,
+          0.000994056,
+          0.001108501,
+          0.001059268,
+          0.0010979
+        ],
+        "mezura": [
+          0.004873768,
+          0.004775704,
+          0.00490143,
+          0.005275703,
+          0.004779451,
+          0.004743173,
+          0.004939471,
+          0.004633146,
+          0.004802133,
+          0.004923011,
+          0.004585507,
+          0.004723666,
+          0.004716443,
+          0.004723846,
+          0.004780232,
+          0.004647102,
+          0.004776084,
+          0.00498173,
+          0.004765074,
+          0.004665076,
+          0.004706093,
+          0.004639469,
+          0.004669414,
+          0.004749224,
+          0.004588803,
+          0.004564738,
+          0.004733294,
+          0.004627045,
+          0.004578764,
+          0.004515475
+        ],
+        "baseline": [
+          0.001272649,
+          0.001171238,
+          0.001411149,
+          0.001199792,
+          0.001129339,
+          0.001151111,
+          0.001205903,
+          0.001148546,
+          0.001120153,
+          0.001137184,
+          0.001122978,
+          0.001072073,
+          0.001176157,
+          0.001137935,
+          0.001112408,
+          0.001144749,
+          0.001127466,
+          0.001090246,
+          0.001138888,
+          0.001167161,
+          0.001204551,
+          0.001101748,
+          0.001119672,
+          0.001023831,
+          0.001102479,
+          0.001392454,
+          0.001100165,
+          0.001114662,
+          0.001153085,
+          0.001157953
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.0010942368333333333,
+          "median_s": 0.001091819,
+          "stddev_s": 5.220956275605225e-05,
+          "min_s": 0.000994056,
+          "max_s": 0.001197858
+        },
+        "mezura": {
+          "mean_s": 0.004746135633333333,
+          "median_s": 0.00472857,
+          "stddev_s": 0.0001532963668257156,
+          "min_s": 0.004515475,
+          "max_s": 0.005275703
+        },
+        "baseline": {
+          "mean_s": 0.0011569241666666667,
+          "median_s": 0.0011384115,
+          "stddev_s": 8.09221274926505e-05,
+          "min_s": 0.001023831,
+          "max_s": 0.001411149
+        }
+      },
+      "speedup_over_mezura": 4.337393413156597,
+      "speedup_over_baseline": 1.0572886338895862,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 4.269323112454507,
+          "upper": 4.404678503676031
+        },
+        "baseline": {
+          "lower": 1.0322534541504764,
+          "upper": 1.086514272136367
+        }
+      }
+    },
+    {
+      "name": "perfbot-json",
+      "path": "/home/jimmyhmiller/apps/perfbot",
+      "extensions": "json",
+      "description": "Many small JSON files in a large build tree",
+      "mezura_supported": false,
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/apps/perfbot",
+          "--extensions",
+          "json",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/apps/perfbot",
+          "--extensions",
+          "json",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1669,
+            "lines": 2680,
+            "code": 2680,
+            "comments": 0,
+            "blanks": 0
+          },
+          "baseline": {
+            "files": 1669,
+            "lines": 2680,
+            "code": 2680,
+            "comments": 0,
+            "blanks": 0
+          }
+        },
+        "comparisons": {},
+        "per_file_json_sha256": {
+          "thecount": "4cd34821202a0cd2e24a545f32b396895a67e096b5cca13b4a52ea16f5b2e0c6",
+          "baseline": "4cd34821202a0cd2e24a545f32b396895a67e096b5cca13b4a52ea16f5b2e0c6"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1115912,
+        "median_file_bytes": 532
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1669,
+            "lines": 2680,
+            "code": 2680,
+            "comments": 0,
+            "blanks": 0
+          },
+          "baseline": {
+            "files": 1669,
+            "lines": 2680,
+            "code": 2680,
+            "comments": 0,
+            "blanks": 0
+          }
+        },
+        "comparisons": {},
+        "per_file_json_sha256": {
+          "thecount": "4cd34821202a0cd2e24a545f32b396895a67e096b5cca13b4a52ea16f5b2e0c6",
+          "baseline": "4cd34821202a0cd2e24a545f32b396895a67e096b5cca13b4a52ea16f5b2e0c6"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 1115912,
+        "median_file_bytes": 532
+      },
+      "samples_s": {
+        "thecount": [
+          0.005162439,
+          0.005162851,
+          0.005335414,
+          0.005632953,
+          0.004507891,
+          0.005603146,
+          0.004719448,
+          0.005544387,
+          0.005596414,
+          0.003291097,
+          0.004668372,
+          0.007489347,
+          0.004713347,
+          0.005115461,
+          0.006260321,
+          0.005742228,
+          0.004273792,
+          0.005640898,
+          0.006666703,
+          0.003871326,
+          0.004375613,
+          0.005776321,
+          0.006833937,
+          0.005751205,
+          0.004503804,
+          0.005034169,
+          0.00700117,
+          0.005701161,
+          0.006224453,
+          0.007242684
+        ],
+        "baseline": [
+          0.005782984,
+          0.005008751,
+          0.003603724,
+          0.005052594,
+          0.005604629,
+          0.003416994,
+          0.003477968,
+          0.004968175,
+          0.003790785,
+          0.003535486,
+          0.00350032,
+          0.003207361,
+          0.004088214,
+          0.003989679,
+          0.003297529,
+          0.004142936,
+          0.005986446,
+          0.003743386,
+          0.004682449,
+          0.003581823,
+          0.003829278,
+          0.003963098,
+          0.003894409,
+          0.003952228,
+          0.00370843,
+          0.003772942,
+          0.003949252,
+          0.005816307,
+          0.00393722,
+          0.00368118
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.0054480784,
+          "median_s": 0.005570400499999999,
+          "stddev_s": 0.0009917632150519148,
+          "min_s": 0.003291097,
+          "max_s": 0.007489347
+        },
+        "baseline": {
+          "mean_s": 0.004165552566666667,
+          "median_s": 0.0039158145,
+          "stddev_s": 0.0008022239430746591,
+          "min_s": 0.003207361,
+          "max_s": 0.005986446
+        }
+      },
+      "speedup_over_mezura": null,
+      "speedup_over_baseline": 0.7645911568869249,
+      "speedup_95pct_bootstrap": {
+        "baseline": {
+          "lower": 0.6928873135585163,
+          "upper": 0.8434444658982554
+        }
+      }
+    },
+    {
+      "name": "single-large-c",
+      "path": "/home/jimmyhmiller/llvm22/src/compiler-rt/test/builtins/Unit/udivmodti4_test.c",
+      "extensions": "c",
+      "description": "Single 16 MB generated C test",
+      "mezura_exclude_extensions": [],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src/compiler-rt/test/builtins/Unit/udivmodti4_test.c",
+          "--extensions",
+          "c",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/llvm22/src/compiler-rt/test/builtins/Unit/udivmodti4_test.c",
+          "--languages",
+          "c",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src/compiler-rt/test/builtins/Unit/udivmodti4_test.c",
+          "--extensions",
+          "c",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10
+          },
+          "mezura": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10,
+            "bytes": 16125794,
+            "classes": {
+              "words_in_code": 65319,
+              "string_content": 2,
+              "comment_words_beside_code": 0,
+              "words_in_comment": 5,
+              "punctuation_in_code": 8,
+              "punctuation_in_comment": 0,
+              "blank": 10,
+              "blank_in_comment": 0,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "b33e4969c1241c01237430b89c81fef5357adccbed9743857eeec797f4d987df",
+          "mezura": "488172141cc573ca2ff82c98d57f95d03617e75e51d3a324ba7b42493d4904cb",
+          "baseline": "b33e4969c1241c01237430b89c81fef5357adccbed9743857eeec797f4d987df"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 16125794,
+        "median_file_bytes": 16125794
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10
+          },
+          "mezura": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10,
+            "bytes": 16125794,
+            "classes": {
+              "words_in_code": 65319,
+              "string_content": 2,
+              "comment_words_beside_code": 0,
+              "words_in_comment": 5,
+              "punctuation_in_code": 8,
+              "punctuation_in_comment": 0,
+              "blank": 10,
+              "blank_in_comment": 0,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1,
+            "lines": 65344,
+            "code": 65329,
+            "comments": 5,
+            "blanks": 10
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "b33e4969c1241c01237430b89c81fef5357adccbed9743857eeec797f4d987df",
+          "mezura": "488172141cc573ca2ff82c98d57f95d03617e75e51d3a324ba7b42493d4904cb",
+          "baseline": "b33e4969c1241c01237430b89c81fef5357adccbed9743857eeec797f4d987df"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 16125794,
+        "median_file_bytes": 16125794
+      },
+      "samples_s": {
+        "thecount": [
+          0.005144256,
+          0.005569183,
+          0.005832177,
+          0.005373376,
+          0.005438087,
+          0.004989244,
+          0.004712636,
+          0.005852024,
+          0.0065212,
+          0.005467502,
+          0.005293445,
+          0.004838311,
+          0.005973101,
+          0.005210029,
+          0.005459818,
+          0.00491743,
+          0.004825877,
+          0.005344601,
+          0.006078609,
+          0.005202254,
+          0.005617073,
+          0.005835473,
+          0.005043547,
+          0.005246849,
+          0.005772234,
+          0.005352467,
+          0.005938526,
+          0.005835023,
+          0.006339428,
+          0.005422578
+        ],
+        "mezura": [
+          0.006415322,
+          0.00787469,
+          0.007636403,
+          0.007211456,
+          0.007206536,
+          0.0071607,
+          0.007323797,
+          0.007211646,
+          0.006807327,
+          0.007388628,
+          0.00700055,
+          0.007025015,
+          0.007108693,
+          0.006038924,
+          0.007322123,
+          0.007241632,
+          0.006842553,
+          0.007186919,
+          0.006283734,
+          0.00702237,
+          0.006717658,
+          0.007122749,
+          0.007070882,
+          0.007120164,
+          0.007119834,
+          0.00592932,
+          0.006302439,
+          0.00708576,
+          0.007032389,
+          0.007239938
+        ],
+        "baseline": [
+          0.004877695,
+          0.00547685,
+          0.005879696,
+          0.005687044,
+          0.005936723,
+          0.005180945,
+          0.005078763,
+          0.00563661,
+          0.005899854,
+          0.004471934,
+          0.005525822,
+          0.004513652,
+          0.004749465,
+          0.005608938,
+          0.004771005,
+          0.005459978,
+          0.004904936,
+          0.005425283,
+          0.00567392,
+          0.005398132,
+          0.005040311,
+          0.004957695,
+          0.005207384,
+          0.005698866,
+          0.004987311,
+          0.005995393,
+          0.005123516,
+          0.005509371,
+          0.005079354,
+          0.004845265
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.005481545266666667,
+          "median_s": 0.0054303325,
+          "stddev_s": 0.00044879723869563077,
+          "min_s": 0.004712636,
+          "max_s": 0.0065212
+        },
+        "mezura": {
+          "mean_s": 0.0070016717,
+          "median_s": 0.007114263500000001,
+          "stddev_s": 0.00043398298621475056,
+          "min_s": 0.00592932,
+          "max_s": 0.00787469
+        },
+        "baseline": {
+          "mean_s": 0.0052867237,
+          "median_s": 0.005302757999999999,
+          "stddev_s": 0.00042653928607769005,
+          "min_s": 0.004471934,
+          "max_s": 0.005995393
+        }
+      },
+      "speedup_over_mezura": 1.277317135840734,
+      "speedup_over_baseline": 0.9644586412792431,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.2289546161745262,
+          "upper": 1.325571633417027
+        },
+        "baseline": {
+          "lower": 0.9293888126900465,
+          "upper": 0.9991138525473547
+        }
+      }
+    },
+    {
+      "name": "single-large-js",
+      "path": "/home/jimmyhmiller/scriptc-corpus/node_modules/.pnpm/@ts-morph+common@0.11.1/node_modules/@ts-morph/common/dist/typescript.js",
+      "extensions": "js",
+      "description": "Single 9.7 MB bundled TypeScript implementation",
+      "mezura_exclude_extensions": [
+        "cjs",
+        "mjs"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/scriptc-corpus/node_modules/.pnpm/@ts-morph+common@0.11.1/node_modules/@ts-morph/common/dist/typescript.js",
+          "--extensions",
+          "js",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/scriptc-corpus/node_modules/.pnpm/@ts-morph+common@0.11.1/node_modules/@ts-morph/common/dist/typescript.js",
+          "--languages",
+          "js",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "*.cjs,*.mjs"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/scriptc-corpus/node_modules/.pnpm/@ts-morph+common@0.11.1/node_modules/@ts-morph/common/dist/typescript.js",
+          "--extensions",
+          "js",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138361,
+            "comments": 22444,
+            "blanks": 3
+          },
+          "mezura": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138363,
+            "comments": 22442,
+            "blanks": 3,
+            "bytes": 9728510,
+            "classes": {
+              "words_in_code": 109451,
+              "string_content": 282,
+              "comment_words_beside_code": 13,
+              "words_in_comment": 18435,
+              "punctuation_in_code": 28617,
+              "punctuation_in_comment": 3998,
+              "blank": 3,
+              "blank_in_comment": 9,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138361,
+            "comments": 22444,
+            "blanks": 3
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "c4378d265d01ec8556cd6e439a8d85e6018c1f20c86a94c71352aa0cbc863195",
+          "mezura": "f211debf2d11915ab0134b27148eb952965aaa3eb799c025588d43853c8f2d6b",
+          "baseline": "c4378d265d01ec8556cd6e439a8d85e6018c1f20c86a94c71352aa0cbc863195"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 9728510,
+        "median_file_bytes": 9728510
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138361,
+            "comments": 22444,
+            "blanks": 3
+          },
+          "mezura": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138363,
+            "comments": 22442,
+            "blanks": 3,
+            "bytes": 9728510,
+            "classes": {
+              "words_in_code": 109451,
+              "string_content": 282,
+              "comment_words_beside_code": 13,
+              "words_in_comment": 18435,
+              "punctuation_in_code": 28617,
+              "punctuation_in_comment": 3998,
+              "blank": 3,
+              "blank_in_comment": 9,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 1,
+            "lines": 160808,
+            "code": 138361,
+            "comments": 22444,
+            "blanks": 3
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 1,
+            "excluded_path_candidates": [],
+            "classification_extensions": {
+              ".js": 1
+            },
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "c4378d265d01ec8556cd6e439a8d85e6018c1f20c86a94c71352aa0cbc863195",
+          "mezura": "f211debf2d11915ab0134b27148eb952965aaa3eb799c025588d43853c8f2d6b",
+          "baseline": "c4378d265d01ec8556cd6e439a8d85e6018c1f20c86a94c71352aa0cbc863195"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 9728510,
+        "median_file_bytes": 9728510
+      },
+      "samples_s": {
+        "thecount": [
+          0.004920906,
+          0.004916418,
+          0.005545138,
+          0.005291642,
+          0.005497077,
+          0.005137333,
+          0.005055489,
+          0.005575795,
+          0.005198959,
+          0.005093971,
+          0.005363637,
+          0.005788375,
+          0.005313644,
+          0.004989455,
+          0.005481769,
+          0.005546371,
+          0.004841457,
+          0.005293846,
+          0.004764473,
+          0.005023168,
+          0.005318312,
+          0.005473123,
+          0.004910377,
+          0.00710697,
+          0.005521043,
+          0.004760655,
+          0.004844744,
+          0.004804728,
+          0.005272146,
+          0.005132404
+        ],
+        "mezura": [
+          0.009758366,
+          0.009569732,
+          0.010364594,
+          0.009710887,
+          0.009963692,
+          0.009171394,
+          0.009942311,
+          0.010053149,
+          0.010334628,
+          0.010018545,
+          0.01031501,
+          0.01002697,
+          0.010764084,
+          0.009889962,
+          0.010705654,
+          0.009822326,
+          0.010011852,
+          0.010012173,
+          0.009972809,
+          0.011094103,
+          0.010062417,
+          0.010034444,
+          0.009939055,
+          0.012655534,
+          0.011415607,
+          0.01173708,
+          0.010027582,
+          0.009999379,
+          0.010209693,
+          0.012099109
+        ],
+        "baseline": [
+          0.005494243,
+          0.005566869,
+          0.005134206,
+          0.005049567,
+          0.005240466,
+          0.005099131,
+          0.005684801,
+          0.005255474,
+          0.004957956,
+          0.004978755,
+          0.004903413,
+          0.005494984,
+          0.004888446,
+          0.005486287,
+          0.00554096,
+          0.005493751,
+          0.005597306,
+          0.005690601,
+          0.005637943,
+          0.005908831,
+          0.006571244,
+          0.006001284,
+          0.004923811,
+          0.005494032,
+          0.005173982,
+          0.005339713,
+          0.004732974,
+          0.004876312,
+          0.005171436,
+          0.005497529
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.0052594475,
+          "median_s": 0.005235552500000001,
+          "stddev_s": 0.00044838988259793467,
+          "min_s": 0.004760655,
+          "max_s": 0.00710697
+        },
+        "mezura": {
+          "mean_s": 0.010322738033333334,
+          "median_s": 0.010027276,
+          "stddev_s": 0.0007678485645864116,
+          "min_s": 0.009171394,
+          "max_s": 0.012655534
+        },
+        "baseline": {
+          "mean_s": 0.0053628769,
+          "median_s": 0.005413,
+          "stddev_s": 0.0003972565691402203,
+          "min_s": 0.004732974,
+          "max_s": 0.006571244
+        }
+      },
+      "speedup_over_mezura": 1.9627038835036064,
+      "speedup_over_baseline": 1.0196654496503672,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 1.9074257011666256,
+          "upper": 2.0228091402030377
+        },
+        "baseline": {
+          "lower": 0.9810846454375999,
+          "upper": 1.0572381586204622
+        }
+      }
+    },
+    {
+      "name": "llvm-fortran",
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "extensions": "f90,f95,f03,f08",
+      "description": "Fortran source and compiler tests",
+      "exclude_paths": [
+        "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90",
+        "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+        "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+      ],
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "f90,f95,f03,f08",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+        ],
+        "mezura": [
+          "/home/jimmyhmiller/.local/share/linebench/counters/mezura",
+          "/home/jimmyhmiller/llvm22/src",
+          "--languages",
+          "f90,f95,f03,f08",
+          "--no-gitignore",
+          "--no-ignore-files",
+          "--search-in-dotted",
+          "--no-local",
+          "--no-default-config",
+          "--hide",
+          "keywords",
+          "--count-minified",
+          "--count-generated",
+          "--count-not-code",
+          "--counting",
+          "region",
+          "--no-shebang",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90,/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08,/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "f90,f95,f03,f08",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+          "--exclude",
+          "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 3060,
+            "lines": 243040,
+            "code": 94520,
+            "comments": 122053,
+            "blanks": 26467
+          },
+          "mezura": {
+            "files": 3060,
+            "lines": 243040,
+            "code": 94520,
+            "comments": 122053,
+            "blanks": 26467,
+            "bytes": 11573832,
+            "classes": {
+              "words_in_code": 94429,
+              "string_content": 12,
+              "comment_words_beside_code": 0,
+              "words_in_comment": 120909,
+              "punctuation_in_code": 79,
+              "punctuation_in_comment": 1144,
+              "blank": 26467,
+              "blank_in_comment": 0,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 3060,
+            "lines": 243040,
+            "code": 94520,
+            "comments": 122053,
+            "blanks": 26467
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": true,
+            "only_counter": 0,
+            "only_mezura": 0,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [],
+              "only_mezura": [],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "98eba5cabac80dd5cd8bc9fa2ac4624c14662e1c9dfb006c2bd619264df41636",
+          "mezura": "17147a057838f4a50339b67d2cd15d5ea23528d835b8d8eba7fb9826726567f8",
+          "baseline": "98eba5cabac80dd5cd8bc9fa2ac4624c14662e1c9dfb006c2bd619264df41636"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 11573832,
+        "median_file_bytes": 1331.5
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 3061,
+            "lines": 243046,
+            "code": 94523,
+            "comments": 122056,
+            "blanks": 26467
+          },
+          "mezura": {
+            "files": 3062,
+            "lines": 243214,
+            "code": 94657,
+            "comments": 122071,
+            "blanks": 26486,
+            "bytes": 11585168,
+            "classes": {
+              "words_in_code": 94566,
+              "string_content": 12,
+              "comment_words_beside_code": 0,
+              "words_in_comment": 120927,
+              "punctuation_in_code": 79,
+              "punctuation_in_comment": 1144,
+              "blank": 26486,
+              "blank_in_comment": 0,
+              "blank_in_string": 0
+            }
+          },
+          "baseline": {
+            "files": 3061,
+            "lines": 243046,
+            "code": 94523,
+            "comments": 122056,
+            "blanks": 26467
+          }
+        },
+        "comparisons": {
+          "thecount": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90",
+              "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+              "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+            ],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+                "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+              ],
+              "line_differences": []
+            }
+          },
+          "baseline": {
+            "same_file_and_line_workload": false,
+            "only_counter": 1,
+            "only_mezura": 2,
+            "line_differences": 0,
+            "classification_differences": 0,
+            "excluded_path_candidates": [
+              "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90",
+              "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+              "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+            ],
+            "classification_extensions": {},
+            "examples": {
+              "only_counter": [
+                "/home/jimmyhmiller/llvm22/src/flang/test/Parser/non-breaking-space.f90"
+              ],
+              "only_mezura": [
+                "/home/jimmyhmiller/llvm22/src/flang/test/Driver/supported-suffices/f08-suffix.f08",
+                "/home/jimmyhmiller/llvm22/src/flang/test/Evaluate/folding05.f90"
+              ],
+              "line_differences": []
+            }
+          }
+        },
+        "per_file_json_sha256": {
+          "thecount": "cf31b5cd8b703f1f253ab98d57c424413ebf23f4a7396b475662fe21d5d0f7aa",
+          "mezura": "bca441a7fd72a92b957c90a967568718bdf0cbbc00ae48d6375cb92ed68827f6",
+          "baseline": "cf31b5cd8b703f1f253ab98d57c424413ebf23f4a7396b475662fe21d5d0f7aa"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "mezura": "1 file could not be parsed, so it is in no figure below.\n\nRun with '--show-faulty-files' for the paths and the reasons.\n\n",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 11574024,
+        "median_file_bytes": 1330
+      },
+      "samples_s": {
+        "thecount": [
+          0.026092133,
+          0.025467952,
+          0.025749059,
+          0.024384278,
+          0.026380073,
+          0.025292212,
+          0.024702926,
+          0.025834931,
+          0.025844479,
+          0.024602978,
+          0.027911999,
+          0.025981276,
+          0.023843954,
+          0.026391786,
+          0.026092144,
+          0.024742841,
+          0.025821536,
+          0.025730284,
+          0.024295872,
+          0.026123202,
+          0.02633011,
+          0.024607196,
+          0.027213058,
+          0.0279444,
+          0.024459129,
+          0.025877791,
+          0.025942232,
+          0.02499249,
+          0.025759249,
+          0.026414077
+        ],
+        "mezura": [
+          0.021185434,
+          0.019400574,
+          0.019455487,
+          0.019003138,
+          0.020087453,
+          0.019694776,
+          0.019235434,
+          0.018778847,
+          0.019420541,
+          0.021392973,
+          0.020042588,
+          0.019298031,
+          0.017978525,
+          0.019089269,
+          0.019665201,
+          0.018315577,
+          0.021553995,
+          0.019479803,
+          0.017226193,
+          0.019752775,
+          0.018776843,
+          0.020624441,
+          0.019272133,
+          0.019204806,
+          0.018766083,
+          0.01926044,
+          0.01898851,
+          0.018529018,
+          0.019014439,
+          0.019028946
+        ],
+        "baseline": [
+          0.025597665,
+          0.025302141,
+          0.026967447,
+          0.02550961,
+          0.027217285,
+          0.027165288,
+          0.025334121,
+          0.026882537,
+          0.026625244,
+          0.025741786,
+          0.026372028,
+          0.027157373,
+          0.025711118,
+          0.025071909,
+          0.02698571,
+          0.025592666,
+          0.025694547,
+          0.026768733,
+          0.026485962,
+          0.025250534,
+          0.026487927,
+          0.025676003,
+          0.025700037,
+          0.026249269,
+          0.025460668,
+          0.025207573,
+          0.02693192,
+          0.025312881,
+          0.025885776,
+          0.02635636
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.025694188233333335,
+          "median_s": 0.0258282335,
+          "stddev_s": 0.0009913315670235104,
+          "min_s": 0.023843954,
+          "max_s": 0.0279444
+        },
+        "mezura": {
+          "mean_s": 0.019384075766666668,
+          "median_s": 0.0192662865,
+          "stddev_s": 0.0009311811969699515,
+          "min_s": 0.017226193,
+          "max_s": 0.021553995
+        },
+        "baseline": {
+          "mean_s": 0.0260900706,
+          "median_s": 0.025813781,
+          "stddev_s": 0.0006957627819541608,
+          "min_s": 0.025071909,
+          "max_s": 0.027217285
+        }
+      },
+      "speedup_over_mezura": 0.754414795697632,
+      "speedup_over_baseline": 1.0154074673646658,
+      "speedup_95pct_bootstrap": {
+        "mezura": {
+          "lower": 0.7405192435688354,
+          "upper": 0.7694991493480817
+        },
+        "baseline": {
+          "lower": 1.000734020893594,
+          "upper": 1.0296929720029404
+        }
+      }
+    },
+    {
+      "name": "llvm-ir",
+      "path": "/home/jimmyhmiller/llvm22/src",
+      "extensions": "ll",
+      "description": "Many LLVM IR tests; Mezura installation has no LLVM IR language",
+      "mezura_supported": false,
+      "commands": {
+        "thecount": [
+          "/tmp/thecount-20260930-bench/thecount-final",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "ll",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ],
+        "baseline": [
+          "/tmp/thecount-20260930-bench/thecount-v17-znver5",
+          "/home/jimmyhmiller/llvm22/src",
+          "--extensions",
+          "ll",
+          "--hidden",
+          "--no-ignore",
+          "--no-config",
+          "--output",
+          "json"
+        ]
+      },
+      "audit": {
+        "totals": {
+          "thecount": {
+            "files": 41539,
+            "lines": 14233646,
+            "code": 3669875,
+            "comments": 9800438,
+            "blanks": 763333
+          },
+          "baseline": {
+            "files": 41539,
+            "lines": 14233646,
+            "code": 3669875,
+            "comments": 9800438,
+            "blanks": 763333
+          }
+        },
+        "comparisons": {},
+        "per_file_json_sha256": {
+          "thecount": "3e36f245ffc45bb977605b25c068338824c492bf6763096a7d547e83cc2d528f",
+          "baseline": "3e36f245ffc45bb977605b25c068338824c492bf6763096a7d547e83cc2d528f"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 632191399,
+        "median_file_bytes": 2627
+      },
+      "full_selection_audit": {
+        "totals": {
+          "thecount": {
+            "files": 41539,
+            "lines": 14233646,
+            "code": 3669875,
+            "comments": 9800438,
+            "blanks": 763333
+          },
+          "baseline": {
+            "files": 41539,
+            "lines": 14233646,
+            "code": 3669875,
+            "comments": 9800438,
+            "blanks": 763333
+          }
+        },
+        "comparisons": {},
+        "per_file_json_sha256": {
+          "thecount": "3e36f245ffc45bb977605b25c068338824c492bf6763096a7d547e83cc2d528f",
+          "baseline": "3e36f245ffc45bb977605b25c068338824c492bf6763096a7d547e83cc2d528f"
+        },
+        "diagnostics": {
+          "thecount": "",
+          "baseline": ""
+        },
+        "current_vs_baseline": {
+          "same_paths": true,
+          "differing_rows": 0,
+          "examples": []
+        },
+        "selected_bytes": 632191399,
+        "median_file_bytes": 2627
+      },
+      "samples_s": {
+        "thecount": [
+          0.043518692,
+          0.045344559,
+          0.045848625,
+          0.045056428,
+          0.044729636,
+          0.044319606,
+          0.043985329,
+          0.043805069,
+          0.044516816,
+          0.045401045,
+          0.043721242,
+          0.045321456,
+          0.045174881,
+          0.045028827,
+          0.045754789,
+          0.044279099,
+          0.043086982,
+          0.045852202,
+          0.046113703,
+          0.045357394,
+          0.044399445,
+          0.046768863,
+          0.046831821,
+          0.045265201,
+          0.046317886,
+          0.045016674,
+          0.045959113,
+          0.044392472,
+          0.045748056,
+          0.04604285
+        ],
+        "baseline": [
+          0.050738293,
+          0.051655365,
+          0.050324276,
+          0.049789241,
+          0.051661335,
+          0.052156585,
+          0.050455001,
+          0.049290385,
+          0.051168701,
+          0.052021401,
+          0.04963918,
+          0.049733457,
+          0.053142035,
+          0.051086136,
+          0.052183445,
+          0.050246551,
+          0.051194399,
+          0.050301614,
+          0.051099771,
+          0.051567389,
+          0.050372486,
+          0.052962067,
+          0.050774551,
+          0.051722079,
+          0.052783242,
+          0.052608664,
+          0.051776301,
+          0.052914488,
+          0.05253215,
+          0.052174368
+        ]
+      },
+      "summary": {
+        "thecount": {
+          "mean_s": 0.045098625366666666,
+          "median_s": 0.045220041,
+          "stddev_s": 0.0009529314049642488,
+          "min_s": 0.043086982,
+          "max_s": 0.046831821
+        },
+        "baseline": {
+          "mean_s": 0.05133583186666667,
+          "median_s": 0.051380893999999996,
+          "stddev_s": 0.0010916446618299898,
+          "min_s": 0.049290385,
+          "max_s": 0.053142035
+        }
+      },
+      "speedup_over_mezura": null,
+      "speedup_over_baseline": 1.1383014770248419,
+      "speedup_95pct_bootstrap": {
+        "baseline": {
+          "lower": 1.1288520051966209,
+          "upper": 1.1476235073175147
+        }
+      }
+    }
+  ],
+  "updated_utc": "2026-10-01T15:51:49.965831+00:00",
+  "bootstrap_method": "paired resampling of rotating rounds; 5000 samples per comparison; seed 12345",
+  "source_commit": "7d43aea",
+  "selection_note": "Mezura extension aliases select whole languages. Extra extensions are excluded explicitly. Full-selection audits are preserved; asymmetric encoding/NUL fixtures and one unsupported TheCount .f08 file are excluded symmetrically before timing, then audited again. JSON and LLVM IR have no Mezura comparison because this installation has no such language definitions."
+}
