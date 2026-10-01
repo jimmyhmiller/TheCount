@@ -363,6 +363,13 @@ the Mac, followed by Linux linking.
 
 ### Hyperfine validation — use this for the current performance claim
 
+These headline results compare a Zen 5 TheCount build against the installed
+Mezura release, with each tool's default worker policy. On this host TheCount
+uses at most 32 combined workers; Mezura defaults to 8 directory producers plus
+64 counting consumers. They are product/default comparisons, not equal worker
+budgets or proof of a win against every possible Mezura tuning. See the fairness
+controls below for matched budgets and a CPU-targeted Mezura build.
+
 Hyperfine **1.20.0** independently validates the same counter binaries, selected
 paths, and counts on `computer.jimmyhmiller.com`. The original “all 14 workloads
 are faster” conclusion does **not** hold reliably: **12 supported workloads have
@@ -519,6 +526,51 @@ Reproduce the compact-layout experiment using
 Worker-control artifacts retain every exact Hyperfine invocation, raw timing,
 warning, and exit code. Raw files remain under
 `/tmp/thecount-20260930-bench/sparse-explanation/` on the Linux host.
+
+### Fairness controls — defaults versus matched worker budgets
+
+The previous comparison did not match worker counts or CPU build targeting.
+Mezura v3.2.0 defaults to 8 walkers and 64 counters on the 32-logical-CPU host;
+TheCount defaults to an adaptive combined pool capped at 32. Mezura's source
+defines these defaults in `mezura-core/src/engine/config.rs`. TheCount's binary
+targets `znver5`; the installed Mezura binary's build provenance is unknown.
+
+Built official Mezura tag v3.2.0, commit
+`6577a40fd2b29e4bb9d1cfb02a316a1932fa1708`, using its locked release profile and
+`RUSTFLAGS="-C target-cpu=znver5" cargo build --release --locked -p mezura`.
+Rust 1.97.1 uses LLVM 22.1.6. Copied Mezura's installed data into an isolated
+`MEZURA_DATA_DIR` shared by stock and rebuilt binaries. Every variant preserves
+its counterpart's exact per-file records; both tools select identical paths and
+physical lines. Keyword counting is disabled using `--hide keywords`.
+
+Hyperfine 1.20.0 measured 120 runs per variant in three rotated blocks, ten
+warmups per command, no shell, warm cache, identical environment wrappers.
+All variants share CPU affinity 0–31. These are three representative workloads,
+not a full sweep or an exhaustive search for optimal thread configurations.
+Three rotations do not balance every one of the seven command positions.
+
+| workload | TheCount default | TheCount fixed 32 | stock Mezura default | Zen 5 Mezura default | fastest tested Zen 5 Mezura with 32 workers |
+|---|---:|---:|---:|---:|---:|
+| Linux | 44.64 ms | 43.81 ms | 68.69 ms | 72.63 ms | 68.23 ms (4 walkers + 28 counters) |
+| C | 8.12 ms | 8.42 ms | 8.60 ms | 8.84 ms | 7.23 ms (16 + 16) |
+| Fortran | 17.79 ms | 17.62 ms | 18.14 ms | 18.56 ms | 13.74 ms (16 + 16) |
+
+Linux still exceeds 50% higher throughput in these controls: 1.529× using our
+default versus the fastest tested Mezura, or 1.558× with both capped at 32.
+However, tuned Mezura beats our fixed-32 configuration by 1.165× on C and
+1.283× on Fortran. Earlier near-parity claims apply to default worker policies.
+Rebuilding Mezura for Zen 5 did not improve its default timings here; that
+does not establish the provenance or optimality of the installed release.
+
+The comparison remains end-to-end: startup, language initialization and JSON
+totals output are included. Mezura's richer line classification differs from
+ours despite equal physical lines. Unsupported JSON and LLVM IR are not used
+to claim wins against Mezura. This evidence establishes no cold-cache result.
+
+[Raw timings, commands, warnings, hashes and audit totals](benchmark/results/linux-workload-fairness-20261001.json)
+are reproducible with `benchmark/audit_fairness.py`. Raw per-file records remain
+under `/tmp/thecount-20260930-bench/fairness/` on the host. Production code has
+not changed during this audit.
 
 ### Varied real Linux workloads — optimized follow-up
 
