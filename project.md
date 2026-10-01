@@ -361,9 +361,93 @@ x86-64 object. Older LLVM parsers on the Linux host could not accept attributes
 emitted by LLVM 22.1.8, so optimization and object emission used that version on
 the Mac, followed by Linux linking.
 
+### Hyperfine validation — use this for the current performance claim
+
+Hyperfine **1.20.0** independently validates the same counter binaries, selected
+paths, and counts on `computer.jimmyhmiller.com`. The original “all 14 workloads
+are faster” conclusion does **not** hold reliably: **12 supported workloads have
+clear wins; the small C corpus and Fortran remain close to parity** across repeats.
+The Linux target does hold: **43.56 vs 68.18 ms, 1.565× throughput**, with all three
+order blocks above 1.55×. JSON and LLVM IR still beat older TheCount, at **1.723×**
+and **1.272×**, respectively; they remain unsupported in this Mezura installation.
+
+| workload | TheCount | reference | throughput ratio | order-block range |
+|---|---:|---:|---:|---:|
+| linux-control | 43.56 ms | 68.18 ms (Mezura) | 1.565× | 1.553–1.588× |
+| llvm-mixed | 39.01 ms | 64.81 ms (Mezura) | 1.662× | 1.642–1.697× |
+| llvm-cpp | 25.59 ms | 45.91 ms (Mezura) | 1.794× | 1.771–1.820× |
+| llvm-python | 15.16 ms | 17.76 ms (Mezura) | 1.171× | 1.170–1.174× |
+| test262-javascript | 11.75 ms | 34.95 ms (Mezura) | 2.975× | 2.947–2.998× |
+| scriptc-web | 10.60 ms | 17.58 ms (Mezura) | 1.658× | 1.615–1.682× |
+| scriptc-c | 7.70 ms | 8.28 ms (Mezura) | 1.076× | 1.070–1.085× |
+| projects-rust | 2.88 ms | 5.81 ms (Mezura) | 2.016× | 2.014–2.018× |
+| projects-mixed | 31.65 ms | 41.97 ms (Mezura) | 1.326× | 1.263–1.380× |
+| abseil-cpp | 1.73 ms | 5.39 ms (Mezura) | 3.114× | 3.080–3.142× |
+| heapster-rust | 0.71 ms | 4.76 ms (Mezura) | 6.737× | 6.661–6.816× |
+| perfbot-json | 2.85 ms | 4.90 ms (older TheCount) | 1.723× | 1.671–1.777× |
+| single-large-c | 4.41 ms | 6.97 ms (Mezura) | 1.579× | 1.425–1.689× |
+| single-large-js | 3.88 ms | 10.44 ms (Mezura) | 2.692× | 2.552–2.918× |
+| llvm-fortran | 17.82 ms | 17.74 ms (Mezura) | 0.995× | 0.958–1.026× |
+| llvm-ir | 40.78 ms | 51.88 ms (older TheCount) | 1.272× | 1.255–1.290× |
+
+A separate longer repeat measured 600 runs per counter on each closest workload:
+
+| workload | TheCount | Mezura | pooled ratio | order-block ratios |
+|---|---:|---:|---:|---|
+| small C corpus | 8.232 ms | 8.248 ms | 1.002× | 0.908×, 1.041×, 1.071× |
+| LLVM Fortran | 17.528 ms | 17.845 ms | 1.018× | 1.015×, 1.021×, 1.019× |
+
+Fortran's first sweep was 0.995× with a conditional interval spanning parity;
+the repeat shows a small 1.8% advantage. That does not support the earlier 9%
+advantage as a reproducible claim. The C repeat spans parity and includes a
+block where Mezura wins. Both deserve further performance investigation; the
+cause of the session/order sensitivity has not been isolated. Production code
+was not changed to favor these measurements.
+
+Method: `--shell=none --output=null --warmup 10 --runs 60`, with three balanced
+command-order blocks (each counter appears once in each position), giving
+**180 runs per counter**. JSON/IR use two balanced blocks, **120 runs per counter**.
+The longer repeat uses `--runs 200`, giving **600 runs per counter**. In total,
+**11,640 timed command executions** are retained. The no-shell mode avoids
+shell startup calibration for these short commands, as described in the
+[Hyperfine documentation](https://github.com/sharkdp/hyperfine).
+
+All 16 audits were completed before timing, with no profiler or audit running
+concurrently. Binary SHA-256 hashes match the earlier survey. Every per-file
+path, language and line bucket still agrees with the previous audit; compare
+semantic records, because raw Mezura JSON includes changing metadata and row
+ordering can vary. Original audit artifact hashes are verified as well.
+
+Raw Hyperfine exports retain all timings, exit codes, user/system times, order,
+load averages, and warnings. Some commands triggered statistical-outlier
+warnings, and one small-project block reported a slow first run despite warmup.
+No runs were dropped. The report includes per-block ratios and independent
+bootstrap resampling stratified by measured blocks. These intervals are
+conditional on those blocks; they do not model arbitrary machine-state changes
+or establish a universal speed guarantee. Cache conditions are warm.
+
+[Full Hyperfine sweep](benchmark/results/linux-workload-hyperfine-20261001.json)
+and [longer repeat](benchmark/results/linux-workload-hyperfine-close-repeat-20261001.json)
+contain the exact invocations and raw exported data. Use
+`benchmark/measure_hyperfine.py` as the validation runner. On the Linux host:
+
+    cd /tmp/thecount-20260930-bench
+    python3 measure_hyperfine.py \
+      --survey linux-workload-updated-20261001.json \
+      --source-audit-dir updated-safe-survey-audits \
+      --output hyperfine-survey.json \
+      --hyperfine /tmp/thecount-20260930-bench/hyperfine-install/bin/hyperfine \
+      --runs 60 --warmup 10
+
+The pinned tool was installed with `cargo install hyperfine --version 1.20.0
+--locked --root /tmp/thecount-20260930-bench/hyperfine-install`. Raw exports and
+audits also remain under `hyperfine-survey-raw/` and `hyperfine-close-repeat-raw/`
+on that host. Earlier Python-timed results below are retained as historical
+crosschecks, not as proof of a reproducible win on every workload.
+
 ### Varied real Linux workloads — optimized follow-up
 
-The final 2026-10-01 build wins **all 14 supported Mezura comparisons** on
+The earlier Python-timed 2026-10-01 sweep showed **14 supported Mezura wins** on
 `computer.jimmyhmiller.com`. JSON and LLVM IR, unsupported by this Mezura
 installation, also beat the older TheCount (`thecount-v17-znver5`). These are
 60 rotating warm-cache trials per binary, three warmups, and per-file audits
