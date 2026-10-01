@@ -45,6 +45,10 @@
 
 (extern sysconf :cc c [i32] (-> i64))
 
+(extern unshare :cc c [i32] (-> i32))
+
+(const CLONE-FILES 1024)
+
 (defstruct ClockTime [(seconds i64) (nanoseconds i64)])
 
 (extern clock_gettime :cc c [i32 (ptr ClockTime)] (-> i32))
@@ -715,6 +719,10 @@
           0))))
 
 (defn reader-worker [(p (ptr i8))] (-> (ptr i8))
+  ;; Workers exchange paths and memory, never file descriptors. A private Linux
+  ;; fd table removes contention on the shared table's open/close lock. Failure
+  ;; (e.g. a restricted container) simply retains the normal shared table.
+  (os-pick (do (unshare (cast i32 CLONE-FILES)) 0) 0)  ; CLONE_FILES
   (let [wa (cast (ptr WorkerArg) p)
         pool (load (field wa pool))
         agg (load (field wa agg))

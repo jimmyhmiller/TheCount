@@ -258,3 +258,34 @@
 
 (deftest c-string-not-continued-by-escaped-backslash
          (same? "C" "char *s = \"a\\\\\n// real comment\nint x;\n"))
+
+;;; Differential syntax coverage across vector boundaries and final tails.
+(deftest c-event-randomized-differential
+         (let [a (malloc-allocator)
+               p (must-alloc [u8] a 1024)
+               alphabet "abc /\"'*\\\n\r\t"
+               (mut seed) 1234567]
+           (for [trial 0 500]
+             (for [j 0 1024]
+               (set! seed (& (+ (* seed 1664525) 1013904223) 4294967295))
+               (store! (index p j)
+                       (slice-get alphabet
+                                  (% (>> seed 16) (slice-len alphabet)))))
+             (same? "C" (slice-new p (% seed 1025))))))
+
+(deftest c-event-plain-lines-all-tails
+         (let [a (malloc-allocator)
+               p (must-alloc [u8] a 256)]
+           (for [j 0 256]
+             (store! (index p j)
+                     (cast u8
+                           (cond (= (% j 7) 0) #\newline
+                                 (= (% j 5) 0) #\a
+                                 :else #\space))))
+           (store! (index p 63) (cast u8 #\newline))
+           (store! (index p 127) (cast u8 #\newline))
+           (for [n 0 257] (same? "C" (slice-new p n)))))
+
+(deftest c-event-comment-to-plain-line
+         (same? "C" "/* comment */\n\ncode\n /* comment */   \n\ncode\n")
+         (same? "C" (spaces-then 60 "/* */\n\n\n\n\n\n\n\nint x;\n")))

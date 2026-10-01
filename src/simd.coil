@@ -145,3 +145,17 @@ ret i64 %r"))
                (return-from :found p))
              (store! (mut p) (+ p 1)))
            len)))
+
+(defn popcount [(x i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [x]
+                     "declare i64 @llvm.ctpop.i64(i64)
+%r = call i64 @llvm.ctpop.i64(i64 $0)
+ret i64 %r"))
+
+(defn clz [(x i64)] (-> i64)
+  (primitive/llvm-ir i64
+                     [x]
+                     "declare i64 @llvm.ctlz.i64(i64, i1)
+%r = call i64 @llvm.ctlz.i64(i64 $0, i1 true)
+ret i64 %r"))

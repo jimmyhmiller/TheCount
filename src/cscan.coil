@@ -1,0 +1,202 @@
+(module thecount.cscan)
+(import "coil.slice" :use *)
+(import "thecount.counter" :use *)
+(import "thecount.lang" :use *)
+(import "thecount.simd" :use *)
+
+(const ST-LINE-COMMENT 4)
+
+;;; Fused physical-line and syntax traversal for non-nesting C-style languages.
+;;; Vectors contain only candidate positions; delimiter recognition still checks
+;;; the original bytes, including pairs split across vector boundaries.
+(defn count-c-events [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
+  (let [data (slice-data bytes)
+        len (slice-len bytes)
+        (mut pos) 0
+        (mut line-start) 0
+        (mut state) ST-NORMAL
+        (mut quote) 0
+        (mut saw-code) false
+        (mut saw-comment) false
+        (mut result) (counts-zero)]
+    (while (< pos len)
+      (let [base pos
+            width (if (<= (+ pos 64) len) 64 (- len pos))
+            (mut newlines) 0
+            (mut syntax) 0
+            (mut events) 0
+            (mut whitespace) 0
+            (mut ws-ready) false]
+        (if (= width 64)
+            (do
+              (set! newlines (v64-eq-mask (index data base) #\newline))
+              (set! syntax
+                    (| (v64-eq-mask (index data base) #\/)
+                       (| (v64-eq-mask (index data base) #\")
+                          (v64-eq-mask (index data base) #\'))))
+              (set! events
+                    (| newlines
+                       (| (v64-eq-mask (index data base) #\/)
+                          (| (v64-eq-mask (index data base) #\*)
+                             (| (v64-eq-mask (index data base) #\")
+                                (v64-eq-mask (index data base) #\'))))))
+              0)
+            (for [j 0 width]
+              (let [b (cast i64 (load (index data (+ base j))))]
+                (when (= b #\newline) (set! newlines (| newlines (<< 1 j))))
+                (when (any (= b #\/) (= b #\") (= b #\'))
+                  (set! syntax (| syntax (<< 1 j))))
+                (when (any (= b #\newline)
+                           (= b #\/)
+                           (= b #\*)
+                           (= b #\")
+                           (= b #\'))
+                  (set! events (| events (<< 1 j))))
+                (when (any (= b 32) (= b 9) (= b 13) (= b 11) (= b 12))
+                  (set! whitespace (| whitespace (<< 1 j)))))))
+        (when (!= width 64) (set! ws-ready true))
+        (while (< pos (+ base width))
+          ;; With no syntax transitions, subtracting non-whitespace bits from
+          ;; newline bits borrows through each nonblank line to its terminator.
+          ;; All line classifications in the vector can then be counted at once.
+          (when (= state ST-NORMAL)
+            (let [start (- pos base)
+                  upcoming (& syntax (<< -1 start))
+                  stop (if (= upcoming 0) width (ctz upcoming))
+                  newlines
+                    (& newlines
+                       (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1))))]
+              (when (= ws-ready false)
+                (set! whitespace (v64-ws-mask (index data base)))
+                (set! ws-ready true))
+              (let [valid
+                      (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1)))
+                    nonws (& valid (& (^ whitespace -1) (^ newlines -1)))
+                    (mut codes) (& newlines (^ (- newlines nonws) -1))]
+                (when (!= newlines 0)
+                  (let [first (& newlines (- 0 newlines))
+                        last (- 63 (clz newlines))]
+                    (when saw-code (set! codes (| codes first)))
+                    (let [comments
+                            (if (and saw-comment (= (& codes first) 0)) 1 0)
+                          lines (popcount newlines)
+                          code (popcount codes)]
+                      (set! (.lines (mut result)) (+ (.lines result) lines))
+                      (set! (.code (mut result)) (+ (.code result) code))
+                      (set! (.comments (mut result))
+                            (+ (.comments result) comments))
+                      (set! (.blank (mut result))
+                            (+ (.blank result) (- (- lines code) comments))))
+                    (set! line-start (+ (+ base last) 1))
+                    (set! saw-code
+                          (if (= last 63)
+                              false
+                              (!= (& nonws (<< -1 (+ last 1))) 0)))
+                    (set! saw-comment false)))
+                (when (= newlines 0) (set! saw-code (or saw-code (!= nonws 0))))
+                (set! pos (+ base stop)))))
+          (when (< pos (+ base width))
+            (let [lo (- pos base)
+                  remaining (& events (<< -1 lo))
+                  hi (if (= remaining 0) width (ctz remaining))
+                  span (& (<< -1 lo) (if (= hi 64) -1 (^ (<< -1 hi) -1)))]
+              (when (all (= state ST-NORMAL) (= saw-code false) (!= span 0))
+                (let [b (cast i64 (load (index data pos)))]
+                  (if (and (!= b 32) (or (< b 9) (> b 13)))
+                      (set! saw-code true)
+                      (do
+                        (when (= ws-ready false)
+                          (set! whitespace (v64-ws-mask (index data base)))
+                          (set! ws-ready true))
+                        (when (!= (& span (^ whitespace -1)) 0)
+                          (set! saw-code true))))))
+              (set! pos (+ base hi))
+              (when (< hi width)
+                (let [b (cast i64 (load (index data pos)))
+                      next
+                        (if (< (+ pos 1) len)
+                            (cast i64 (load (index data (+ pos 1))))
+                            -1)]
+                  (cond (= b #\newline)
+                          (do
+                            (set! (.lines (mut result)) (+ (.lines result) 1))
+                            (cond (or saw-code (= state ST-STRING))
+                                    (set! (.code (mut result))
+                                          (+ (.code result) 1))
+                                  (or saw-comment
+                                      (= state ST-BLOCK)
+                                      (= state ST-LINE-COMMENT))
+                                    (set! (.comments (mut result))
+                                          (+ (.comments result) 1))
+                                  :else
+                                    (set! (.blank (mut result))
+                                          (+ (.blank result) 1)))
+                            (when (= state ST-STRING)
+                              (let [end
+                                      (if (and (> pos line-start)
+                                               (= (cast i64
+                                                        (load (index data
+                                                                     (- pos 1))))
+                                                  13))
+                                          (- pos 1)
+                                          pos)]
+                                (when (= (% (backslashes-before bytes
+                                                                line-start
+                                                                end)
+                                            2)
+                                         0)
+                                  (set! state ST-NORMAL))))
+                            (when (= state ST-LINE-COMMENT)
+                              (set! state ST-NORMAL))
+                            (set! saw-code false)
+                            (set! saw-comment false)
+                            (set! line-start (+ pos 1))
+                            (set! pos (+ pos 1)))
+                        (= state ST-BLOCK)
+                          (do
+                            (set! saw-comment true)
+                            (if (and (= b #\*) (= next #\/))
+                                (do (set! state ST-NORMAL) (set! pos (+ pos 2)))
+                                (set! pos (+ pos 1))))
+                        (= state ST-STRING)
+                          (do
+                            (set! saw-code true)
+                            (when (and (= b quote)
+                                       (= (% (backslashes-before bytes
+                                                                 line-start
+                                                                 pos)
+                                             2)
+                                          0))
+                              (set! state ST-NORMAL))
+                            (set! pos (+ pos 1)))
+                        (= state ST-LINE-COMMENT) (set! pos (+ pos 1))
+                        (and (= b #\/) (= next #\*))
+                          (do
+                            (set! saw-comment true)
+                            (set! state ST-BLOCK)
+                            (set! pos (+ pos 2)))
+                        (and (= b #\/) (= next #\/))
+                          (do
+                            (set! saw-comment true)
+                            (set! state ST-LINE-COMMENT)
+                            (set! pos (+ pos 2)))
+                        (or (= b #\") (= b #\'))
+                          (do
+                            (set! saw-code true)
+                            (when (= (% (backslashes-before bytes
+                                                            line-start
+                                                            pos)
+                                        2)
+                                     0)
+                              (set! quote b)
+                              (set! state ST-STRING))
+                            (set! pos (+ pos 1)))
+                        :else (do (set! saw-code true) (set! pos (+ pos 1)))))))))))
+    (when (< line-start len)
+      (set! (.lines (mut result)) (+ (.lines result) 1))
+      (cond (or saw-code (= state ST-STRING))
+              (set! (.code (mut result)) (+ (.code result) 1))
+            (or saw-comment (= state ST-BLOCK) (= state ST-LINE-COMMENT))
+              (set! (.comments (mut result)) (+ (.comments result) 1))
+            :else (set! (.blank (mut result)) (+ (.blank result) 1))))
+    result))

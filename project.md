@@ -79,6 +79,8 @@ an extension a builtin already claims overrides it.
   directory's languages together (see `dir-row-cmp` / `agg-dir-groups!`).
 - `src/specialize.coil` — compile-time specialization of the counter (below).
 - `src/simd.coil` — vector byte-class bitmasks over `(primitive/llvm-ir …)`.
+- `src/cscan.coil` — fused newline/syntax scanner for non-nesting C-style
+  languages; ordinary line spans are classified together using bit masks.
 
 `coil verify` runs fmt + lint + check + build + tests.
 
@@ -90,9 +92,11 @@ over the line-comment tokens, a loop over the block pairs, a byte-by-byte
 known when thecount is compiled, none of that has to happen at runtime.
 
 `src/specialize.coil` holds a table of 26 such languages and a MACRO that walks
-it at compile time, emitting one scanner per row (~6,000 lines of generated
-Coil) in which dead states are deleted, every delimiter comparison is folded to
-a literal byte compare, and state a language cannot vary is not stored. The
+it at compile time, emitting a scanner entry point per row. Non-nesting C-style rows with exactly
+`//`, `/* */`, and single/double quotes select the shared fused scanner; other
+rows generate scanners in which dead states are deleted, every delimiter
+comparison is folded to a literal byte compare, and state a language cannot
+vary is not stored. The
 registry keeps a `counters` array parallel to `specs`; entries default to
 `count-bytes` and `add-specialized!` swaps in the generated scanner. Everything
 else — every user-registered language from the config file — keeps running
@@ -293,6 +297,69 @@ is byte-for-byte identical to the earlier audited output. Raw
 [samples](benchmark/results/linux-corpus-x86-20261001-optimized-znver5.json)
 include commands, binary hashes, and every timing. This build uses `coil emit-ir`
 followed by `zig cc -O3 -march=znver5` and is specific to the tested CPU.
+
+
+### Linux target reached: 1.53× Mezura throughput
+
+On 2026-10-01, 60 rotating warm-cache trials on `computer.jimmyhmiller.com`
+(Ryzen AI Max+ 395), with five warmups per binary, measured:
+
+| binary | mean ± sample SD |
+|---|---:|
+| TheCount, Zen 5 optimized | **44.61 ± 1.79 ms** |
+| Mezura 3.2.0 | **68.40 ± 3.36 ms** |
+| prior Zen 5 TheCount | 55.64 ± 2.61 ms |
+| current generic x86-64 TheCount | 54.32 ± 2.10 ms |
+
+The optimized result is **1.533× throughput** (53.3% faster, 34.8% less elapsed
+time) than Mezura. A paired bootstrap over the rotating rounds gives a 95%
+interval of 1.508–1.558×. The generic build does not meet the 1.5× target.
+[Raw samples and build metadata](benchmark/results/linux-corpus-x86-20261001-private-fds.json)
+include all commands and binary hashes. Run `benchmark/measure_linux.py --help`
+for the reproducible timing harness.
+
+Two changes account for the improvement:
+
+- Each Linux worker calls `unshare(CLONE_FILES)` before opening files. Workers
+  exchange paths and memory, never descriptors, so they can use private
+  descriptor tables and avoid contention on a shared table. If the kernel
+  rejects the call, the worker continues with its shared table. macOS skips
+  the call. See the [Linux API documentation](https://man7.org/linux/man-pages/man2/unshare.2.html).
+- The C-family scanner processes newlines and syntax candidates together. In
+  ordinary spans, subtracting non-whitespace bits from newline bits identifies
+  nonblank line endings; population counts classify several lines together.
+  Delimiter and quote transitions still inspect the original bounded buffer,
+  including tokens crossing vector boundaries. Other language scanners retain
+  their existing behavior.
+
+A separate 60-round rotating
+[ablation](benchmark/results/linux-corpus-x86-20261001-private-fds-ablation.json)
+measured the prior optimized scanner at 54.83 ms, private descriptor tables
+alone at 45.82 ms, and both changes at 44.25 ms; Mezura was 69.14 ms.
+
+All 63,738 selected paths and 36,018,801 physical lines match Mezura, and the
+entire per-file JSON is byte-identical to the previous audited TheCount output.
+The existing 213 classification differences (160 Python, 45 shell, 8 Perl)
+remain. Generic and optimized binaries emit identical per-file JSON. Injecting
+`EPERM` into every `unshare` call with `strace` also produces identical totals.
+`coil verify` passes all 100 tests, including randomized differential syntax
+cases and every partial vector tail length.
+
+The optimized build uses LLVM 22.1.8 (matching the emitted IR). Generate a Linux
+ELF object on either platform:
+
+    coil emit-ir src/main.coil --target x86_64-unknown-linux-gnu > thecount.ll
+    opt -O3 thecount.ll -o thecount.bc
+    llc -O3 -mcpu=znver5 -relocation-model=pic -filetype=obj thecount.bc -o thecount.o
+
+Then link on Linux (the measured build used Zig 0.16.0):
+
+    zig cc thecount.o -o thecount -lpthread -lm -ldl
+
+`znver5` is specific to the tested CPU. Use `-mcpu=x86-64` to emit a portable
+x86-64 object. Older LLVM parsers on the Linux host could not accept attributes
+emitted by LLVM 22.1.8, so optimization and object emission used that version on
+the Mac, followed by Linux linking.
 
 ## Known divergences from scc
 

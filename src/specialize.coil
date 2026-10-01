@@ -37,6 +37,7 @@
 (import "thecount.lang" :use *)
 (import "thecount.counter" :use *)
 (import "thecount.simd" :use *)
+(import "thecount.cscan" :use *)
 
 ;;; ---------------------------------------------------------------------------
 ;;; The table. Same seven token strings `add-builtin!` takes, so a row here reads
@@ -596,101 +597,111 @@
       (primitive/error "specialize: a table row may declare at most two multiline-string delimiters"))
     (when (!= (% (ct-tok-count blocks) 2) 0)
       (primitive/error "specialize: block tokens must come in start/end pairs"))
-    `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec))
-                                                                              (bytes (slice u8))] (-> Counts)
-       (let [len (slice-len bytes)
-             data (slice-data bytes)
-             ~@(if has-hot `(cls-tab (load (field spec classes))) `()) (mut i)
-             0 ~@(if has-state `((mut state) ST-NORMAL) `())
-             ~@(if (and has-bl nested) `((mut bdepth) 0) `())
-               ~@(if (> n-q 1) `((mut qch) 0) `())
-             ~@(if (> n-mq 1) `((mut mqi) 0) `())
-               ~@(if has-mq `((mut mqdoc) false) `())
-             (mut n-lines) 0
-             (mut n-blank) 0
-             (mut n-comments) 0
-             (mut n-code) 0]
-         (while (< i len)
-           (let [le (find-newline data i len)
-                 (mut pos) (load i)
-                 (mut saw-code) false
-                 (mut saw-comment) false]
-             (while (< pos le)
-               ~(if has-state
-                    `(cond ~@(if has-bl
-                                 `((= state ST-BLOCK) ~(gen-block-arm blocks
-                                                                      nested))
-                                 `())
-                             ~@(if has-q
-                                   `((= state ST-STRING) ~(gen-string-arm quotes))
-                                   `())
-                           ~@(if has-mq
-                                 `((= state ST-MSTRING) ~(gen-mstring-arm mqs))
-                                 `())
-                             true
-                           ~(gen-normal-arm has-hot
-                                            lcs
-                                            blocks
-                                            quotes
-                                            mqs
-                                            (gen-dispatch lcs
-                                                          blocks
-                                                          nested
-                                                          quotes
-                                                          mqs)))
-                    (gen-normal-arm has-hot lcs blocks quotes mqs `0)))
-             (store! (mut n-lines) (+ n-lines 1))
-             (cond (= saw-code true) (store! (mut n-code) (+ n-code 1))
-                   (= saw-comment true)
-                     (store! (mut n-comments) (+ n-comments 1))
-                   ~@(if has-bl
-                         `((= state ST-BLOCK) (store! (mut n-comments)
-                                                      (+ n-comments 1)))
-                         `())
-                     ~@(if has-q
-                           `((= state ST-STRING) (store! (mut n-code)
-                                                         (+ n-code 1)))
-                           `())
-                   ~@(if has-mq
-                         `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
-                                                                             (+ n-comments
-                                                                                1))
-                             (= state ST-MSTRING)
-                             (store! (mut n-code) (+ n-code 1)))
-                         `())
-                     true
-                   (store! (mut n-blank) (+ n-blank 1)))
-             ;; Some languages allow quoted strings across physical newlines.
-             ;; Others require a trailing continuation slash.
-             ~@(if has-q
-                   `((when (= state ST-STRING)
-                       (let [e
-                               (if (all (> le i)
-                                        (= (cast i64
-                                                 (load (index data (- le 1))))
-                                           #\u0D))
-                                   (- le 1)
-                                   le)]
-                         (when (and (= (quote-byte? ~(if (> n-q 1)
-                                                         `(load qch)
-                                                         `~(cast i64
-                                                                 (slice-get quotes
-                                                                            0)))
-                                                    (load (field spec
-                                                                 multiline-quote-chars)))
-                                       false)
-                                    (= (% (backslashes-before bytes i e) 2) 0))
-                           (store! (mut state) ST-NORMAL)
-                           0)
-                         0)
-                       0))
-                   `())
-             (store! (mut i) (+ le 1))))
-         (Counts
-           :lines n-lines
-           :blank n-blank
-           :comments n-comments
-           :code n-code)))))
+    (if (all (= lcs "//")
+             (= blocks "/* */")
+             (= quotes "\"'")
+             (= mqs "")
+             (= nested false))
+        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec))
+                                                                                  (bytes (slice u8))] (-> Counts)
+           (count-c-events spec bytes))
+        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec))
+                                                                                  (bytes (slice u8))] (-> Counts)
+           (let [len (slice-len bytes)
+                 data (slice-data bytes)
+                 ~@(if has-hot `(cls-tab (load (field spec classes))) `())
+                   (mut i)
+                 0 ~@(if has-state `((mut state) ST-NORMAL) `())
+                 ~@(if (and has-bl nested) `((mut bdepth) 0) `())
+                   ~@(if (> n-q 1) `((mut qch) 0) `())
+                 ~@(if (> n-mq 1) `((mut mqi) 0) `())
+                   ~@(if has-mq `((mut mqdoc) false) `())
+                 (mut n-lines) 0
+                 (mut n-blank) 0
+                 (mut n-comments) 0
+                 (mut n-code) 0]
+             (while (< i len)
+               (let [le (find-newline data i len)
+                     (mut pos) (load i)
+                     (mut saw-code) false
+                     (mut saw-comment) false]
+                 (while (< pos le)
+                   ~(if has-state
+                        `(cond ~@(if has-bl
+                                     `((= state ST-BLOCK) ~(gen-block-arm blocks
+                                                                          nested))
+                                     `())
+                                 ~@(if has-q
+                                       `((= state ST-STRING) ~(gen-string-arm quotes))
+                                       `())
+                               ~@(if has-mq
+                                     `((= state ST-MSTRING) ~(gen-mstring-arm mqs))
+                                     `())
+                                 true
+                               ~(gen-normal-arm has-hot
+                                                lcs
+                                                blocks
+                                                quotes
+                                                mqs
+                                                (gen-dispatch lcs
+                                                              blocks
+                                                              nested
+                                                              quotes
+                                                              mqs)))
+                        (gen-normal-arm has-hot lcs blocks quotes mqs `0)))
+                 (store! (mut n-lines) (+ n-lines 1))
+                 (cond (= saw-code true) (store! (mut n-code) (+ n-code 1))
+                       (= saw-comment true)
+                         (store! (mut n-comments) (+ n-comments 1))
+                       ~@(if has-bl
+                             `((= state ST-BLOCK) (store! (mut n-comments)
+                                                          (+ n-comments 1)))
+                             `())
+                         ~@(if has-q
+                               `((= state ST-STRING) (store! (mut n-code)
+                                                             (+ n-code 1)))
+                               `())
+                       ~@(if has-mq
+                             `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
+                                                                                 (+ n-comments
+                                                                                    1))
+                                 (= state ST-MSTRING)
+                                 (store! (mut n-code) (+ n-code 1)))
+                             `())
+                         true
+                       (store! (mut n-blank) (+ n-blank 1)))
+                 ;; Some languages allow quoted strings across physical newlines.
+                 ;; Others require a trailing continuation slash.
+                 ~@(if has-q
+                       `((when (= state ST-STRING)
+                           (let [e
+                                   (if (all (> le i)
+                                            (= (cast i64
+                                                     (load (index data (- le 1))))
+                                               #\u0D))
+                                       (- le 1)
+                                       le)]
+                             (when (and (= (quote-byte? ~(if (> n-q 1)
+                                                             `(load qch)
+                                                             `~(cast i64
+                                                                     (slice-get quotes
+                                                                                0)))
+                                                        (load (field spec
+                                                                     multiline-quote-chars)))
+                                           false)
+                                        (= (% (backslashes-before bytes i e) 2)
+                                           0))
+                               (store! (mut state) ST-NORMAL)
+                               0)
+                             0)
+                           0))
+                       `())
+                 (store! (mut i) (+ le 1))))
+             (Counts
+               :lines n-lines
+               :blank n-blank
+               :comments n-comments
+               :code n-code))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Table accessors, so thecount.registry can register these rows without
