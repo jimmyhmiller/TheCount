@@ -445,6 +445,81 @@ audits also remain under `hyperfine-survey-raw/` and `hyperfine-close-repeat-raw
 on that host. Earlier Python-timed results below are retained as historical
 crosschecks, not as proof of a reproducible win on every workload.
 
+### Why small C and Fortran are close to parity
+
+These commands select a small subset from much larger mixed trees. Their
+counting work is limited, but they still visit the unrelated directories and
+inspect their entries. Fresh measurements on the unchanged binaries show:
+
+| workload | directories traversed | non-directory entries | selected files | selected bytes |
+|---|---:|---:|---:|---:|
+| small C | 4,097 | 19,276 | 1,490 (7.7%) | 40.9 MB |
+| LLVM Fortran | 15,103 | 160,010 | 3,061 (1.9%) | 11.6 MB |
+
+“Small C” refers to the selected corpus, not individual files: its median file
+is 18.3 KB, versus 5.4 KB in the Linux control. Fortran's median is 1.3 KB.
+The Linux control selects 1.37 GB, giving the accelerated read/count pipeline
+much more work over which to amortize traversal and startup.
+
+Twenty fresh instrumented runs put directory enumeration at a median **62% for
+C and 90% for Fortran** of accumulated walk/I/O/scan time. These are overlapping
+worker-phase times, not wall-time percentages; they exclude some queue/startup
+and other overhead. A walk selecting no files still costs about **3.84 ms** for
+the C tree and **16.91 ms** for LLVM. That control also changes lookup tables and
+worker growth, so it is evidence of traversal cost, not an exact subtractive
+breakdown of the real command.
+
+As a stronger content-preserving diagnostic, the same selected contents were
+hard-linked (or copied across filesystems) into one compact directory. Every
+per-file language and line bucket was verified against the original records;
+TheCount and Mezura still have matching paths and physical line workloads.
+Five rotated-order Hyperfine blocks × 60 runs measured:
+
+| layout | C: TheCount / Mezura | Fortran: TheCount / Mezura |
+|---|---:|---:|
+| original mixed tree | 7.01 / 8.54 ms | 16.88 / 18.10 ms |
+| compact selected-only tree | 3.22 / 6.89 ms | 2.76 / 7.12 ms |
+
+The compact comparisons give **2.14× and 2.58× throughput**. Removing the
+surrounding traversal and changing batching/locality exposes the counting
+pipeline's advantage. This is an end-to-end layout control, not a pure scanner
+microbenchmark and not a replacement for the original real workloads. The new
+original-tree means also differ from earlier sweeps, reinforcing the observed
+session sensitivity.
+
+There is a specific pool-sizing contribution. Fortran's selected files occupy
+only **46 directories**, including 802 in one directory. Our heuristic reacts
+to those dense batches by growing to **32 workers**, then retains them through
+the remaining sparse traversal. All 20 phase samples used 32 workers. C has
+one 174-file directory: 19 of 20 samples used 32 workers and one used 26.
+For comparison, Python's 2,631 files occupy **1,518 directories**, with at most
+65 per directory; twenty fresh samples used only **10–20 workers**.
+
+A matched-wrapper Hyperfine worker-count control (five rotated-order blocks ×
+40 runs; 200 per variant) isolates the pool-size effect on the same commands:
+
+| workload | default adaptive | fixed 8 | fixed 16 | fixed 32 | Mezura |
+|---|---:|---:|---:|---:|---:|
+| small C | 8.70 ms | 6.61 ms | 5.89 ms | 8.47 ms | 8.64 ms |
+| LLVM Fortran | 17.78 ms | 16.74 ms | 15.84 ms | 17.68 ms | 18.12 ms |
+
+Fixed 16 beats fixed 32 in every order block on both workloads. The control uses
+`/usr/bin/env` consistently for every variant, unsets phase timing and inherited
+worker settings, and verifies identical totals for all worker overrides. It
+supports excess pool capacity as a contributor; it does not separate thread
+creation, queue contention, cache effects, and operating-system scheduling.
+
+Production code is unchanged. The evidence is saved in
+[layout and phase controls](benchmark/results/linux-workload-sparse-explanation-20261001.json),
+[selected-directory layout and Python phase samples](benchmark/results/linux-workload-sparse-layout-20261001.json),
+and [worker-count controls](benchmark/results/linux-workload-sparse-worker-controls-20261001.json).
+Reproduce the compact-layout experiment using
+`benchmark/explain_sparse_workloads.py --survey <survey.json> --audit-dir
+<hyperfine-survey-raw> --directory <new-directory> --hyperfine <hyperfine>`.
+Worker-control artifacts retain every exact Hyperfine invocation, raw timing,
+warning, and exit code. Raw files remain under
+`/tmp/thecount-20260930-bench/sparse-explanation/` on the Linux host.
+
 ### Varied real Linux workloads — optimized follow-up
 
 The earlier Python-timed 2026-10-01 sweep showed **14 supported Mezura wins** on
