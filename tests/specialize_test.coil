@@ -25,8 +25,8 @@
         (mut found) -1]
     (while (and (< k n) (= found -1))
       (when (= (spec-row-name k) name)
-        (store! (mut found) k))
-      (store! (mut k) (+ k 1)))
+        (set! (mut found) k))
+      (set! (mut k) (+ k 1)))
     (load found)))
 
 ;;; The LangSpec for a table row, built through the ordinary runtime path.
@@ -49,21 +49,21 @@
     (let [spec-p (row-spec-ptr i)
           generic (count-bytes spec-p src)
           special (call-ptr (spec-row-counter i) spec-p src)]
-      (assert-eq (load (field special lines)) (load (field generic lines)))
-      (assert-eq (load (field special blank)) (load (field generic blank)))
-      (assert-eq (load (field special comments))
-                 (load (field generic comments)))
-      (assert-eq (load (field special code)) (load (field generic code)))
+      (assert-eq (.lines special) (.lines generic))
+      (assert-eq (.blank special) (.blank generic))
+      (assert-eq (.comments special)
+                 (.comments generic))
+      (assert-eq (.code special) (.code generic))
       0)))
 
 ;;; Exercise hot-token positions at both sides of a 64-byte vector boundary.
 (defn spaces-then [(n i64) (suffix (slice u8))] (-> (slice u8))
   (let [a (malloc-allocator)
-        total (+ n (slice-len suffix))
+        total (+ n (len suffix))
         p (must-alloc [u8] a total)]
-    (for [k 0 n] (store! (index p k) (cast u8 #\space)))
-    (for [k 0 (slice-len suffix)]
-      (store! (index p (+ n k)) (slice-get suffix k)))
+    (for [k 0 n] (set! (index p k) (cast u8 #\space)))
+    (for [k 0 (len suffix)]
+      (set! (index p (+ n k)) (slice-get suffix k)))
     (slice-new p total)))
 
 (deftest c-hot-token-around-64-byte-boundary
@@ -268,22 +268,22 @@
            (for [trial 0 500]
              (for [j 0 1024]
                (set! seed (& (+ (* seed 1664525) 1013904223) 4294967295))
-               (store! (index p j)
-                       (slice-get alphabet
-                                  (% (>> seed 16) (slice-len alphabet)))))
+               (set! (index p j)
+                     (slice-get alphabet
+                                (% (>> seed 16) (slice-len alphabet)))))
              (same? "C" (slice-new p (% seed 1025))))))
 
 (deftest c-event-plain-lines-all-tails
          (let [a (malloc-allocator)
                p (must-alloc [u8] a 256)]
            (for [j 0 256]
-             (store! (index p j)
-                     (cast u8
-                           (cond (= (% j 7) 0) #\newline
-                                 (= (% j 5) 0) #\a
-                                 :else #\space))))
-           (store! (index p 63) (cast u8 #\newline))
-           (store! (index p 127) (cast u8 #\newline))
+             (set! (index p j)
+                   (cast u8
+                         (cond (= (% j 7) 0) #\newline
+                               (= (% j 5) 0) #\a
+                               :else #\space))))
+           (set! (index p 63) (cast u8 #\newline))
+           (set! (index p 127) (cast u8 #\newline))
            (for [n 0 257] (same? "C" (slice-new p n)))))
 
 (deftest c-event-comment-to-plain-line

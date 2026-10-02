@@ -4,7 +4,6 @@
 (import "coil.arraylist" :use *)
 (import "coil.str" :use *)
 (import "coil.fs" :use *)
-(import "coil.primitive" :as primitive)
 (import "thecount.util" :use *)
 
 ;;; One parsed .gitignore line.
@@ -22,20 +21,20 @@
 
 ;;; Glob match over bytes: * (within segment), ? (single non-/), ** (across /).
 (defn glob-rec [(pat (slice u8)) (s (slice u8)) (pi i64) (si i64)] (-> bool)
-  (let [pl (slice-len pat)
-        sl (slice-len s)]
+  (let [pl (len pat)
+        sl (len s)]
     (if (= pi pl)
         (= si sl)
-        (let [pc (cast i64 (slice-get pat pi))]
+        (let [pc (cast i64 (get pat pi))]
           (cond ;; ** — matches anything, including slashes
                 (and (= pc #\*)
                      (and (< (+ pi 1) pl)
-                          (= (cast i64 (slice-get pat (+ pi 1))) #\*)))
+                          (= (cast i64 (get pat (+ pi 1))) #\*)))
                   (let [pj (+ pi 2)
                         ;; "a/**/b" — the zero-directories case skips the following '/'
                         zero
                           (if (and (< pj pl)
-                                   (= (cast i64 (slice-get pat pj)) #\/))
+                                   (= (cast i64 (get pat pj)) #\/))
                               (glob-rec pat s (+ pj 1) si)
                               false)]
                     (if (= zero true)
@@ -44,8 +43,8 @@
                               (mut hit) false]
                           (while (and (= hit false) (<= k sl))
                             (when (glob-rec pat s pj k)
-                              (store! (mut hit) true))
-                            (store! (mut k) (+ k 1)))
+                              (set! (mut hit) true))
+                            (set! (mut k) (+ k 1)))
                           (= hit true))))
                 ;; * — any run of non-/ bytes
                 (= pc #\*)
@@ -54,18 +53,18 @@
                         (mut stop) false]
                     (while (and (= hit false) (and (= stop false) (<= k sl)))
                       (when (glob-rec pat s (+ pi 1) k)
-                        (store! (mut hit) true))
-                      (when (and (< k sl) (= (cast i64 (slice-get s k)) #\/))
-                        (store! (mut stop) true))
-                      (store! (mut k) (+ k 1)))
+                        (set! (mut hit) true))
+                      (when (and (< k sl) (= (cast i64 (get s k)) #\/))
+                        (set! (mut stop) true))
+                      (set! (mut k) (+ k 1)))
                     (= hit true))
                 ;; ? — one non-/ byte
                 (= pc #\?)
-                  (if (and (< si sl) (!= (cast i64 (slice-get s si)) #\/))
+                  (if (and (< si sl) (!= (cast i64 (get s si)) #\/))
                       (glob-rec pat s (+ pi 1) (+ si 1))
                       false)
                 :else
-                  (if (and (< si sl) (= (cast i64 (slice-get s si)) pc))
+                  (if (and (< si sl) (= (cast i64 (get s si)) pc))
                       (glob-rec pat s (+ pi 1) (+ si 1))
                       false))))))
 
@@ -79,70 +78,72 @@
     (for source-line
       (iter lines)
       (let [raw (str-trim source-line)]
-        (when (and (> (slice-len raw) 0)
-                   (!= (cast i64 (slice-get raw 0)) #\u23))  ; '#'
+        (when (and (> (len raw) 0)
+                   (!= (cast i64 (get raw 0)) #\u23))  ; '#'
           (let [(mut p) raw
                 (mut neg) false]
-            (when (= (cast i64 (slice-get p 0)) #\u21)  ; '!'
-              (store! (mut neg) true)
-              (store! (mut p) (subslice p 1 (slice-len p)))
+            (when (= (cast i64 (get p 0)) #\u21)  ; '!'
+              (set! (mut neg) true)
+              (set! (mut p) (subslice p 1 (slice-len p)))
               0)
             (let [(mut dir-only) false]
-              (let [pn (slice-len p)]
-                (when (and (> pn 0) (= (cast i64 (slice-get p (- pn 1))) #\/))
-                  (store! (mut dir-only) true)
-                  (store! (mut p) (subslice p 0 (- pn 1)))
+              (let [pn (len p)]
+                (when (and (> pn 0) (= (cast i64 (get p (- pn 1))) #\/))
+                  (set! (mut dir-only) true)
+                  (set! (mut p) (subslice p 0 (- pn 1)))
                   0))
               ;; leading slash anchors; inner slash also anchors
               (let [(mut anchored) false]
-                (when (and (> (slice-len p) 0)
-                           (= (cast i64 (slice-get p 0)) #\/))
-                  (store! (mut anchored) true)
-                  (store! (mut p) (subslice p 1 (slice-len p)))
+                (when (and (> (len p) 0)
+                           (= (cast i64 (get p 0)) #\/))
+                  (set! (mut anchored) true)
+                  (set! (mut p) (subslice p 1 (slice-len p)))
                   0)
-                (let [pn2 (slice-len p)]
+                (let [pn2 (len p)]
                   (for [j 0 pn2]
-                    (when (= (cast i64 (slice-get p j)) #\/)
-                      (store! (mut anchored) true))))
-                (when (> (slice-len p) 0)
-                  (let [pn3 (slice-len p)
+                    (when (= (cast i64 (get p j)) #\/)
+                      (set! (mut anchored) true))))
+                (when (> (len p) 0)
+                  (let [pn3 (len p)
                         (mut lit) true]
                     (for [q 0 pn3]
-                      (let [c (cast i64 (slice-get p q))]
-                        (when (or (= c #\*) (or (= c #\?) (= c #\u5B)))
-                          (store! (mut lit) false)
+                      (let [c (cast i64 (get p q))]
+                        (when (or (= c #\*) (= c #\?) (= c #\u5B))
+                          (set! (mut lit) false)
                           0)))
-                    (al-push! rules
-                              (IgnoreRule
-                                :pat p
-                                :negated neg
-                                :dir-only dir-only
-                                :anchored anchored
-                                :literal lit)))
+                    (push! rules
+                           (IgnoreRule
+                             :pat p
+                             :negated neg
+                             :dir-only dir-only
+                             :anchored anchored
+                             :literal lit)))
                   0)))))))
     rules))
 
-;;; Load dir/.gitignore into an IgnoreCtx; rules list is empty when absent.
-(defn load-ignore-ctx [(a (dyn Allocator)) (dir (slice u8))] (-> IgnoreCtx)
+;;; Load dir/`file` (gitignore syntax) into an IgnoreCtx; rules list is empty
+;;; when absent.
+(defn load-ignore-ctx [(a (dyn Allocator)) (dir (slice u8)) (file (slice u8))] (-> IgnoreCtx)
   (let [path
-          (if (= (slice-len dir) 0)
-              ".gitignore"
-              (match (str-concat a dir "/.gitignore")
-                (Some [s] s)
-                (None [] ".gitignore")))
+          (if (= (len dir) 0)
+              file
+              (match (str-concat a dir "/")
+                (Some [d] (match (str-concat a d file)
+                            (Some [s] s)
+                            (None [] file)))
+                (None [] file)))
         (mut ctx) (zeroed IgnoreCtx)]
     (set! (.base (mut ctx)) dir)
     (try (let [src
                  (try-or! (read-file a path)
-                          (store! (field (mut ctx) rules)
-                                  (new-list a IgnoreRule)))]
-           (store! (field (mut ctx) rules) (parse-ignore a src))))
+                          (set! (.rules (mut ctx)) (new-list a IgnoreRule)))]
+           (set! (.rules (mut ctx)) (parse-ignore a src))))
     ctx))
 
 (defn basename-of [(path (slice u8))] (-> (slice u8))
   (subslice path
             (+ (bytes-last-index-of path (cast u8 #\/)) 1)
-            (slice-len path)))
+            (len path)))
 
 ;;; Is `path` (with basename `name`) ignored by the ctx stack?
 ;;; Rules apply outermost-first, in file order; the LAST matching rule wins,
@@ -151,26 +152,26 @@
                 (path (slice u8))
                 (name (slice u8))
                 (is-dir bool)] (-> bool)
-  (let [nc (al-len (load ctxs))
+  (let [nc (len (load ctxs))
         (mut ign) false]
     (for [c 0 nc]
       (let [ctx (index (slice-data (al-slice (load ctxs))) c)
-            base (load (field ctx base))
-            bl (slice-len base)
-            rel (if (= bl 0) path (subslice path (+ bl 1) (slice-len path)))
+            base (.base ctx)
+            bl (len base)
+            rel (if (= bl 0) path (subslice path (+ bl 1) (len path)))
             rules (load (field ctx rules))
-            nr (al-len (load rules))]
+            nr (len (load rules))]
         (for [ri 0 nr]
           (let [rule (index (slice-data (al-slice (load rules))) ri)]
-            (when (or (= is-dir true) (= (load (field rule dir-only)) false))
-              (let [pat (load (field rule pat))
-                    target (if (= (load (field rule anchored)) true) rel name)
+            (when (or (= is-dir true) (= (.dir-only rule) false))
+              (let [pat (.pat rule)
+                    target (if (= (.anchored rule) true) rel name)
                     hit
-                      (if (= (load (field rule literal)) true)
+                      (if (= (.literal rule) true)
                           (= pat target)
                           (glob-match pat target))]
                 (when (= hit true)
-                  (store! (mut ign) (= (load (field rule negated)) false))
+                  (set! (mut ign) (= (load (field rule negated)) false))
                   0))
               0)))))
     (= ign true)))

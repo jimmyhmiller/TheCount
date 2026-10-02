@@ -257,10 +257,7 @@ run on the same corpus had Mezura at 2,502 ms and TheCount at 1,747 ms. The
 over to the quiet Linux host. All three counters reported exactly 63,726
 files and 36,017,734 lines on macOS, and 63,738 files and 36,018,801 lines on
 Linux. The Linux checkout preserves twelve case-colliding names that the Mac
-filesystem does not. The raw [Mac](benchmark/results/linux-corpus-macos-run.json)
-and [Linux](benchmark/results/linux-corpus-x86-run.json) linebench records are
-included for review.
-
+filesystem does not.
 After the counting fixes, a per-file audit of the macOS checkout confirms all
 63,726 paths and all 36,017,734 physical lines match Mezura exactly. Of those
 files, 210 still differ in code/comment/blank classification: 160 Python files
@@ -283,19 +280,13 @@ regression in the current build without identifying which change caused it.
 the older binary. The new reader's extra EOF check accounts for roughly one
 additional read per selected file and is a likely contributor to the slowdown;
 the traced syscall times are not comparable to the untraced benchmark times.
-Raw [full-run](benchmark/results/linux-corpus-x86-20260930.json),
-[worker-count](benchmark/results/linux-corpus-x86-workers-20260930.json), and
-[extension-subset](benchmark/results/linux-corpus-x86-subsets-20260930.json)
-measurements include individual samples and commands.
 
 On 2026-10-01, a scanner optimization pass reduced the strict Linux time to
 **55.30 ± 2.38 ms** in 30 alternating warm-cache trials with a Zen 5 optimized
 LLVM build. Mezura averaged **68.46 ± 3.37 ms** in the same trials, making
 TheCount **1.24× faster**. The target of 1.30× has not been reached. The generic
 Linux build is about 57–58 ms on this host. The optimized binary's per-file JSON
-is byte-for-byte identical to the earlier audited output. Raw
-[samples](benchmark/results/linux-corpus-x86-20261001-optimized-znver5.json)
-include commands, binary hashes, and every timing. This build uses `coil emit-ir`
+is byte-for-byte identical to the earlier audited output. This build uses `coil emit-ir`
 followed by `zig cc -O3 -march=znver5` and is specific to the tested CPU.
 
 
@@ -314,8 +305,7 @@ On 2026-10-01, 60 rotating warm-cache trials on `computer.jimmyhmiller.com`
 The optimized result is **1.533× throughput** (53.3% faster, 34.8% less elapsed
 time) than Mezura. A paired bootstrap over the rotating rounds gives a 95%
 interval of 1.508–1.558×. The generic build does not meet the 1.5× target.
-[Raw samples and build metadata](benchmark/results/linux-corpus-x86-20261001-private-fds.json)
-include all commands and binary hashes. Run `benchmark/measure_linux.py --help`
+Run `benchmark/measure_linux.py --help`
 for the reproducible timing harness.
 
 Two changes account for the improvement:
@@ -332,9 +322,7 @@ Two changes account for the improvement:
   including tokens crossing vector boundaries. Other language scanners retain
   their existing behavior.
 
-A separate 60-round rotating
-[ablation](benchmark/results/linux-corpus-x86-20261001-private-fds-ablation.json)
-measured the prior optimized scanner at 54.83 ms, private descriptor tables
+A separate 60-round rotating ablation measured the prior optimized scanner at 54.83 ms, private descriptor tables
 alone at 45.82 ms, and both changes at 44.25 ms; Mezura was 69.14 ms.
 
 All 63,738 selected paths and 36,018,801 physical lines match Mezura, and the
@@ -437,8 +425,7 @@ source is unchanged. An attempted cross-target static library build exposed an
 empty-archive success bug in Coil, reported in its `coil-bugs` pad; the measured
 executable uses ordinary release with a proper cross linker.
 
-[Full results, hashes, build provenance, commands, per-block ratios and raw timings](benchmark/results/linux-workload-build-comparison-20261001.json)
-and [reproduction runner](benchmark/compare_builds.py) retain the evidence.
+The [reproduction runner](benchmark/compare_builds.py) regenerates the evidence.
 Raw per-file records and Hyperfine exports are under
 `/tmp/thecount-20260930-bench/build-comparison/` on the Linux host.
 
@@ -514,9 +501,7 @@ bootstrap resampling stratified by measured blocks. These intervals are
 conditional on those blocks; they do not model arbitrary machine-state changes
 or establish a universal speed guarantee. Cache conditions are warm.
 
-[Full Hyperfine sweep](benchmark/results/linux-workload-hyperfine-20261001.json)
-and [longer repeat](benchmark/results/linux-workload-hyperfine-close-repeat-20261001.json)
-contain the exact invocations and raw exported data. Use
+Use
 `benchmark/measure_hyperfine.py` as the validation runner. On the Linux host:
 
     cd /tmp/thecount-20260930-bench
@@ -597,11 +582,7 @@ worker settings, and verifies identical totals for all worker overrides. It
 supports excess pool capacity as a contributor; it does not separate thread
 creation, queue contention, cache effects, and operating-system scheduling.
 
-Production code is unchanged. The evidence is saved in
-[layout and phase controls](benchmark/results/linux-workload-sparse-explanation-20261001.json),
-[selected-directory layout and Python phase samples](benchmark/results/linux-workload-sparse-layout-20261001.json),
-and [worker-count controls](benchmark/results/linux-workload-sparse-worker-controls-20261001.json).
-Reproduce the compact-layout experiment using
+Production code is unchanged. Reproduce the compact-layout experiment using
 `benchmark/explain_sparse_workloads.py --survey <survey.json> --audit-dir
 <hyperfine-survey-raw> --directory <new-directory> --hyperfine <hyperfine>`.
 Worker-control artifacts retain every exact Hyperfine invocation, raw timing,
@@ -648,8 +629,7 @@ totals output are included. Mezura's richer line classification differs from
 ours despite equal physical lines. Unsupported JSON and LLVM IR are not used
 to claim wins against Mezura. This evidence establishes no cold-cache result.
 
-[Raw timings, commands, warnings, hashes and audit totals](benchmark/results/linux-workload-fairness-20261001.json)
-are reproducible with `benchmark/audit_fairness.py`. Raw per-file records remain
+The audit is reproducible with `benchmark/audit_fairness.py`. Raw per-file records remain
 under `/tmp/thecount-20260930-bench/fairness/` on the host. Production code has
 not changed during this audit.
 
@@ -731,12 +711,7 @@ its string-map capability table before worker startup and resolves the lazy errn
 accessor on the coordinator before concurrent I/O. Both underlying Coil issues
 are recorded in its `coil-bugs` pad; no sanitizer suppression was used.
 
-[Final timings, audits, hashes, commands, and samples](benchmark/results/linux-workload-updated-20261001.json),
-[full coverage audit](benchmark/results/linux-workload-full-coverage-20261001.json),
-[early filtering experiment](benchmark/results/linux-workload-early-filter-20261001.json),
-[worker sweep](benchmark/results/linux-workload-worker-sweep-20261001.json), and
-[first adaptive sweep](benchmark/results/linux-workload-adaptive-20261001.json)
-retain the evidence. The experimental sweeps predate the initialization fixes.
+The experimental sweeps predate the initialization fixes.
 Reproduce with `benchmark/measure_workloads.py` and
 `benchmark/workloads_linux_20261001.json`; use `benchmark/audit_coverage.py`
 for coverage without selection filters or fairness exclusions. Raw final per-file
@@ -745,8 +720,7 @@ JSON remains on the host under
 `/tmp/thecount-20260930-bench/updated-safe-coverage-audits/`.
 
 The tested Linux binary is
-`/tmp/thecount-20260930-bench/thecount-updated`. The original survey and JSON
-regression confirmation remain under `benchmark/results/` as historical evidence.
+`/tmp/thecount-20260930-bench/thecount-updated`.
 
 ## Known divergences from scc
 

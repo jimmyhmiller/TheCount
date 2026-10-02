@@ -4,7 +4,6 @@
 (import "coil.arraylist" :use *)
 (import "coil.hashmap" :use *)
 (import "coil.str" :use *)
-(import "coil.primitive" :as primitive)
 (import "coil.fs" :use *)
 (import "coil.os" :as os)
 (import "thecount.lang" :use *)
@@ -16,9 +15,9 @@
 (import "thecount.util" :use *)
 
 (defn strip-trailing-slashes [(s (slice u8))] (-> (slice u8))
-  (let [(mut n) (slice-len s)]
-    (while (and (> n 1) (= (cast i64 (slice-get s (- n 1))) #\/))
-      (store! (mut n) (- n 1)))
+  (let [(mut n) (len s)]
+    (while (and (> n 1) (= (cast i64 (get s (- n 1))) #\/))
+      (set! (mut n) (- n 1)))
     (subslice s 0 n)))
 
 (defn usage [] (-> i64)
@@ -35,6 +34,7 @@
   (println "  --depth N      folder rollup depth (default 1, implies --dirs)")
   (println "  --hidden       include hidden files and directories")
   (println "  --no-ignore    do not honor .gitignore files")
+  (println "  --ignore-file F also honor ignore file F (gitignore syntax) in every directory")
   (println "  --no-config    use built-in language definitions only")
   (println "  --extensions E count only comma-separated extensions")
   (println "  --output json  print machine-readable totals (with --files: per-file rows)")
@@ -63,13 +63,14 @@
                  (depth i64)
                  (hidden bool)
                  (use-ignore bool)
+                 (ignore-file (slice u8))
                  (json-output bool)
                  (excludes (ptr (ArrayList (slice u8))))] (-> i64)
   (let [n-specs (reg-count r)
         clean-roots (new-list a (slice u8))]
     (for root
       (iter (load roots))
-      (al-push! clean-roots (strip-trailing-slashes root)))
+      (push! clean-roots (strip-trailing-slashes root)))
     (let [agg
             (count-all a
                        r
@@ -79,15 +80,16 @@
                        depth
                        hidden
                        use-ignore
+                       ignore-file
                        excludes)]
       ;; emit
       (cond (= json-output true)
-              (let [files-per (slice-data (load (field agg files-per)))
-                    counts-per (slice-data (load (field agg counts-per)))
+              (let [files-per (slice-data (.files-per agg))
+                    counts-per (slice-data (.counts-per agg))
                     (mut files) 0
                     (mut c) (counts-zero)]
                 (for [s 0 n-specs]
-                  (store! (mut files) (+ files (load (index files-per s))))
+                  (set! (mut files) (+ files (load (index files-per s))))
                   (counts-add! (mut c) (load (index counts-per s))))
                 (print-json a
                             files
@@ -107,15 +109,15 @@
                 (print-dir-tree a (al-slice (load (load (field agg dir-rows))))))
             :else
               (let [rows (new-list a Row)
-                    files-per (slice-data (load (field agg files-per)))
-                    counts-per (slice-data (load (field agg counts-per)))]
+                    files-per (slice-data (.files-per agg))
+                    counts-per (slice-data (.counts-per agg))]
                 (for [s 0 n-specs]
                   (when (> (load (index files-per s)) 0)
-                    (al-push! rows
-                              (mk-row (load (field (reg-spec r s) name))
-                                      ""
-                                      (load (index files-per s))
-                                      (load (index counts-per s))))
+                    (push! rows
+                           (mk-row (load (field (reg-spec r s) name))
+                                   ""
+                                   (load (index files-per s))
+                                   (load (index counts-per s))))
                     0))
                 (print-table a
                              "Language"
@@ -128,14 +130,14 @@
   (let [n (reg-count r)
         exts (must-alloc [StrBuf] a n)]
     (for [k 0 n]
-      (store! (index exts k) (sb-new a)))
+      (set! (index exts k) (sb-new a)))
     (hm-for [ext idx (load (field r by-ext))]
             (let [bp (index exts idx)]
-              (when (> (slice-len (sb-str (load bp))) 0)
+              (when (> (len (sb-str (load bp))) 0)
                 (sb-push-str! bp " "))
               (sb-push-str! bp ext)))
     (for [j 0 n]
-      (let [nm (load (field (reg-spec r j) name))
+      (let [nm (.name (reg-spec r j))
             es (sb-str (load (index exts j)))]
         (println "{s}: {s}" nm es)))
     0))
@@ -150,20 +152,20 @@
 (defn run-add-lang [(a (dyn Allocator))
                     (r (ptr Registry))
                     (args (ptr (ArrayList (slice u8))))] (-> i64)
-  (let [n (al-len (load args))]
+  (let [n (len (load args))]
     (when (= n 0)
       (println "thecount add-lang: missing language name")
       (os/_exit 2)
       0)
-    (let [name (al-get (load args) 0)
+    (let [name (get (load args) 0)
           (mut b) (sb-new a)
           (mut k) 1]
       (sb-push-str! (mut b) "\nlang ")
       (sb-push-str! (mut b) name)
       (sb-push-str! (mut b) "\n")
       (while (< k n)
-        (let [arg (al-get (load args) k)
-              val (if (< (+ k 1) n) (al-get (load args) (+ k 1)) "")]
+        (let [arg (get (load args) k)
+              val (if (< (+ k 1) n) (get (load args) (+ k 1)) "")]
           (cond (= arg "--like")
                   (do
                     (when (= (reg-lookup-name r val) -1)
@@ -172,39 +174,39 @@
                       (os/_exit 2)
                       0)
                     (push-directive! (mut b) "like" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--ext")
                   (do
                     (push-directive! (mut b) "ext" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--file")
                   (do
                     (push-directive! (mut b) "file" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--line")
                   (do
                     (push-directive! (mut b) "line" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--block")
                   (do
                     (push-directive! (mut b) "block" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--quotes")
                   (do
                     (push-directive! (mut b) "quotes" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--multi")
                   (do
                     (push-directive! (mut b) "multi" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--multiline-quotes")
                   (do
                     (push-directive! (mut b) "multiline-quotes" val)
-                    (store! (mut k) (+ k 2)))
+                    (set! (mut k) (+ k 2)))
                 (= arg "--nested")
                   (do
                     (sb-push-str! (mut b) "nested\n")
-                    (store! (mut k) (+ k 1)))
+                    (set! (mut k) (+ k 1)))
                 :else
                   (do
                     (println "thecount add-lang: unknown option: {s}" arg)
@@ -231,7 +233,7 @@
 (defn run-remove-lang [(a (dyn Allocator))
                        (r (ptr Registry))
                        (args (ptr (ArrayList (slice u8))))] (-> i64)
-  (let [n (al-len (load args))]
+  (let [n (len (load args))]
     (when (= n 0)
       (println "thecount remove-lang: missing language name")
       (os/_exit 2)
@@ -240,7 +242,7 @@
     (let [(mut b) (sb-new a)]
       (for [k 0 n]
         (when (> k 0) (sb-push-str! (mut b) " ") 0)
-        (sb-push-str! (mut b) (al-get (load args) k)))
+        (sb-push-str! (mut b) (get (load args) k)))
       (let [name (sb-str b)
             src (config-read a)]
         (match (remove-stanza a src name)
@@ -269,6 +271,7 @@
         (mut depth) 1
         (mut hidden) false
         (mut use-ignore) true
+        (mut ignore-file) ""
         (mut use-user-config) true
         (mut json-output) false
         (mut extensions) ""
@@ -277,30 +280,37 @@
         (mut k) 1]
     (while (< k nargs)
       (let [arg (cstr->str (load (index argv k)))]
-        (cond (and (= k 1) (= arg "add-lang")) (do (store! (mut mode) 1) 0)
-              (and (= k 1) (= arg "remove-lang")) (do (store! (mut mode) 4) 0)
-              (and (= k 1) (= arg "langs")) (do (store! (mut mode) 2) 0)
-              (or (= mode 1) (= mode 4)) (do (al-push! rest arg) 0)
+        (cond (and (= k 1) (= arg "add-lang")) (do (set! (mut mode) 1) 0)
+              (and (= k 1) (= arg "remove-lang")) (do (set! (mut mode) 4) 0)
+              (and (= k 1) (= arg "langs")) (do (set! (mut mode) 2) 0)
+              (or (= mode 1) (= mode 4)) (do (push! rest arg) 0)
               (= arg "--exclude")
                 (do
                   (when (< (+ k 1) nargs)
-                    (al-push! excludes (cstr->str (load (index argv (+ k 1)))))
-                    (store! (mut k) (+ k 1))
+                    (push! excludes (cstr->str (load (index argv (+ k 1)))))
+                    (set! (mut k) (+ k 1))
                     0)
                   0)
               (or (= arg "--help") (= arg "-h") (= arg "help"))
-                (do (store! (mut mode) 3) 0)
-              (= arg "--files") (do (store! (mut want-files) true) 0)
-              (= arg "--dirs") (do (store! (mut want-dirs) true) 0)
-              (= arg "--hidden") (do (store! (mut hidden) true) 0)
-              (= arg "--no-ignore") (do (store! (mut use-ignore) false) 0)
-              (= arg "--no-config") (do (store! (mut use-user-config) false) 0)
+                (do (set! (mut mode) 3) 0)
+              (= arg "--files") (do (set! (mut want-files) true) 0)
+              (= arg "--dirs") (do (set! (mut want-dirs) true) 0)
+              (= arg "--hidden") (do (set! (mut hidden) true) 0)
+              (= arg "--no-ignore") (do (set! (mut use-ignore) false) 0)
+              (= arg "--ignore-file")
+                (do
+                  (when (< (+ k 1) nargs)
+                    (set! (mut ignore-file) (cstr->str (load (index argv (+ k 1)))))
+                    (set! (mut k) (+ k 1))
+                    0)
+                  0)
+              (= arg "--no-config") (do (set! (mut use-user-config) false) 0)
               (= arg "--extensions")
                 (if (< (+ k 1) nargs)
                     (do
-                      (store! (mut extensions)
-                              (cstr->str (load (index argv (+ k 1)))))
-                      (store! (mut k) (+ k 1))
+                      (set! (mut extensions)
+                            (cstr->str (load (index argv (+ k 1)))))
+                      (set! (mut k) (+ k 1))
                       0)
                     (do
                       (println "thecount: --extensions needs a value")
@@ -310,34 +320,34 @@
                 (if (< (+ k 1) nargs)
                     (let [value (cstr->str (load (index argv (+ k 1))))]
                       (if (= value "json")
-                          (store! (mut json-output) true)
+                          (set! (mut json-output) true)
                           (if (= value "text")
-                              (store! (mut json-output) false)
+                              (set! (mut json-output) false)
                               (do
                                 (println "thecount: unknown output format: {s}"
                                          value)
                                 (os/_exit 2)
                                 0)))
-                      (store! (mut k) (+ k 1))
+                      (set! (mut k) (+ k 1))
                       0)
                     (do
                       (println "thecount: --output needs a value")
                       (os/_exit 2)
                       0))
-              (= arg "--version") (do (store! (mut mode) 5) 0)
+              (= arg "--version") (do (set! (mut mode) 5) 0)
               (= arg "--depth")
                 (do
                   (when (< (+ k 1) nargs)
                     (match (str-parse-int (cstr->str (load (index argv (+ k 1)))))
-                      (Some [d] (do (store! (mut depth) d) 0))
+                      (Some [d] (do (set! (mut depth) d) 0))
                       (None [] 0))
-                    (store! (mut k) (+ k 1))
+                    (set! (mut k) (+ k 1))
                     0)
-                  (store! (mut want-dirs) true)
-                  (when (< depth 1) (store! (mut depth) 1) 0)
+                  (set! (mut want-dirs) true)
+                  (when (< depth 1) (set! (mut depth) 1) 0)
                   0)
-              :else (do (al-push! roots arg) 0)))
-      (store! (mut k) (+ k 1)))
+              :else (do (push! roots arg) 0)))
+      (set! (mut k) (+ k 1)))
     (if (= mode 3)
         (usage)
         (if (= mode 5)
@@ -347,7 +357,7 @@
               (when (= use-user-config true)
                 (load-user-langs! r)
                 0)
-              (when (> (slice-len extensions) 0)
+              (when (> (len extensions) 0)
                 (reg-restrict-extensions! r extensions)
                 0)
               (cond (= mode 1) (run-add-lang a r rest)
@@ -355,8 +365,8 @@
                     (= mode 2) (run-langs a r)
                     :else
                       (do
-                        (when (= (al-len (load roots)) 0)
-                          (al-push! roots ".")
+                        (when (= (len (load roots)) 0)
+                          (push! roots ".")
                           0)
                         (run-count a
                                    r
@@ -366,5 +376,6 @@
                                    depth
                                    hidden
                                    use-ignore
+                                   ignore-file
                                    json-output
                                    excludes))))))))

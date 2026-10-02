@@ -35,7 +35,7 @@
 (const DT-UNKNOWN 0)
 
 (defn linux-stat-mode-offset [] (-> Code)
-  (if (primitive/code-eq (primitive/target-arch) `x86_64) `24 `16))
+  (if (= (primitive/target-arch) `x86_64) `24 `16))
 
 (defn stat-mode [(raw (ptr u8))] (-> i64)
   (os-pick (cast i64
@@ -67,7 +67,7 @@
 ;;; Copy s into allocator-owned, NUL-terminated storage (dirent name buffers
 ;;; are reused). The slice excludes the terminator; openat can use its data.
 (defn copy-str [(a (dyn Allocator)) (s (slice u8))] (-> (slice u8))
-  (let [n (slice-len s)
+  (let [n (len s)
         p (must-alloc [u8] a (+ n 1))]
     (mem-copy p (slice-data s) n)
     (set! (index p n) (cast u8 0))
@@ -75,10 +75,10 @@
 
 ;;; dir + "/" + name, allocator-owned. A dir of "" yields just name.
 (defn join-path [(a (dyn Allocator)) (dir (slice u8)) (name (slice u8))] (-> (slice u8))
-  (let [dn (slice-len dir)]
+  (let [dn (len dir)]
     (if (= dn 0)
         (copy-str a name)
-        (let [nn (slice-len name)
+        (let [nn (len name)
               p (must-alloc [u8] a (+ (+ dn nn) 1))]
           (mem-copy p (slice-data dir) dn)
           (set! (index p dn) (cast u8 #\/))

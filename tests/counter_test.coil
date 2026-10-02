@@ -28,45 +28,45 @@
                  "int main() {\n  // a comment\n  return 0; // trailing\n\n  /* block\n     more block */\n}\n"
                c (count-bytes spec-p src)]
            ;; lines: int main {, //comment, return, blank, /*block, more block*/, }
-           (assert-eq (load (field c lines)) 7)
-           (assert-eq (load (field c comments)) 3)
-           (assert-eq (load (field c blank)) 1)
-           (assert-eq (load (field c code)) 3)))
+           (assert-eq (.lines c) 7)
+           (assert-eq (.comments c) 3)
+           (assert-eq (.blank c) 1)
+           (assert-eq (.code c) 3)))
 
 (deftest comment-token-inside-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"http://x\";\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c code)) 1)
-           (assert-eq (load (field c comments)) 0)))
+           (assert-eq (.code c) 1)
+           (assert-eq (.comments c) 0)))
 
 (deftest block-comment-inside-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"/* not a comment */\";\nint x;\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c code)) 2)
-           (assert-eq (load (field c comments)) 0)))
+           (assert-eq (.code c) 2)
+           (assert-eq (.comments c) 0)))
 
 (deftest code-then-block-is-code
          (let [spec-p (c-spec-ptr)
                src "int x; /* c1\n c2 */\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c code)) 1)
-           (assert-eq (load (field c comments)) 1)))
+           (assert-eq (.code c) 1)
+           (assert-eq (.comments c) 1)))
 
 (deftest no-trailing-newline
          (let [spec-p (c-spec-ptr)
                src "int x;"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 1)
-           (assert-eq (load (field c code)) 1)))
+           (assert-eq (.lines c) 1)
+           (assert-eq (.code c) 1)))
 
 (deftest escaped-quote-in-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"a\\\"b // no\";\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c code)) 1)
-           (assert-eq (load (field c comments)) 0)))
+           (assert-eq (.code c) 1)
+           (assert-eq (.comments c) 0)))
 
 (deftest python-hash-and-docstring
          ;; a triple-quote opening a line is a docstring -> comment lines,
@@ -75,18 +75,18 @@
                src
                  "# comment\nx = 1\n\"\"\"doc\n# not a comment\ndoc end\"\"\"\ny = 2\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 6)
-           (assert-eq (load (field c comments)) 4)
-           (assert-eq (load (field c code)) 2)))
+           (assert-eq (.lines c) 6)
+           (assert-eq (.comments c) 4)
+           (assert-eq (.code c) 2)))
 
 (deftest python-string-value-is-code
          ;; a triple-quote preceded by code on its line is a plain string
          (let [spec-p (py-spec-ptr)
                src "x = \"\"\"not a docstring\n\nstill string\"\"\"\ny = 2\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 4)
-           (assert-eq (load (field c comments)) 0)
-           (assert-eq (load (field c code)) 4)))
+           (assert-eq (.lines c) 4)
+           (assert-eq (.comments c) 0)
+           (assert-eq (.code c) 4)))
 
 (deftest python-docstring-with-inner-quotes
          ;; embedded quotes must not break docstring tracking (scc gets this wrong)
@@ -94,30 +94,30 @@
                src
                  "def f():\n    \"\"\"Doc with \"quotes\" inside.\"\"\"\n    return 1\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c comments)) 1)
-           (assert-eq (load (field c code)) 2)))
+           (assert-eq (.comments c) 1)
+           (assert-eq (.code c) 2)))
 
 (deftest empty-file
          (let [spec-p (c-spec-ptr)
                src ""
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 0)))
+           (assert-eq (.lines c) 0)))
 
 (deftest blank-lines-only
          (let [spec-p (c-spec-ptr)
                src "\n  \n\t\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 3)
-           (assert-eq (load (field c blank)) 3)))
+           (assert-eq (.lines c) 3)
+           (assert-eq (.blank c) 3)))
 
 (deftest form-feed-and-vertical-tab-are-whitespace
          (let [spec-p (c-spec-ptr)
                src "\x0C;\n\x0B;\n\x0C;/* comment */\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 3)
-           (assert-eq (load (field c blank)) 2)
-           (assert-eq (load (field c comments)) 1)
-           (assert-eq (load (field c code)) 0)))
+           (assert-eq (.lines c) 3)
+           (assert-eq (.blank c) 2)
+           (assert-eq (.comments c) 1)
+           (assert-eq (.code c) 0)))
 
 (deftest shell-heredoc-delimiter
          (assert-eq (shell-heredoc-end "cat << EOF" 4 10) 10)
@@ -173,9 +173,9 @@
                src
                  "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 4)
-           (assert-eq (load (field c comments)) 0)
-           (assert-eq (load (field c code)) 4)))
+           (assert-eq (.lines c) 4)
+           (assert-eq (.comments c) 0)
+           (assert-eq (.code c) 4)))
 
 ;; An even run of backslashes is an escaped backslash, NOT a continuation:
 ;; the string still ends at the newline and the next line's `//` is a comment.
@@ -183,6 +183,6 @@
          (let [spec-p (c-spec-ptr)
                src "char *s = \"a\\\\\n// real comment\nint x;\n"
                c (count-bytes spec-p src)]
-           (assert-eq (load (field c lines)) 3)
-           (assert-eq (load (field c comments)) 1)
-           (assert-eq (load (field c code)) 2)))
+           (assert-eq (.lines c) 3)
+           (assert-eq (.comments c) 1)
+           (assert-eq (.code c) 2)))
