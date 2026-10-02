@@ -11,7 +11,7 @@
 ;;; the original bytes, including pairs split across vector boundaries.
 (defn count-c-events [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
   (let [data (slice-data bytes)
-        len (slice-len bytes)
+        len (len bytes)
         (mut pos) 0
         (mut line-start) 0
         (mut state) ST-NORMAL

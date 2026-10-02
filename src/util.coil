@@ -32,16 +32,16 @@
 
 ;;; Last index containing a byte, or -1.
 (defn bytes-last-index-of :inline (Always) [(s (slice u8)) (needle u8)] (-> i64)
-  (let [(mut i) (- (slice-len s) 1)]
-    (while (and (>= i 0) (!= (slice-get s i) needle))
-      (store! (mut i) (- i 1)))
+  (let [(mut i) (- (len s) 1)]
+    (while (and (>= i 0) (!= (get s i) needle))
+      (set! (mut i) (- i 1)))
     i))
 
 (defn bytes-contains? :inline (Always) [(s (slice u8)) (needle u8)] (-> bool)
-  (let [n (slice-len s)
+  (let [n (len s)
         (mut i) 0]
-    (while (and (< i n) (!= (slice-get s i) needle))
-      (store! (mut i) (+ i 1)))
+    (while (and (< i n) (!= (get s i) needle))
+      (set! (mut i) (+ i 1)))
     (< i n)))
 
 ;;; Increment an i64 map value, treating a missing key as zero. Returns the new
@@ -49,22 +49,22 @@
 (defn hm-add! :inline (Always) [K] [(m (mut (HashMap K i64)))
                                     (key K)
                                     (delta i64)] (-> i64)
-  (let [next (+ (option-or (hm-get (load m) key) 0) delta)]
-    (hm-put! (mut m) key next)
+  (let [next (+ (option-or (get (load m) key) 0) delta)]
+    (set! (mut m) key next)
     next))
 
 ;;; Emit field stores for set-fields!/zeroed-with. Each initializer is `(field value)` so
 ;;; field names stay symbols and are checked by the ordinary `field` form after
 ;;; expansion.
 (defn zeroed-with-stores [(place Code) (inits Code) (i i64)] (-> Code)
-  (if (>= i (primitive/code-count inits))
+  (if (>= i (len inits))
       `()
-      (let [init (primitive/code-nth inits i)]
-        `((store! (field (mut ~place) ~(primitive/code-nth init 0))
-                  ~(primitive/code-nth init 1)) ~@(zeroed-with-stores place
-                                                                      inits
-                                                                      (+ i
-                                                                         1))))))
+      (let [init (get inits i)]
+        `((store! (field (mut ~place) ~(get init 0))
+                  ~(get init 1)) ~@(zeroed-with-stores place
+                                                       inits
+                                                       (+ i
+                                                          1))))))
 
 ;;; Assign several fields of one mutable place, with field names checked after
 ;;; expansion by Coil's ordinary `field` form.

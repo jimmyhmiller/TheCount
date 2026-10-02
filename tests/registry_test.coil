@@ -25,18 +25,18 @@
 (deftest ext-lookup-names
          (let [r (fresh)]
            (let [rs (reg-lookup-path r "main.rs")]
-             (assert (= (load (field (reg-spec r rs) name)) "Rust")))
+             (assert (= (.name (reg-spec r rs)) "Rust")))
            (let [up (reg-lookup-path r "MAIN.RS")]
-             (assert (= (load (field (reg-spec r up) name)) "Rust")))))
+             (assert (= (.name (reg-spec r up)) "Rust")))))
 
 (deftest filename-lookup
          (let [r (fresh)]
            (let [mk (reg-lookup-path r "some/dir/Makefile")]
-             (assert (= (load (field (reg-spec r mk) name)) "Makefile")))
+             (assert (= (.name (reg-spec r mk)) "Makefile")))
            (let [dk (reg-lookup-path r "Dockerfile")]
-             (assert (= (load (field (reg-spec r dk) name)) "Dockerfile")))
+             (assert (= (.name (reg-spec r dk)) "Dockerfile")))
            (let [rk (reg-lookup-path r "proj/Rakefile")]
-             (assert (= (load (field (reg-spec r rk) name)) "Ruby")))))
+             (assert (= (.name (reg-spec r rk)) "Ruby")))))
 
 (deftest name-lookup-case-insensitive
          (let [r (fresh)]
@@ -51,7 +51,7 @@
                custom (lang-from-strings a "MyPython" "#" "" false "\"'" "")]
            (reg-add! r custom "py")
            (let [idx (reg-lookup-path r "x.py")]
-             (assert (= (load (field (reg-spec r idx) name)) "MyPython")))))
+             (assert (= (.name (reg-spec r idx)) "MyPython")))))
 
 (deftest dotfile-is-not-extension
          (let [r (fresh)]
@@ -72,16 +72,16 @@
                idx (reg-lookup-name r "nim")
                src "#[ outer\n#[ inner ]#\nstill comment ]#\nx = 1\n"
                c (count-bytes (reg-spec r idx) src)]
-           (assert-eq (load (field c comments)) 3)
-           (assert-eq (load (field c code)) 1)))
+           (assert-eq (.comments c) 3)
+           (assert-eq (.code c) 1)))
 
 (deftest lua-block-vs-line
          (let [r (fresh)
                idx (reg-lookup-name r "lua")
                src "--[[ block\nstill ]]\nx = 1 -- line\n-- whole line\n"
                c (count-bytes (reg-spec r idx) src)]
-           (assert-eq (load (field c comments)) 3)
-           (assert-eq (load (field c code)) 1)))
+           (assert-eq (.comments c) 3)
+           (assert-eq (.code c) 1)))
 
 (deftest assembly-slash-comments
          (let [r (fresh)
@@ -89,9 +89,9 @@
                c
                  (count-bytes (reg-spec r idx)
                               "// heading\nmov %eax, %ebx // tail\n; another comment\n")]
-           (assert-eq (load (field c lines)) 3)
-           (assert-eq (load (field c code)) 1)
-           (assert-eq (load (field c comments)) 2)))
+           (assert-eq (.lines c) 3)
+           (assert-eq (.code c) 1)
+           (assert-eq (.comments c) 2)))
 
 (deftest shell-and-rust-multiline-strings
          (let [r (fresh)
@@ -103,15 +103,15 @@
                rust-count
                  (count-bytes (reg-spec r rs)
                               "let s = \"first\n/// data\nlast\";\n// comment\n")]
-           (assert (= (load (field (reg-spec r sh) shell-heredocs)) true))
+           (assert (= (.shell-heredocs (reg-spec r sh)) true))
            (assert-eq (load (index (load (field (reg-spec r sh) classes)) #\<))
                       (cast u8 CLS-HOT))
-           (assert-eq (load (field shell-count lines)) 5)
-           (assert-eq (load (field shell-count code)) 4)
-           (assert-eq (load (field shell-count comments)) 1)
-           (assert-eq (load (field rust-count lines)) 4)
-           (assert-eq (load (field rust-count code)) 3)
-           (assert-eq (load (field rust-count comments)) 1)))
+           (assert-eq (.lines shell-count) 5)
+           (assert-eq (.code shell-count) 4)
+           (assert-eq (.comments shell-count) 1)
+           (assert-eq (.lines rust-count) 4)
+           (assert-eq (.code rust-count) 3)
+           (assert-eq (.comments rust-count) 1)))
 
 (deftest rust-character-literals-and-lifetimes
          (let [r (fresh)
@@ -119,9 +119,9 @@
                c
                  (count-bytes (reg-spec r rs)
                               "let c = '\"';\n// comment\nlet q = '\\'';\nfn f<'a>(x: &'a str) {} // tail\n")]
-           (assert-eq (load (field c lines)) 4)
-           (assert-eq (load (field c code)) 3)
-           (assert-eq (load (field c comments)) 1)))
+           (assert-eq (.lines c) 4)
+           (assert-eq (.code c) 3)
+           (assert-eq (.comments c) 1)))
 
 (deftest shell-escaped-quote-outside-string
          (let [r (fresh)
@@ -129,10 +129,10 @@
                c
                  (count-bytes (reg-spec r sh)
                               "value=${value//\\\"/}\n\n# real comment\n")]
-           (assert-eq (load (field c lines)) 3)
-           (assert-eq (load (field c code)) 1)
-           (assert-eq (load (field c blank)) 1)
-           (assert-eq (load (field c comments)) 1)))
+           (assert-eq (.lines c) 3)
+           (assert-eq (.code c) 1)
+           (assert-eq (.blank c) 1)
+           (assert-eq (.comments c) 1)))
 
 ;; --- --dirs rollup keys -----------------------------------------------------
 ;; --dirs keeps one row per (directory, language), so the rollup key has to
@@ -152,7 +152,7 @@
 
 (deftest dir-lang-key-handles-root-and-empty
          (let [a (malloc-allocator)]
-           (assert (= (slice-len (dir-lang-key a "." "Markdown")) 10))
+           (assert (= (len (dir-lang-key a "." "Markdown")) 10))
            (assert (= (= (dir-lang-key a "." "C") (dir-lang-key a "." "D"))
                       false))))
 
@@ -182,9 +182,9 @@
               (y (slice u8))
               (z (slice u8))] (-> (ptr (ArrayList (slice u8))))
   (let [l (box! a (ArrayList (slice u8)) (al-new [(slice u8)] a))]
-    (al-push! l x)
-    (al-push! l y)
-    (al-push! l z)
+    (push! l x)
+    (push! l y)
+    (push! l z)
     l))
 
 (deftest dir-base-len-longest-component-match
@@ -199,8 +199,8 @@
 (deftest walk-roots-dot-becomes-empty
          (let [a (malloc-allocator)
                w (walk-roots-of a (roots3 a "." "src" "vendor"))]
-           (assert-eq (slice-len (al-get (load w) 0)) 0)
-           (assert (= (al-get (load w) 1) "src"))
+           (assert-eq (len (al-get (load w) 0)) 0)
+           (assert (= (get (load w) 1) "src"))
            (assert-eq (dir-base-len w "anything/here") 0)))
 
 (deftest fortran-2008-extension

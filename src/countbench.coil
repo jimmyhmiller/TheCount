@@ -33,10 +33,10 @@
               (if use-generic
                   (count-bytes (reg-spec r idx) data)
                   (reg-count-bytes r idx data))]
-        (store! (mut sink) (+ sink (load (field c lines)))))
-      (store! (mut k) (+ k 1)))
+        (set! (mut sink) (+ sink (load (field c lines)))))
+      (set! (mut k) (+ k 1)))
     (let [ms (- (now-ms) t0)
-          total-mb (/ (* (slice-len data) REPS) 1048576)]
+          total-mb (/ (* (len data) REPS) 1048576)]
       (println "  {d} lines/pass, {d} ms, {d} MB/s"
                (/ sink REPS)
                ms
@@ -62,8 +62,8 @@
                      (let [spec (reg-spec r idx)]
                        (println "{s}: {d} bytes as {s}"
                                 path
-                                (slice-len data)
-                                (load (field spec name)))
+                                (len data)
+                                (.name spec))
                        (println "interpreter (count-bytes):")
                        (let [g (bench r idx data true)]
                          (println "specialized:")

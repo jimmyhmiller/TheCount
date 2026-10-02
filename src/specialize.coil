@@ -92,45 +92,45 @@
 
 ;;; How many space-separated tokens are in s.
 (defn ct-tok-count [(s (slice u8))] (-> i64)
-  (let [n (slice-len s)
+  (let [n (len s)
         (mut i) 0
         (mut c) 0]
     (while (< i n)
-      (while (and (< i n) (= (cast i64 (slice-get s i)) #\space))
-        (store! (mut i) (+ i 1)))
+      (while (and (< i n) (= (cast i64 (get s i)) #\space))
+        (set! (mut i) (+ i 1)))
       (when (< i n)
-        (store! (mut c) (+ c 1))
-        (while (and (< i n) (!= (cast i64 (slice-get s i)) #\space))
-          (store! (mut i) (+ i 1)))
+        (set! (mut c) (+ c 1))
+        (while (and (< i n) (!= (cast i64 (get s i)) #\space))
+          (set! (mut i) (+ i 1)))
         0))
     (load c)))
 
 ;;; Byte offset where token k starts, or -1.
 (defn ct-tok-start [(s (slice u8)) (k i64)] (-> i64)
-  (let [n (slice-len s)
+  (let [n (len s)
         (mut i) 0
         (mut seen) 0
         (mut res) -1]
     (while (and (< i n) (= res -1))
-      (while (and (< i n) (= (cast i64 (slice-get s i)) #\space))
-        (store! (mut i) (+ i 1)))
+      (while (and (< i n) (= (cast i64 (get s i)) #\space))
+        (set! (mut i) (+ i 1)))
       (when (< i n)
-        (when (= seen k) (store! (mut res) (load i)) 0)
-        (store! (mut seen) (+ seen 1))
-        (while (and (< i n) (!= (cast i64 (slice-get s i)) #\space))
-          (store! (mut i) (+ i 1)))
+        (when (= seen k) (set! (mut res) (load i)) 0)
+        (set! (mut seen) (+ seen 1))
+        (while (and (< i n) (!= (cast i64 (get s i)) #\space))
+          (set! (mut i) (+ i 1)))
         0))
     (load res)))
 
 ;;; Length of token k.
 (defn ct-tok-len [(s (slice u8)) (k i64)] (-> i64)
   (let [st (ct-tok-start s k)
-        n (slice-len s)]
+        n (len s)]
     (if (< st 0)
         0
         (let [(mut j) st]
-          (while (and (< j n) (!= (cast i64 (slice-get s j)) #\space))
-            (store! (mut j) (+ j 1)))
+          (while (and (< j n) (!= (cast i64 (get s j)) #\space))
+            (set! (mut j) (+ j 1)))
           (- (load j) st)))))
 
 ;; ---------------------------------------------------------------------------
@@ -146,11 +146,11 @@
 (defn ct-cmps [(s (slice u8)) (st i64) (j i64) (n i64) (posc Code)] (-> Code)
   (if (>= j n)
       `()
-      `(~(ct-cmp (cast i64 (slice-get s (+ st j))) posc j) ~@(ct-cmps s
-                                                                      st
-                                                                      (+ j 1)
-                                                                      n
-                                                                      posc))))
+      `(~(ct-cmp (cast i64 (get s (+ st j))) posc j) ~@(ct-cmps s
+                                                                st
+                                                                (+ j 1)
+                                                                n
+                                                                posc))))
 
 ;;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`len`),
 ;;; exactly as the interpreter's match-at does — not against the line end.
@@ -168,7 +168,7 @@
 (defn ct-quote-tests [(q (slice u8)) (k i64) (n i64) (bc Code)] (-> Code)
   (if (>= k n)
       `()
-      `((= ~bc ~(cast i64 (slice-get q k))) ~@(ct-quote-tests q (+ k 1) n bc))))
+      `((= ~bc ~(cast i64 (get q k))) ~@(ct-quote-tests q (+ k 1) n bc))))
 
 ;; ---------------------------------------------------------------------------
 ;; The scanner body, assembled per language.
@@ -183,7 +183,7 @@
                     (mqs (slice u8))] (-> Code)
   (let [n-lc (ct-tok-count lcs)
         n-bl (/ (ct-tok-count blocks) 2)
-        n-q (slice-len quotes)
+        n-q (len quotes)
         n-mq (ct-tok-count mqs)
         plain
           `(do
@@ -282,8 +282,8 @@
 (defn gen-block-arm [(blocks (slice u8)) (nested bool)] (-> Code)
   (let [len-end (ct-tok-len blocks 1)
         len-start (ct-tok-len blocks 0)
-        e0 (cast i64 (slice-get blocks (ct-tok-start blocks 1)))
-        s0 (cast i64 (slice-get blocks (ct-tok-start blocks 0)))]
+        e0 (cast i64 (get blocks (ct-tok-start blocks 1)))
+        s0 (cast i64 (get blocks (ct-tok-start blocks 0)))]
     `(do
        (store! (mut saw-comment) true)
        (let [(mut scanning) true]
@@ -320,8 +320,8 @@
 ;;; The ST-STRING arm. One quote character means the closer is a literal and no
 ;;; `qch` is carried.
 (defn gen-string-arm [(quotes (slice u8))] (-> Code)
-  (let [n-q (slice-len quotes)
-        closer (if (= n-q 1) `~(cast i64 (slice-get quotes 0)) `(load qch))]
+  (let [n-q (len quotes)
+        closer (if (= n-q 1) `~(cast i64 (get quotes 0)) `(load qch))]
     `(do
        (store! (mut saw-code) true)
        (let [(mut scanning) true]
@@ -343,10 +343,10 @@
   (let [n-mq (ct-tok-count mqs)
         t0
           (if (= n-mq 1)
-              `~(cast i64 (slice-get mqs (ct-tok-start mqs 0)))
+              `~(cast i64 (get mqs (ct-tok-start mqs 0)))
               `(if (= mqi 0)
-                   ~(cast i64 (slice-get mqs (ct-tok-start mqs 0)))
-                   ~(cast i64 (slice-get mqs (ct-tok-start mqs 1)))))
+                   ~(cast i64 (get mqs (ct-tok-start mqs 0)))
+                   ~(cast i64 (get mqs (ct-tok-start mqs 1)))))
         hit
           (if (= n-mq 1)
               (ct-match mqs 0 `h)
@@ -383,23 +383,23 @@
   (let [(mut hit) false]
     (let [n (ct-tok-count lcs)]
       (for [k 0 n]
-        (when (= (cast i64 (slice-get lcs (ct-tok-start lcs k))) b)
-          (store! (mut hit) true)
+        (when (= (cast i64 (get lcs (ct-tok-start lcs k))) b)
+          (set! (mut hit) true)
           0)))
     (when (> (ct-tok-count blocks) 0)
-      (when (= (cast i64 (slice-get blocks (ct-tok-start blocks 0))) b)
-        (store! (mut hit) true)
+      (when (= (cast i64 (get blocks (ct-tok-start blocks 0))) b)
+        (set! (mut hit) true)
         0)
       0)
     (let [n (ct-tok-count mqs)]
       (for [k 0 n]
-        (when (= (cast i64 (slice-get mqs (ct-tok-start mqs k))) b)
-          (store! (mut hit) true)
+        (when (= (cast i64 (get mqs (ct-tok-start mqs k))) b)
+          (set! (mut hit) true)
           0)))
-    (let [n (slice-len quotes)]
+    (let [n (len quotes)]
       (for [k 0 n]
-        (when (= (cast i64 (slice-get quotes k)) b)
-          (store! (mut hit) true)
+        (when (= (cast i64 (get quotes k)) b)
+          (set! (mut hit) true)
           0)))
     (load hit)))
 
@@ -423,11 +423,11 @@
 
 ;;; Fold a list of mask expressions into `(| a (| b …))`, or 0 when empty.
 (defn ct-or-fold [(xs Code) (i i64)] (-> Code)
-  (if (>= i (primitive/code-count xs))
+  (if (>= i (len xs))
       `0
-      (if (= i (- (primitive/code-count xs) 1))
-          (primitive/code-nth xs i)
-          `(| ~(primitive/code-nth xs i) ~(ct-or-fold xs (+ i 1))))))
+      (if (= i (- (len xs) 1))
+          (get xs i)
+          `(| ~(get xs i) ~(ct-or-fold xs (+ i 1))))))
 
 ;;; The ST-NORMAL arm — where 98.8% of the bytes go, so the only loop whose cost
 ;;; really matters.
@@ -576,21 +576,21 @@
 ;; ---------------------------------------------------------------------------
 ;; One whole scanner.
 (defn gen-counter [(row Code)] (-> Code)
-  (let [ident (primitive/code-nth row 0)
-        lcs (primitive/code-str (primitive/code-nth row 3))
-        blocks (primitive/code-str (primitive/code-nth row 4))
-        nested (primitive/code-eq (primitive/code-nth row 5) `true)
-        quotes (primitive/code-str (primitive/code-nth row 6))
-        mqs (primitive/code-str (primitive/code-nth row 7))
+  (let [ident (get row 0)
+        lcs (primitive/code-str (get row 3))
+        blocks (primitive/code-str (get row 4))
+        nested (= (primitive/code-nth row 5) `true)
+        quotes (primitive/code-str (get row 6))
+        mqs (primitive/code-str (get row 7))
         n-lc (ct-tok-count lcs)
         n-bl (/ (ct-tok-count blocks) 2)
-        n-q (slice-len quotes)
+        n-q (len quotes)
         n-mq (ct-tok-count mqs)
         has-bl (> n-bl 0)
         has-q (> n-q 0)
         has-mq (> n-mq 0)
         has-hot (> (+ (+ n-lc n-bl) (+ n-q n-mq)) 0)
-        has-state (or has-bl (or has-q has-mq))]
+        has-state (or has-bl has-q has-mq)]
     (when (> n-bl 1)
       (primitive/error "specialize: a table row may declare at most one block-comment pair"))
     (when (> n-mq 2)
@@ -684,8 +684,8 @@
                              (when (and (= (quote-byte? ~(if (> n-q 1)
                                                              `(load qch)
                                                              `~(cast i64
-                                                                     (slice-get quotes
-                                                                                0)))
+                                                                     (get quotes
+                                                                          0)))
                                                         (load (field spec
                                                                      multiline-quote-chars)))
                                            false)
@@ -709,26 +709,26 @@
 (defn gen-counters [(tbl Code) (k i64) (n i64)] (-> Code)
   (if (>= k n)
       `()
-      `(~(gen-counter (primitive/code-nth tbl k)) ~@(gen-counters tbl (+ k 1) n))))
+      `(~(gen-counter (get tbl k)) ~@(gen-counters tbl (+ k 1) n))))
 
 ;;; Nested ifs over the row index; the last row doubles as the fallback.
 (defn gen-field-arms [(tbl Code) (k i64) (n i64) (fidx i64)] (-> Code)
   (if (= k (- n 1))
-      (primitive/code-nth (primitive/code-nth tbl k) fidx)
+      (get (primitive/code-nth tbl k) fidx)
       `(if (= i ~k)
-           ~(primitive/code-nth (primitive/code-nth tbl k) fidx)
+           ~(get (primitive/code-nth tbl k) fidx)
            ~(gen-field-arms tbl (+ k 1) n fidx))))
 
 (defn gen-field-accessor [(nm Code) (rty Code) (tbl Code) (fidx i64)] (-> Code)
   `(defn ~(primitive/syntax->datum nm) [(i i64)] (-> ~rty)
-     ~(gen-field-arms tbl 0 (primitive/code-count tbl) fidx)))
+     ~(gen-field-arms tbl 0 (len tbl) fidx)))
 
 (defn gen-counter-arms [(tbl Code) (k i64) (n i64)] (-> Code)
   (let [f
           `(primitive/fnptr-of ~(primitive/syntax->datum (primitive/code-symbol "count$"
-                                                                                (primitive/code-nth (primitive/code-nth tbl
-                                                                                                                        k)
-                                                                                                    0))))]
+                                                                                (get (primitive/code-nth tbl
+                                                                                                         k)
+                                                                                     0))))]
     (if (= k (- n 1))
         f
         `(if (= i ~k) ~f ~(gen-counter-arms tbl (+ k 1) n)))))
@@ -738,14 +738,14 @@
 ;;; `cond`, `when` or any other macro. A macro's output is expanded normally,
 ;;; which is what lets the generated scanners below be written in ordinary Coil.
 (defn scanner-id [(names Code) (ids Code) (f Code)] (-> Code)
-  (let [n (primitive/code-count names)
+  (let [n (len names)
         (mut i) 0
         (mut found) f]
     (when (primitive/code-sym? f)
       (while (< i n)
         (when (= (primitive/code-sym f)
-                 (primitive/code-str (primitive/code-nth names (load i))))
-          (store! (mut found) (primitive/code-nth ids (load i)))
+                 (primitive/code-str (get names (load i))))
+          (store! (mut found) (get ids (load i)))
           (store! (mut i) n)
           0)
         (store! (mut i) (+ i 1)))
@@ -760,15 +760,14 @@
                                          (ids Code)
                                          (f Code)
                                          (out CodeBuilder)] (-> CodeBuilder)
-  (let [n (primitive/code-count f)
+  (let [n (len f)
         (mut i) 0]
     (while (< i n)
       (primitive/code-list-push! out
                                  (bind-scanner-identifiers names
                                                            ids
-                                                           (primitive/code-nth f
-                                                                               (load i))))
-      (store! (mut i) (+ i 1)))
+                                                           (get f (load i))))
+      (set! (mut i) (+ i 1)))
     out))
 
 (defn bind-scanner-identifiers [(names Code) (ids Code) (f Code)] (-> Code)
@@ -787,7 +786,7 @@
 
 (defn define-specialized-counters [& (_ Code)] (-> Code)
   (let [tbl (spec-table)
-        n (primitive/code-count tbl)
+        n (len tbl)
         ;; Names are data, while each corresponding identifier is allocated
         ;; exactly once and reused at every binder/reference site.
         scanner-names
@@ -855,7 +854,7 @@
               ~(primitive/fresh-identifier "fh")
               ~(primitive/fresh-identifier "cls")
               ~(primitive/fresh-identifier "b")
-              ~(primitive/syntax->datum (primitive/code-nth `(Counts) 0)))
+              ~(primitive/syntax->datum (get `(Counts) 0)))
         generated
           `(do
              ~@(gen-counters tbl 0 n)

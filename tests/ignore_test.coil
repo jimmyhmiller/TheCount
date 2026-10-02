@@ -27,7 +27,7 @@
         (mut ctx) (zeroed IgnoreCtx)]
     (set! (.base (mut ctx)) "")
     (set! (.rules (mut ctx)) (parse-ignore a src))
-    (al-push! ctxs ctx)
+    (push! ctxs ctx)
     ctxs))
 
 (deftest ignore-rules

@@ -41,9 +41,11 @@ def main():
         put("ignored.c")
         put("skip/sub.c")
         put("keep.c")
+        put("extra/x.c")
         put("Foofile", b"// custom\nint custom;\n")
         put("custom.special", b"// custom\nint custom;\n")
         put(".gitignore", b"ignored.c\nskip/\n")
+        (root / ".countignore").write_bytes(b"extra/\n")
         expected = {name for name in expected
                     if not name.endswith(".unrecognized")
                     and name not in {"binary.c", ".git/never.c", ".gitignore",
@@ -77,6 +79,10 @@ def main():
              {name for name in expected if name.endswith(".c")}),
             (["--hidden", "--no-ignore", "--no-config", "--exclude", "skip/",
               "--exclude", str(root / "keep.c")], expected - {"skip/sub.c", "keep.c"}),
+            (["--hidden", "--no-config", "--ignore-file", ".countignore"],
+             expected - {"ignored.c", "skip/sub.c", "extra/x.c"}),
+            (["--hidden", "--no-ignore", "--no-config", "--ignore-file", ".countignore"],
+             expected - {"extra/x.c"}),
         ]
         for flags, paths in cases:
             reference = run(root, flags, 1)

@@ -4,7 +4,6 @@
 (import "coil.arraylist" :use *)
 (import "coil.str" :use *)
 (import "coil.os" :as os)
-(import "coil.primitive" :as primitive)
 (import "coil.mem" :use [mem-fill])
 (import "thecount.util" :use *)
 
@@ -35,26 +34,26 @@
 ;;; Split s on runs of spaces into freshly allocated token slices (views into s).
 (defn split-tokens [(a (dyn Allocator)) (s (slice u8))] (-> (slice (slice u8)))
   (let [pieces (str-split a s " ")
-        n (al-len pieces)
+        n (len pieces)
         (mut count) 0]
     (for piece
       (iter pieces)
-      (when (> (slice-len piece) 0)
-        (store! (mut count) (+ count 1))))
+      (when (> (len piece) 0)
+        (set! (mut count) (+ count 1))))
     (let [out (must-alloc [(slice u8)] a count)
           (mut w) 0]
       (for piece
         (iter pieces)
-        (when (> (slice-len piece) 0)
-          (store! (index out w) piece)
-          (store! (mut w) (+ w 1))))
+        (when (> (len piece) 0)
+          (set! (index out w) piece)
+          (set! (mut w) (+ w 1))))
       (slice-new out count))))
 
 ;;; Parse "START END START END ..." into block pairs. An odd trailing token is
 ;;; a configuration error and aborts with a message.
 (defn parse-blocks [(a (dyn Allocator)) (s (slice u8))] (-> (slice BlockPair))
   (let [toks (split-tokens a s)
-        n (slice-len toks)]
+        n (len toks)]
     (when (!= (% n 2) 0)
       (println "thecount: block comment tokens must come in start/end pairs: {s}"
                s)
@@ -63,9 +62,9 @@
     (let [np (/ n 2)
           out (must-alloc [BlockPair] a np)]
       (for [k 0 np]
-        (store! (index out k)
-                (BlockPair :bstart (slice-get toks (* k 2))
-                  :bend (slice-get toks (+ (* k 2) 1)))))
+        (set! (index out k)
+              (BlockPair :bstart (slice-get toks (* k 2))
+                :bend (slice-get toks (+ (* k 2) 1)))))
       (slice-new out np))))
 
 ;;; Build a LangSpec from space-separated token strings — the exact same
@@ -108,27 +107,27 @@
     (let [lcs (.line-comments (mut l))]
       (for lc
         (iter lcs)
-        (store! (index t (cast i64 (slice-get lc 0))) (cast u8 CLS-HOT))))
+        (set! (index t (cast i64 (slice-get lc 0))) (cast u8 CLS-HOT))))
     (let [bls (.blocks (mut l))]
       (for block
         (iter bls)
         (let [(mut b) block]
-          (store! (index t
-                         (cast i64 (slice-get (load (field (mut b) bstart)) 0)))
-                  (cast u8 CLS-HOT)))))
+          (set! (index t
+                       (cast i64 (slice-get (load (field (mut b) bstart)) 0)))
+                (cast u8 CLS-HOT)))))
     (let [mqs (.multi-quotes (mut l))]
       (for mq
         (iter mqs)
-        (store! (index t (cast i64 (slice-get mq 0))) (cast u8 CLS-HOT))))
+        (set! (index t (cast i64 (slice-get mq 0))) (cast u8 CLS-HOT))))
     (let [qs (.quotes (mut l))]
       (for q
         (iter qs)
-        (store! (index t (cast i64 q)) (cast u8 CLS-HOT))))
+        (set! (index t (cast i64 q)) (cast u8 CLS-HOT))))
     (when (= (.shell-heredocs (mut l)) true)
-      (store! (index t #\<) (cast u8 CLS-HOT))
-      (store! (index t #\$) (cast u8 CLS-HOT))
-      (store! (index t #\() (cast u8 CLS-HOT))
-      (store! (index t #\)) (cast u8 CLS-HOT))
+      (set! (index t #\<) (cast u8 CLS-HOT))
+      (set! (index t #\$) (cast u8 CLS-HOT))
+      (set! (index t #\() (cast u8 CLS-HOT))
+      (set! (index t #\)) (cast u8 CLS-HOT))
       0)
     (set! (.classes (mut l)) t)
     0))
