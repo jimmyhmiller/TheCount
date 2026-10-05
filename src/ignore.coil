@@ -1,10 +1,10 @@
 (module thecount.ignore)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "coil.str" :use *)
-(import "coil.fs" :use *)
-(import "thecount.util" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "coil.str" :as str)
+(import "coil.fs" :as fs)
+(import "thecount.util" :as util)
 
 ;;; One parsed .gitignore line.
 (defstruct IgnoreRule
@@ -17,7 +17,7 @@
 ;;; The rules of one .gitignore, tied to the directory that holds it.
 (defstruct IgnoreCtx
   [(base (slice u8))  ; dir prefix rules are relative to ("" = walk root)
-   (rules (ptr (ArrayList IgnoreRule)))])
+   (rules (ptr (arraylist/ArrayList IgnoreRule)))])
 
 ;;; Glob match over bytes: * (within segment), ? (single non-/), ** (across /).
 (defn glob-rec [(pat (slice u8)) (s (slice u8)) (pi i64) (si i64)] (-> bool)
@@ -72,32 +72,32 @@
   (glob-rec pat s 0 0))
 
 ;;; Parse one .gitignore's content into rules (in file order).
-(defn parse-ignore [(a (dyn Allocator)) (src (slice u8))] (-> (ptr (ArrayList IgnoreRule)))
-  (let [rules (new-list a IgnoreRule)
-        lines (str-split a src "\n")]
+(defn parse-ignore [(a (dyn alloc/Allocator)) (src (slice u8))] (-> (ptr (arraylist/ArrayList IgnoreRule)))
+  (let [rules (util/new-list a IgnoreRule)
+        lines (str/str-split a src "\n")]
     (for source-line
       (iter lines)
-      (let [raw (str-trim source-line)]
+      (let [raw (str/str-trim source-line)]
         (when (and (> (len raw) 0)
                    (!= (cast i64 (get raw 0)) #\u23))  ; '#'
           (let [(mut p) raw
                 (mut neg) false]
             (when (= (cast i64 (get p 0)) #\u21)  ; '!'
               (set! (mut neg) true)
-              (set! (mut p) (subslice p 1 (slice-len p)))
+              (set! (mut p) (slice/subslice p 1 (len p)))
               0)
             (let [(mut dir-only) false]
               (let [pn (len p)]
                 (when (and (> pn 0) (= (cast i64 (get p (- pn 1))) #\/))
                   (set! (mut dir-only) true)
-                  (set! (mut p) (subslice p 0 (- pn 1)))
+                  (set! (mut p) (slice/subslice p 0 (- pn 1)))
                   0))
               ;; leading slash anchors; inner slash also anchors
               (let [(mut anchored) false]
                 (when (and (> (len p) 0)
                            (= (cast i64 (get p 0)) #\/))
                   (set! (mut anchored) true)
-                  (set! (mut p) (subslice p 1 (slice-len p)))
+                  (set! (mut p) (slice/subslice p 1 (len p)))
                   0)
                 (let [pn2 (len p)]
                   (for [j 0 pn2]
@@ -123,46 +123,51 @@
 
 ;;; Load dir/`file` (gitignore syntax) into an IgnoreCtx; rules list is empty
 ;;; when absent.
-(defn load-ignore-ctx [(a (dyn Allocator)) (dir (slice u8)) (file (slice u8))] (-> IgnoreCtx)
+(defn load-ignore-ctx [(a (dyn alloc/Allocator))
+                       (dir (slice u8))
+                       (file (slice u8))] (-> IgnoreCtx)
   (let [path
           (if (= (len dir) 0)
               file
-              (match (str-concat a dir "/")
-                (Some [d] (match (str-concat a d file)
-                            (Some [s] s)
-                            (None [] file)))
+              (match (str/str-concat a dir "/")
+                (Some [d]
+                      (match (str/str-concat a d file)
+                        (Some [s] s)
+                        (None [] file)))
                 (None [] file)))
         (mut ctx) (zeroed IgnoreCtx)]
     (set! (.base (mut ctx)) dir)
     (try (let [src
-                 (try-or! (read-file a path)
-                          (set! (.rules (mut ctx)) (new-list a IgnoreRule)))]
+                 (try-or! (fs/read-file a path)
+                          (set! (.rules (mut ctx)) (util/new-list a IgnoreRule)))]
            (set! (.rules (mut ctx)) (parse-ignore a src))))
     ctx))
 
 (defn basename-of [(path (slice u8))] (-> (slice u8))
-  (subslice path
-            (+ (bytes-last-index-of path (cast u8 #\/)) 1)
-            (len path)))
+  (slice/subslice path
+                  (+ (util/bytes-last-index-of path (cast u8 #\/)) 1)
+                  (len path)))
 
 ;;; Is `path` (with basename `name`) ignored by the ctx stack?
 ;;; Rules apply outermost-first, in file order; the LAST matching rule wins,
 ;;; which is exactly git's negation semantics for the subset we support.
-(defn ignored? [(ctxs (ptr (ArrayList IgnoreCtx)))
+(defn ignored? [(ctxs (ptr (arraylist/ArrayList IgnoreCtx)))
                 (path (slice u8))
                 (name (slice u8))
                 (is-dir bool)] (-> bool)
   (let [nc (len (load ctxs))
         (mut ign) false]
     (for [c 0 nc]
-      (let [ctx (index (slice-data (al-slice (load ctxs))) c)
+      (let [ctx (index (slice/slice-data (arraylist/al-slice (load ctxs))) c)
             base (.base ctx)
             bl (len base)
-            rel (if (= bl 0) path (subslice path (+ bl 1) (len path)))
+            rel (if (= bl 0) path (slice/subslice path (+ bl 1) (len path)))
             rules (load (field ctx rules))
             nr (len (load rules))]
         (for [ri 0 nr]
-          (let [rule (index (slice-data (al-slice (load rules))) ri)]
+          (let [rule
+                  (index (slice/slice-data (arraylist/al-slice (load rules)))
+                         ri)]
             (when (or (= is-dir true) (= (.dir-only rule) false))
               (let [pat (.pat rule)
                     target (if (= (.anchored rule) true) rel name)
@@ -171,7 +176,7 @@
                           (= pat target)
                           (glob-match pat target))]
                 (when (= hit true)
-                  (set! (mut ign) (= (load (field rule negated)) false))
+                  (set! (mut ign) (= (.negated rule) false))
                   0))
               0)))))
     (= ign true)))

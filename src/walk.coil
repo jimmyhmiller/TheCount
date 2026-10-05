@@ -1,8 +1,8 @@
 (module thecount.walk)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "coil.str" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "coil.str" :as str)
 (import "coil.fs" :use [os-pick])
 (import "coil.primitive" :as primitive)
 (import "coil.mem" :use [mem-copy])
@@ -66,21 +66,21 @@
 
 ;;; Copy s into allocator-owned, NUL-terminated storage (dirent name buffers
 ;;; are reused). The slice excludes the terminator; openat can use its data.
-(defn copy-str [(a (dyn Allocator)) (s (slice u8))] (-> (slice u8))
+(defn copy-str [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (len s)
         p (must-alloc [u8] a (+ n 1))]
-    (mem-copy p (slice-data s) n)
+    (mem-copy p (slice/slice-data s) n)
     (set! (index p n) (cast u8 0))
-    (slice-new p n)))
+    (slice/slice-new p n)))
 
 ;;; dir + "/" + name, allocator-owned. A dir of "" yields just name.
-(defn join-path [(a (dyn Allocator)) (dir (slice u8)) (name (slice u8))] (-> (slice u8))
+(defn join-path [(a (dyn alloc/Allocator)) (dir (slice u8)) (name (slice u8))] (-> (slice u8))
   (let [dn (len dir)]
     (if (= dn 0)
         (copy-str a name)
         (let [nn (len name)
               p (must-alloc [u8] a (+ (+ dn nn) 1))]
-          (mem-copy p (slice-data dir) dn)
+          (mem-copy p (slice/slice-data dir) dn)
           (set! (index p dn) (cast u8 #\/))
-          (mem-copy (index p (+ dn 1)) (slice-data name) nn)
-          (slice-new p (+ (+ dn nn) 1))))))
+          (mem-copy (index p (+ dn 1)) (slice/slice-data name) nn)
+          (slice/slice-new p (+ (+ dn nn) 1))))))

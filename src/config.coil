@@ -1,21 +1,21 @@
 (module thecount.config)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "coil.str" :use *)
-(import "coil.fs" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "coil.str" :as str)
+(import "coil.fs" :as fs)
 (import "coil.os" :as os)
-(import "thecount.lang" :use *)
-(import "thecount.registry" :use *)
-(import "thecount.util" :use *)
+(import "thecount.lang" :as lang)
+(import "thecount.registry" :as registry)
+(import "thecount.util" :as util)
 
-(defn cat [(a (dyn Allocator)) (x (slice u8)) (y (slice u8))] (-> (slice u8))
-  (match (str-concat a x y)
+(defn cat [(a (dyn alloc/Allocator)) (x (slice u8)) (y (slice u8))] (-> (slice u8))
+  (match (str/str-concat a x y)
     (Some [s] s)
     (None [] "")))
 
 ;;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
-(defn config-path [(a (dyn Allocator))] (-> (slice u8))
+(defn config-path [(a (dyn alloc/Allocator))] (-> (slice u8))
   (let [(mut out) ""]
     (try (let [opt (try-or! (os/env-get a "THECOUNT_LANGS") 0)]
            (match opt
@@ -32,14 +32,14 @@
                  (None [] "")))))))
 
 ;;; Read the whole config file; "" when it does not exist.
-(defn config-read [(a (dyn Allocator))] (-> (slice u8))
+(defn config-read [(a (dyn alloc/Allocator))] (-> (slice u8))
   (let [path (config-path a)]
     (if (= (len path) 0)
         ""
-        (try (let [data (try-or! (read-file a path) "")] data)))))
+        (try (let [data (try-or! (fs/read-file a path) "")] data)))))
 
 ;;; Overwrite the config file with data, creating parent directories.
-(defn config-write [(a (dyn Allocator)) (data (slice u8))] (-> i64)
+(defn config-write [(a (dyn alloc/Allocator)) (data (slice u8))] (-> i64)
   (let [path (config-path a)]
     (when (= (len path) 0)
       (println "thecount: cannot locate config (no HOME)")
@@ -50,13 +50,16 @@
            (match opt
              (Some [h]
                    (let [home (os/owned-string-slice h)]
-                     (make-dir (str->cstr a (cat a home "/.config")) 493)
-                     (make-dir (str->cstr a (cat a home "/.config/thecount"))
-                               493)
+                     (fs/make-dir (str/str->cstr a (cat a home "/.config")) 493)
+                     (fs/make-dir (str/str->cstr a
+                                                 (cat a
+                                                      home
+                                                      "/.config/thecount"))
+                                  493)
                      0))
              (None [] 0))))
     (try (let [_
-                 (try-or! (write-file a path data)
+                 (try-or! (fs/write-file a path data)
                           (do
                             (println "thecount: failed to write config file")
                             (os/_exit 2)
@@ -66,7 +69,7 @@
 (defn strip-cr [(line (slice u8))] (-> (slice u8))
   (let [n (len line)]
     (if (and (> n 0) (= (cast i64 (get line (- n 1))) #\return))
-        (subslice line 0 (- n 1))
+        (slice/subslice line 0 (- n 1))
         line)))
 
 ;;; Rest of the line after the first token (trimmed), e.g. the name in "lang Foo Bar".
@@ -75,7 +78,7 @@
         (mut k) 0]
     (while (and (< k n) (!= (cast i64 (get line k)) #\space))
       (set! (mut k) (+ k 1)))
-    (str-trim (subslice line k n))))
+    (str/str-trim (slice/subslice line k n))))
 
 ;;; Pending user-language stanza being accumulated during parsing.
 (defstruct Pending
@@ -97,42 +100,42 @@
    (mqs (slice u8))
    (has-mqs bool)])
 
-(defn flush-pending! [(r (ptr Registry)) (p (ptr Pending))] (-> i64)
+(defn flush-pending! [(r (ptr registry/Registry)) (p (ptr Pending))] (-> i64)
   (if (= (.active p) false)
       0
       (let [a (.arena r)
             like (.like p)
             (mut base) -1]
         (when (> (len like) 0)
-          (set! (mut base) (reg-lookup-name r like))
+          (set! (mut base) (registry/reg-lookup-name r like))
           (when (= base -1)
             (println "thecount: config references unknown base language: {s}"
                      like)
             0))
-        (let [(mut spec) (zeroed LangSpec)]
+        (let [(mut spec) (zeroed lang/LangSpec)]
           (if (>= base 0)
-              (set! (mut spec) (load (reg-spec r base)))
-              (set! (mut spec) (lang-from-strings a "" "" "" false "" "")))
+              (set! (mut spec) (load (registry/reg-spec r base)))
+              (set! (mut spec) (lang/lang-from-strings a "" "" "" false "" "")))
           (set! (.name (mut spec)) (.name p))
           (when (= (.has-lcs p) true)
             (set! (.line-comments (mut spec))
-                  (split-tokens a (load (field p lcs)))))
+                  (lang/split-tokens a (.lcs p))))
           (when (= (.has-blocks p) true)
-            (set! (.blocks (mut spec)) (parse-blocks a (load (field p blocks)))))
+            (set! (.blocks (mut spec)) (lang/parse-blocks a (.blocks p))))
           (when (= (.has-nested p) true)
-            (set! (.nested (mut spec)) (load (field p nested))))
+            (set! (.nested (mut spec)) (.nested p)))
           (when (= (.has-quotes p) true)
-            (set! (.quotes (mut spec)) (load (field p quotes))))
+            (set! (.quotes (mut spec)) (.quotes p)))
           (when (= (.has-multiline-quote-chars p) true)
             (set! (.multiline-quote-chars (mut spec))
-                  (load (field p multiline-quote-chars))))
+                  (.multiline-quote-chars p)))
           (when (= (.has-mqs p) true)
             (set! (.multi-quotes (mut spec))
-                  (split-tokens a (load (field p mqs)))))
-          (rebuild-classes! a (mut spec))
-          (let [idx (reg-add! r spec (.exts p))]
-            (when (> (len (load (field p files))) 0)
-              (reg-add-files! r idx (.files p)))
+                  (lang/split-tokens a (.mqs p))))
+          (lang/rebuild-classes! a (mut spec))
+          (let [idx (registry/reg-add! r spec (.exts p))]
+            (when (> (len (.files p)) 0)
+              (registry/reg-add-files! r idx (.files p)))
             idx)))))
 
 ;;; Parse the user config format and register every language in it.
@@ -147,16 +150,16 @@
 ;;;   quotes " '            single-char string delimiters
 ;;;   multiline-quotes " '  quote characters allowed across newlines
 ;;;   multi """ '''         multiline string delimiters
-(defn load-config! [(r (ptr Registry)) (src (slice u8))] (-> i64)
+(defn load-config! [(r (ptr registry/Registry)) (src (slice u8))] (-> i64)
   (let [a (.arena r)
-        lines (str-split a src "\n")
-        pend (box! a Pending (zeroed Pending))]
+        lines (str/str-split a src "\n")
+        pend (alloc/box! a Pending (zeroed Pending))]
     (for raw-line
       (iter lines)
-      (let [line (str-trim (strip-cr raw-line))]
+      (let [line (str/str-trim (strip-cr raw-line))]
         (when (and (> (len line) 0)
                    (!= (cast i64 (get line 0)) #\u23))  ; '#'
-          (let [toks (split-tokens a line)
+          (let [toks (lang/split-tokens a line)
                 d (get toks 0)
                 rest (rest-of-line line)]
             (cond (= d "lang")
@@ -179,31 +182,32 @@
                   (= d "file") (do (set! (.files pend) rest) 0)
                   (= d "line")
                     (do
-                      (set-fields! pend (lcs rest) (has-lcs true))
+                      (util/set-fields! pend (lcs rest) (has-lcs true))
                       0)
                   (= d "block")
                     (do
-                      (set-fields! pend (blocks rest) (has-blocks true))
+                      (util/set-fields! pend (blocks rest) (has-blocks true))
                       0)
                   (= d "nested")
                     (do
-                      (set-fields! pend (nested true) (has-nested true))
+                      (util/set-fields! pend (nested true) (has-nested true))
                       0)
                   (= d "quotes")
                     (do
-                      (set-fields! pend
-                                   (quotes (strip-spaces a rest))
-                                   (has-quotes true))
+                      (util/set-fields! pend
+                                        (quotes (strip-spaces a rest))
+                                        (has-quotes true))
                       0)
                   (= d "multiline-quotes")
                     (do
-                      (set-fields! pend
-                                   (multiline-quote-chars (strip-spaces a rest))
-                                   (has-multiline-quote-chars true))
+                      (util/set-fields! pend
+                                        (multiline-quote-chars (strip-spaces a
+                                                                             rest))
+                                        (has-multiline-quote-chars true))
                       0)
                   (= d "multi")
                     (do
-                      (set-fields! pend (mqs rest) (has-mqs true))
+                      (util/set-fields! pend (mqs rest) (has-mqs true))
                       0)
                   :else
                     (do (println "thecount: unknown config directive: {s}" d) 0))))))
@@ -211,51 +215,53 @@
     0))
 
 ;;; "\" '" -> "\"'" — quotes are single chars, spacing is only for readability.
-(defn strip-spaces [(a (dyn Allocator)) (s (slice u8))] (-> (slice u8))
+(defn strip-spaces [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (len s)
-        p (must-alloc [u8] a n)
+        p (util/must-alloc [u8] a n)
         (mut w) 0]
     (for [k 0 n]
       (when (!= (cast i64 (get s k)) #\space)
-        (set! (index p w) (slice-get s k))
+        (set! (index p w) (get s k))
         (set! (mut w) (+ w 1))))
-    (slice-new p w)))
+    (slice/slice-new p w)))
 
 ;;; Remove the stanza for `name` (case-insensitive) from config text.
 ;;; (Some new-text) on success, (None) when no stanza matched.
-(defn remove-stanza [(a (dyn Allocator)) (src (slice u8)) (name (slice u8))] (-> (Option (slice u8)))
-  (let [lines (str-split a src "\n")
+(defn remove-stanza [(a (dyn alloc/Allocator))
+                     (src (slice u8))
+                     (name (slice u8))] (-> (Option (slice u8)))
+  (let [lines (str/str-split a src "\n")
         n (len lines)
-        want (lower a name)
-        (mut b) (sb-new a)
+        want (registry/lower a name)
+        (mut b) (str/sb-new a)
         (mut skipping) false
         (mut found) false]
     (for [k 0 n]
       (let [line (strip-cr (get lines k))
-            trimmed (str-trim line)
-            toks (split-tokens a trimmed)]
+            trimmed (str/str-trim line)
+            toks (lang/split-tokens a trimmed)]
         (if (and (> (len toks) 0) (= (get toks 0) "lang"))
-            (if (= (lower a (rest-of-line trimmed)) want)
+            (if (= (registry/lower a (rest-of-line trimmed)) want)
                 (do
                   (set! (mut skipping) true)
                   (set! (mut found) true)
                   0)
                 (do
                   (set! (mut skipping) false)
-                  (sb-push-str! (mut b) line)
-                  (sb-push-str! (mut b) "\n")
+                  (str/sb-push-str! (mut b) line)
+                  (str/sb-push-str! (mut b) "\n")
                   0))
             (when (= skipping false)
               ;; keep the line unless it is the trailing empty piece of the split
               (when (or (< k (- n 1)) (> (len line) 0))
-                (sb-push-str! (mut b) line)
-                (sb-push-str! (mut b) "\n")
+                (str/sb-push-str! (mut b) line)
+                (str/sb-push-str! (mut b) "\n")
                 0)
               0))))
-    (if (= found true) (Some (sb-str b)) (None))))
+    (if (= found true) (Some (str/sb-str b)) (None))))
 
 ;;; Load user languages from the config file on top of the builtins.
-(defn load-user-langs! [(r (ptr Registry))] (-> i64)
+(defn load-user-langs! [(r (ptr registry/Registry))] (-> i64)
   (let [src (config-read (.arena r))]
     (if (> (len src) 0)
         (load-config! r src)

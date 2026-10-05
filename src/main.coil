@@ -1,24 +1,24 @@
 (module thecount.main)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "coil.hashmap" :use *)
-(import "coil.str" :use *)
-(import "coil.fs" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "coil.hashmap" :as hashmap)
+(import "coil.str" :as str)
+(import "coil.fs" :as fs)
 (import "coil.os" :as os)
-(import "thecount.lang" :use *)
-(import "thecount.registry" :use *)
-(import "thecount.config" :use *)
-(import "thecount.counter" :use *)
-(import "thecount.output" :use *)
-(import "thecount.engine" :use *)
-(import "thecount.util" :use *)
+(import "thecount.lang" :as lang)
+(import "thecount.registry" :as registry)
+(import "thecount.config" :as config)
+(import "thecount.counter" :as counter)
+(import "thecount.output" :as output)
+(import "thecount.engine" :as engine)
+(import "thecount.util" :as util)
 
 (defn strip-trailing-slashes [(s (slice u8))] (-> (slice u8))
   (let [(mut n) (len s)]
     (while (and (> n 1) (= (cast i64 (get s (- n 1))) #\/))
       (set! (mut n) (- n 1)))
-    (subslice s 0 n)))
+    (slice/subslice s 0 n)))
 
 (defn usage [] (-> i64)
   (println "thecount — count lines of code")
@@ -55,9 +55,9 @@
   (println "languages live in ~/.config/thecount/languages — plain text, edit freely")
   0)
 
-(defn run-count [(a (dyn Allocator))
-                 (r (ptr Registry))
-                 (roots (ptr (ArrayList (slice u8))))
+(defn run-count [(a (dyn alloc/Allocator))
+                 (r (ptr registry/Registry))
+                 (roots (ptr (arraylist/ArrayList (slice u8))))
                  (want-files bool)
                  (want-dirs bool)
                  (depth i64)
@@ -65,110 +65,114 @@
                  (use-ignore bool)
                  (ignore-file (slice u8))
                  (json-output bool)
-                 (excludes (ptr (ArrayList (slice u8))))] (-> i64)
-  (let [n-specs (reg-count r)
-        clean-roots (new-list a (slice u8))]
+                 (excludes (ptr (arraylist/ArrayList (slice u8))))] (-> i64)
+  (let [n-specs (registry/reg-count r)
+        clean-roots (util/new-list a (slice u8))]
     (for root
       (iter (load roots))
       (push! clean-roots (strip-trailing-slashes root)))
     (let [agg
-            (count-all a
-                       r
-                       clean-roots
-                       want-files
-                       want-dirs
-                       depth
-                       hidden
-                       use-ignore
-                       ignore-file
-                       excludes)]
+            (engine/count-all a
+                              r
+                              clean-roots
+                              want-files
+                              want-dirs
+                              depth
+                              hidden
+                              use-ignore
+                              ignore-file
+                              excludes)]
       ;; emit
       (cond (= json-output true)
-              (let [files-per (slice-data (.files-per agg))
-                    counts-per (slice-data (.counts-per agg))
+              (let [files-per (slice/slice-data (.files-per agg))
+                    counts-per (slice/slice-data (.counts-per agg))
                     (mut files) 0
-                    (mut c) (counts-zero)]
+                    (mut c) (counter/counts-zero)]
                 (for [s 0 n-specs]
                   (set! (mut files) (+ files (load (index files-per s))))
-                  (counts-add! (mut c) (load (index counts-per s))))
-                (print-json a
-                            files
-                            c
-                            (al-slice (load (load (field agg file-rows))))
-                            want-files))
+                  (counter/counts-add! (mut c) (load (index counts-per s))))
+                (output/print-json a
+                                   files
+                                   c
+                                   (arraylist/al-slice (load (load (field agg
+                                                                          file-rows))))
+                                   want-files))
             (= want-files true)
-              (print-table a
-                           "File"
-                           (al-slice (load (load (field agg file-rows))))
-                           false
-                           true
-                           (fnptr-of row-cmp))
+              (output/print-table a
+                                  "File"
+                                  (arraylist/al-slice (load (load (field agg
+                                                                         file-rows))))
+                                  false
+                                  true
+                                  (fnptr-of output/row-cmp))
             (= want-dirs true)
               (do
-                (agg-dir-groups! a agg)
-                (print-dir-tree a (al-slice (load (load (field agg dir-rows))))))
+                (engine/agg-dir-groups! a agg)
+                (output/print-dir-tree a
+                                       (arraylist/al-slice (load (load (field agg
+                                                                              dir-rows))))))
             :else
-              (let [rows (new-list a Row)
-                    files-per (slice-data (.files-per agg))
-                    counts-per (slice-data (.counts-per agg))]
+              (let [rows (util/new-list a output/Row)
+                    files-per (slice/slice-data (.files-per agg))
+                    counts-per (slice/slice-data (.counts-per agg))]
                 (for [s 0 n-specs]
                   (when (> (load (index files-per s)) 0)
                     (push! rows
-                           (mk-row (load (field (reg-spec r s) name))
-                                   ""
-                                   (load (index files-per s))
-                                   (load (index counts-per s))))
+                           (output/mk-row (.name (registry/reg-spec r s))
+                                          ""
+                                          (load (index files-per s))
+                                          (load (index counts-per s))))
                     0))
-                (print-table a
-                             "Language"
-                             (al-slice (load rows))
-                             true
-                             false
-                             (fnptr-of row-cmp)))))))
+                (output/print-table a
+                                    "Language"
+                                    (arraylist/al-slice (load rows))
+                                    true
+                                    false
+                                    (fnptr-of output/row-cmp)))))))
 
-(defn run-langs [(a (dyn Allocator)) (r (ptr Registry))] (-> i64)
-  (let [n (reg-count r)
-        exts (must-alloc [StrBuf] a n)]
+(defn run-langs [(a (dyn alloc/Allocator)) (r (ptr registry/Registry))] (-> i64)
+  (let [n (registry/reg-count r)
+        exts (util/must-alloc [str/StrBuf] a n)]
     (for [k 0 n]
-      (set! (index exts k) (sb-new a)))
-    (hm-for [ext idx (load (field r by-ext))]
-            (let [bp (index exts idx)]
-              (when (> (len (sb-str (load bp))) 0)
-                (sb-push-str! bp " "))
-              (sb-push-str! bp ext)))
+      (set! (index exts k) (str/sb-new a)))
+    (hashmap/hm-for [ext idx (load (field r by-ext))]
+                    (let [bp (index exts idx)]
+                      (when (> (len (str/sb-str (load bp))) 0)
+                        (str/sb-push-str! bp " "))
+                      (str/sb-push-str! bp ext)))
     (for [j 0 n]
-      (let [nm (.name (reg-spec r j))
-            es (sb-str (load (index exts j)))]
+      (let [nm (.name (registry/reg-spec r j))
+            es (str/sb-str (load (index exts j)))]
         (println "{s}: {s}" nm es)))
     0))
 
-(defn push-directive! [(b (mut StrBuf)) (d (slice u8)) (val (slice u8))] (-> i64)
-  (sb-push-str! (mut b) d)
-  (sb-push-str! (mut b) " ")
-  (sb-push-str! (mut b) val)
-  (sb-push-str! (mut b) "\n")
+(defn push-directive! [(b (mut str/StrBuf)) (d (slice u8)) (val (slice u8))] (-> i64)
+  (str/sb-push-str! (mut b) d)
+  (str/sb-push-str! (mut b) " ")
+  (str/sb-push-str! (mut b) val)
+  (str/sb-push-str! (mut b) "\n")
   0)
 
-(defn run-add-lang [(a (dyn Allocator))
-                    (r (ptr Registry))
-                    (args (ptr (ArrayList (slice u8))))] (-> i64)
+(defn run-add-lang [(a (dyn alloc/Allocator))
+                    (r (ptr registry/Registry))
+                    (args (ptr (arraylist/ArrayList (slice u8))))] (-> i64)
   (let [n (len (load args))]
     (when (= n 0)
       (println "thecount add-lang: missing language name")
       (os/_exit 2)
       0)
     (let [name (get (load args) 0)
-          (mut b) (sb-new a)
+          (mut b) (str/sb-new a)
           (mut k) 1]
-      (sb-push-str! (mut b) "\nlang ")
-      (sb-push-str! (mut b) name)
-      (sb-push-str! (mut b) "\n")
+      (str/sb-push-str! (mut b) "\nlang ")
+      (str/sb-push-str! (mut b) name)
+      (str/sb-push-str! (mut b) "\n")
       (while (< k n)
         (let [arg (get (load args) k)
               val (if (< (+ k 1) n) (get (load args) (+ k 1)) "")]
           (cond (= arg "--like")
                   (do
-                    (when (= (reg-lookup-name r val) -1)
+                    (when (= (registry/reg-lookup-name r val) -1)
                       (println "thecount add-lang: unknown base language: {s}"
                                val)
                       (os/_exit 2)
@@ -205,7 +209,7 @@
                     (set! (mut k) (+ k 2)))
                 (= arg "--nested")
                   (do
-                    (sb-push-str! (mut b) "nested\n")
+                    (str/sb-push-str! (mut b) "nested\n")
                     (set! (mut k) (+ k 1)))
                 :else
                   (do
@@ -213,47 +217,47 @@
                     (os/_exit 2)
                     0))))
       ;; validate the combined config before writing it
-      (let [old (config-read a)
-            (mut all) (sb-new a)]
-        (sb-push-str! (mut all) old)
-        (sb-push-str! (mut all) (sb-str b))
-        (let [check-reg (reg-new a)]
-          (add-builtins! check-reg)
-          (load-config! check-reg (sb-str all))
-          (when (= (reg-lookup-name check-reg name) -1)
+      (let [old (config/config-read a)
+            (mut all) (str/sb-new a)]
+        (str/sb-push-str! (mut all) old)
+        (str/sb-push-str! (mut all) (str/sb-str b))
+        (let [check-reg (registry/reg-new a)]
+          (registry/add-builtins! check-reg)
+          (config/load-config! check-reg (str/sb-str all))
+          (when (= (registry/reg-lookup-name check-reg name) -1)
             (println "thecount add-lang: stanza did not register; not writing")
             (os/_exit 2)
             0)
           0)
-        (config-write a (sb-str all))
+        (config/config-write a (str/sb-str all))
         (println "registered language: {s}" name)
         (println "config: ~/.config/thecount/languages")
         0))))
 
-(defn run-remove-lang [(a (dyn Allocator))
-                       (r (ptr Registry))
-                       (args (ptr (ArrayList (slice u8))))] (-> i64)
+(defn run-remove-lang [(a (dyn alloc/Allocator))
+                       (r (ptr registry/Registry))
+                       (args (ptr (arraylist/ArrayList (slice u8))))] (-> i64)
   (let [n (len (load args))]
     (when (= n 0)
       (println "thecount remove-lang: missing language name")
       (os/_exit 2)
       0)
     ;; join the args so multi-word names work unquoted
-    (let [(mut b) (sb-new a)]
+    (let [(mut b) (str/sb-new a)]
       (for [k 0 n]
-        (when (> k 0) (sb-push-str! (mut b) " ") 0)
-        (sb-push-str! (mut b) (get (load args) k)))
-      (let [name (sb-str b)
-            src (config-read a)]
-        (match (remove-stanza a src name)
+        (when (> k 0) (str/sb-push-str! (mut b) " ") 0)
+        (str/sb-push-str! (mut b) (get (load args) k)))
+      (let [name (str/sb-str b)
+            src (config/config-read a)]
+        (match (config/remove-stanza a src name)
           (Some [out]
                 (do
-                  (config-write a out)
+                  (config/config-write a out)
                   (println "removed language: {s}" name)
                   0))
           (None []
                 (do
-                  (if (>= (reg-lookup-name r name) 0)
+                  (if (>= (registry/reg-lookup-name r name) 0)
                       (println "thecount remove-lang: '{s}' is a builtin, not in your config; override it with add-lang instead"
                                name)
                       (println "thecount remove-lang: no user language named '{s}'"
@@ -262,10 +266,10 @@
                   0)))))))
 
 (defn main [(argc i32) (argv (ptr (ptr i8)))] (-> i64)
-  (let [a (malloc-allocator)
+  (let [a (alloc/malloc-allocator)
         nargs (cast i64 argc)
-        roots (new-list a (slice u8))
-        rest (new-list a (slice u8))
+        roots (util/new-list a (slice u8))
+        rest (util/new-list a (slice u8))
         (mut want-files) false
         (mut want-dirs) false
         (mut depth) 1
@@ -275,11 +279,11 @@
         (mut use-user-config) true
         (mut json-output) false
         (mut extensions) ""
-        excludes (new-list a (slice u8))
+        excludes (util/new-list a (slice u8))
         (mut mode) 0  ; 0=count 1=add-lang 2=langs 3=help 4=remove-lang
         (mut k) 1]
     (while (< k nargs)
-      (let [arg (cstr->str (load (index argv k)))]
+      (let [arg (str/cstr->str (load (index argv k)))]
         (cond (and (= k 1) (= arg "add-lang")) (do (set! (mut mode) 1) 0)
               (and (= k 1) (= arg "remove-lang")) (do (set! (mut mode) 4) 0)
               (and (= k 1) (= arg "langs")) (do (set! (mut mode) 2) 0)
@@ -287,7 +291,7 @@
               (= arg "--exclude")
                 (do
                   (when (< (+ k 1) nargs)
-                    (push! excludes (cstr->str (load (index argv (+ k 1)))))
+                    (push! excludes (str/cstr->str (load (index argv (+ k 1)))))
                     (set! (mut k) (+ k 1))
                     0)
                   0)
@@ -300,7 +304,8 @@
               (= arg "--ignore-file")
                 (do
                   (when (< (+ k 1) nargs)
-                    (set! (mut ignore-file) (cstr->str (load (index argv (+ k 1)))))
+                    (set! (mut ignore-file)
+                          (str/cstr->str (load (index argv (+ k 1)))))
                     (set! (mut k) (+ k 1))
                     0)
                   0)
@@ -309,7 +314,7 @@
                 (if (< (+ k 1) nargs)
                     (do
                       (set! (mut extensions)
-                            (cstr->str (load (index argv (+ k 1)))))
+                            (str/cstr->str (load (index argv (+ k 1)))))
                       (set! (mut k) (+ k 1))
                       0)
                     (do
@@ -318,7 +323,7 @@
                       0))
               (= arg "--output")
                 (if (< (+ k 1) nargs)
-                    (let [value (cstr->str (load (index argv (+ k 1))))]
+                    (let [value (str/cstr->str (load (index argv (+ k 1))))]
                       (if (= value "json")
                           (set! (mut json-output) true)
                           (if (= value "text")
@@ -338,7 +343,9 @@
               (= arg "--depth")
                 (do
                   (when (< (+ k 1) nargs)
-                    (match (str-parse-int (cstr->str (load (index argv (+ k 1)))))
+                    (match (str/str-parse-int (str/cstr->str (load (index argv
+                                                                          (+ k
+                                                                             1)))))
                       (Some [d] (do (set! (mut depth) d) 0))
                       (None [] 0))
                     (set! (mut k) (+ k 1))
@@ -352,13 +359,13 @@
         (usage)
         (if (= mode 5)
             (do (println "thecount 0.1.0-dev") 0)
-            (let [r (reg-new a)]
-              (add-builtins! r)
+            (let [r (registry/reg-new a)]
+              (registry/add-builtins! r)
               (when (= use-user-config true)
-                (load-user-langs! r)
+                (config/load-user-langs! r)
                 0)
               (when (> (len extensions) 0)
-                (reg-restrict-extensions! r extensions)
+                (registry/reg-restrict-extensions! r extensions)
                 0)
               (cond (= mode 1) (run-add-lang a r rest)
                     (= mode 4) (run-remove-lang a r rest)

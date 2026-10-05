@@ -33,11 +33,11 @@
 ;;
 ;; Read the generated code with:  coil expand src/specialize.coil
 (import "coil.primitive" :as primitive)
-(import "coil.slice" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.counter" :use *)
-(import "thecount.simd" :use *)
-(import "thecount.cscan" :use *)
+(import "coil.slice" :as slice)
+(import "thecount.lang" :as lang)
+(import "thecount.counter" :as counter)
+(import "thecount.simd" :as simd)
+(import "thecount.cscan" :as cscan)
 
 ;;; ---------------------------------------------------------------------------
 ;;; The table. Same seven token strings `add-builtin!` takes, so a row here reads
@@ -202,7 +202,7 @@
                                                     single-scalar-char-literals))
                                        true)
                                     (= ch #\'))
-                               (single-scalar-char-end bytes pos le)
+                               (counter/single-scalar-char-end bytes pos le)
                                -1)]
                      (store! (mut saw-code) true)
                      (cond (>= char-end 0) (store! (mut pos) char-end)
@@ -210,11 +210,12 @@
                                                     single-scalar-char-literals))
                                        true)
                                     (= ch #\'))
-                               (= (% (backslashes-before bytes i pos) 2) 1))
+                               (= (% (counter/backslashes-before bytes i pos) 2)
+                                  1))
                              (store! (mut pos) (+ pos 1))
                            true
                              (do
-                               (store! (mut state) ST-STRING)
+                               (store! (mut state) counter/ST-STRING)
                                ~@(if (> n-q 1)
                                      `((store! (mut qch)
                                                (cast i64
@@ -253,7 +254,7 @@
                              (store! (mut mqdoc) false)
                              (store! (mut saw-code) true)
                              0))
-                       (store! (mut state) ST-MSTRING)
+                       (store! (mut state) counter/ST-MSTRING)
                        ~@(if (> n-mq 1) `((store! (mut mqi) mq)) `())
                        (store! (mut pos)
                                (+ pos
@@ -269,7 +270,7 @@
         `(if ~(ct-match blocks 0 `pos)
              (do
                (store! (mut saw-comment) true)
-               (store! (mut state) ST-BLOCK)
+               (store! (mut state) counter/ST-BLOCK)
                ~@(if nested `((store! (mut bdepth) 1)) `())
                (store! (mut pos) (+ pos ~(ct-tok-len blocks 0)))
                0)
@@ -288,8 +289,8 @@
        (store! (mut saw-comment) true)
        (let [(mut scanning) true]
          (while (= scanning true)
-           (let [he (find-byte bytes pos le ~e0)
-                 hs ~(if nested `(find-byte bytes pos le ~s0) `le)
+           (let [he (counter/find-byte bytes pos le ~e0)
+                 hs ~(if nested `(counter/find-byte bytes pos le ~s0) `le)
                  h (if (< hs he) hs he)]
              (cond (>= h le)
                      (do (store! (mut pos) le) (store! (mut scanning) false) 0)
@@ -299,9 +300,9 @@
                              `((store! (mut bdepth) (- bdepth 1)) (when (= bdepth
                                                                            0)
                                                                     (store! (mut state)
-                                                                            ST-NORMAL)
+                                                                            counter/ST-NORMAL)
                                                                     0))
-                             `((store! (mut state) ST-NORMAL)))
+                             `((store! (mut state) counter/ST-NORMAL)))
                        (store! (mut pos) (+ h ~len-end))
                        (store! (mut scanning) false)
                        0)
@@ -326,13 +327,13 @@
        (store! (mut saw-code) true)
        (let [(mut scanning) true]
          (while (= scanning true)
-           (let [q (find-byte bytes pos le ~closer)]
+           (let [q (counter/find-byte bytes pos le ~closer)]
              (if (>= q le)
                  (do (store! (mut pos) le) (store! (mut scanning) false) 0)
-                 (if (= (% (backslashes-before bytes pos q) 2) 1)
+                 (if (= (% (counter/backslashes-before bytes pos q) 2) 1)
                      (do (store! (mut pos) (+ q 1)) 0)
                      (do
-                       (store! (mut state) ST-NORMAL)
+                       (store! (mut state) counter/ST-NORMAL)
                        (store! (mut pos) (+ q 1))
                        (store! (mut scanning) false)
                        0)))))
@@ -361,12 +362,13 @@
            (store! (mut saw-code) true))
        (let [(mut scanning) true]
          (while (= scanning true)
-           (let [h (find-byte bytes pos le ~t0)]
+           (let [h (counter/find-byte bytes pos le ~t0)]
              (if (>= h le)
                  (do (store! (mut pos) le) (store! (mut scanning) false) 0)
-                 (if (all ~hit (!= (% (backslashes-before bytes pos h) 2) 1))
+                 (if (all ~hit
+                          (!= (% (counter/backslashes-before bytes pos h) 2) 1))
                      (do
-                       (store! (mut state) ST-NORMAL)
+                       (store! (mut state) counter/ST-NORMAL)
                        (store! (mut pos) (+ h ~adv))
                        (store! (mut scanning) false)
                        0)
@@ -413,12 +415,12 @@
   (if (>= b 256)
       `()
       (if (ct-hot-byte? lcs blocks quotes mqs b)
-          `((v64-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs
-                                                         blocks
-                                                         quotes
-                                                         mqs
-                                                         (+ b 1)
-                                                         pexpr))
+          `((simd/v64-eq-mask ~pexpr ~b) ~@(ct-hot-mask-calls lcs
+                                                              blocks
+                                                              quotes
+                                                              mqs
+                                                              (+ b 1)
+                                                              pexpr))
           (ct-hot-mask-calls lcs blocks quotes mqs (+ b 1) pexpr))))
 
 ;;; Fold a list of mask expressions into `(| a (| b …))`, or 0 when empty.
@@ -455,7 +457,7 @@
            (when (= (cast i64
                           (load (index cls-tab
                                        (cast i64 (load (index data pos))))))
-                    CLS-PLAIN)
+                    lang/CLS-PLAIN)
              (store! (mut saw-code) true)
              0)
            0)
@@ -474,13 +476,13 @@
                                                      0
                                                      `(index data pos))
                                   0)
-                   nonws (^ (v64-ws-mask (index data pos)) -1)]
+                   nonws (^ (simd/v64-ws-mask (index data pos)) -1)]
                (if (= hm 0)
                    (do
                      (when (!= nonws 0) (store! (mut acc) 1) 0)
                      (store! (mut pos) (+ pos 64))
                      0)
-                   (let [fh (ctz hm)]
+                   (let [fh (simd/ctz hm)]
                      ;; only the bytes BEFORE the delimiter count toward the
                      ;; line being non-blank, exactly as the scalar loop does
                      (when (!= (& nonws (^ (<< -1 fh) -1)) 0)
@@ -503,7 +505,7 @@
                (if (= hm 0)
                    (store! (mut pos) (+ pos 64))
                    (do
-                     (store! (mut pos) (+ pos (ctz hm)))
+                     (store! (mut pos) (+ pos (simd/ctz hm)))
                      (store! (mut hot) true)
                      0))))
            ;; The last 1..63 bytes of a line may be read as a full vector when
@@ -523,14 +525,14 @@
                    nonws
                      (if (or (!= acc 0) (= saw-code true))
                          0
-                         (& (^ (v64-ws-mask (index data pos)) -1)
+                         (& (^ (simd/v64-ws-mask (index data pos)) -1)
                             valid))]
                (if (= hm 0)
                    (do
                      (when (!= nonws 0) (store! (mut acc) 1) 0)
                      (store! (mut pos) le)
                      0)
-                   (let [fh (ctz hm)]
+                   (let [fh (simd/ctz hm)]
                      (when (!= (& nonws (^ (<< -1 fh) -1)) 0)
                        (store! (mut acc) 1)
                        0)
@@ -543,7 +545,7 @@
                      (cast i64
                            (load (index cls-tab
                                         (cast i64 (load (index data pos))))))]
-               (if (!= cls CLS-HOT)
+               (if (!= cls lang/CLS-HOT)
                    (do
                      (store! (mut acc) (| acc (- 1 (>> cls 1))))
                      (store! (mut pos) (+ pos 1))
@@ -556,7 +558,7 @@
       `(do
          (let [(mut acc) 0]
            (while (all (= acc 0) (<= (+ pos 16) le))
-             (if (= (^ (v16-ws-mask (index data pos)) 65535) 0)
+             (if (= (^ (simd/v16-ws-mask (index data pos)) 65535) 0)
                  (store! (mut pos) (+ pos 16))
                  (store! (mut acc) 1)))
            (while (all (< pos le) (= acc 0))
@@ -579,7 +581,7 @@
   (let [ident (get row 0)
         lcs (primitive/code-str (get row 3))
         blocks (primitive/code-str (get row 4))
-        nested (= (primitive/code-nth row 5) `true)
+        nested (= (get row 5) `true)
         quotes (primitive/code-str (get row 6))
         mqs (primitive/code-str (get row 7))
         n-lc (ct-tok-count lcs)
@@ -602,16 +604,16 @@
              (= quotes "\"'")
              (= mqs "")
              (= nested false))
-        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec))
-                                                                                  (bytes (slice u8))] (-> Counts)
-           (count-c-events spec bytes))
-        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr LangSpec))
-                                                                                  (bytes (slice u8))] (-> Counts)
-           (let [len (slice-len bytes)
-                 data (slice-data bytes)
+        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr lang/LangSpec))
+                                                                                  (bytes (slice u8))] (-> counter/Counts)
+           (cscan/count-c-events spec bytes))
+        `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr lang/LangSpec))
+                                                                                  (bytes (slice u8))] (-> counter/Counts)
+           (let [len (slice/slice-len bytes)
+                 data (slice/slice-data bytes)
                  ~@(if has-hot `(cls-tab (load (field spec classes))) `())
                    (mut i)
-                 0 ~@(if has-state `((mut state) ST-NORMAL) `())
+                 0 ~@(if has-state `((mut state) counter/ST-NORMAL) `())
                  ~@(if (and has-bl nested) `((mut bdepth) 0) `())
                    ~@(if (> n-q 1) `((mut qch) 0) `())
                  ~@(if (> n-mq 1) `((mut mqi) 0) `())
@@ -621,21 +623,21 @@
                  (mut n-comments) 0
                  (mut n-code) 0]
              (while (< i len)
-               (let [le (find-newline data i len)
+               (let [le (simd/find-newline data i len)
                      (mut pos) (load i)
                      (mut saw-code) false
                      (mut saw-comment) false]
                  (while (< pos le)
                    ~(if has-state
                         `(cond ~@(if has-bl
-                                     `((= state ST-BLOCK) ~(gen-block-arm blocks
-                                                                          nested))
+                                     `((= state counter/ST-BLOCK) ~(gen-block-arm blocks
+                                                                                  nested))
                                      `())
                                  ~@(if has-q
-                                       `((= state ST-STRING) ~(gen-string-arm quotes))
+                                       `((= state counter/ST-STRING) ~(gen-string-arm quotes))
                                        `())
                                ~@(if has-mq
-                                     `((= state ST-MSTRING) ~(gen-mstring-arm mqs))
+                                     `((= state counter/ST-MSTRING) ~(gen-mstring-arm mqs))
                                      `())
                                  true
                                ~(gen-normal-arm has-hot
@@ -654,18 +656,20 @@
                        (= saw-comment true)
                          (store! (mut n-comments) (+ n-comments 1))
                        ~@(if has-bl
-                             `((= state ST-BLOCK) (store! (mut n-comments)
-                                                          (+ n-comments 1)))
+                             `((= state counter/ST-BLOCK) (store! (mut n-comments)
+                                                                  (+ n-comments
+                                                                     1)))
                              `())
                          ~@(if has-q
-                               `((= state ST-STRING) (store! (mut n-code)
-                                                             (+ n-code 1)))
+                               `((= state counter/ST-STRING) (store! (mut n-code)
+                                                                     (+ n-code
+                                                                        1)))
                                `())
                        ~@(if has-mq
-                             `((all (= state ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
-                                                                                 (+ n-comments
-                                                                                    1))
-                                 (= state ST-MSTRING)
+                             `((all (= state counter/ST-MSTRING) (= mqdoc true)) (store! (mut n-comments)
+                                                                                         (+ n-comments
+                                                                                            1))
+                                 (= state counter/ST-MSTRING)
                                  (store! (mut n-code) (+ n-code 1)))
                              `())
                          true
@@ -673,7 +677,7 @@
                  ;; Some languages allow quoted strings across physical newlines.
                  ;; Others require a trailing continuation slash.
                  ~@(if has-q
-                       `((when (= state ST-STRING)
+                       `((when (= state counter/ST-STRING)
                            (let [e
                                    (if (all (> le i)
                                             (= (cast i64
@@ -681,23 +685,26 @@
                                                #\u0D))
                                        (- le 1)
                                        le)]
-                             (when (and (= (quote-byte? ~(if (> n-q 1)
-                                                             `(load qch)
-                                                             `~(cast i64
-                                                                     (get quotes
-                                                                          0)))
-                                                        (load (field spec
-                                                                     multiline-quote-chars)))
+                             (when (and (= (counter/quote-byte? ~(if (> n-q 1)
+                                                                     `(load qch)
+                                                                     `~(cast i64
+                                                                             (get quotes
+                                                                                  0)))
+                                                                (load (field spec
+                                                                             multiline-quote-chars)))
                                            false)
-                                        (= (% (backslashes-before bytes i e) 2)
+                                        (= (% (counter/backslashes-before bytes
+                                                                          i
+                                                                          e)
+                                              2)
                                            0))
-                               (store! (mut state) ST-NORMAL)
+                               (store! (mut state) counter/ST-NORMAL)
                                0)
                              0)
                            0))
                        `())
                  (store! (mut i) (+ le 1))))
-             (Counts
+             (counter/Counts
                :lines n-lines
                :blank n-blank
                :comments n-comments
@@ -714,9 +721,9 @@
 ;;; Nested ifs over the row index; the last row doubles as the fallback.
 (defn gen-field-arms [(tbl Code) (k i64) (n i64) (fidx i64)] (-> Code)
   (if (= k (- n 1))
-      (get (primitive/code-nth tbl k) fidx)
+      (get (get tbl k) fidx)
       `(if (= i ~k)
-           ~(get (primitive/code-nth tbl k) fidx)
+           ~(get (get tbl k) fidx)
            ~(gen-field-arms tbl (+ k 1) n fidx))))
 
 (defn gen-field-accessor [(nm Code) (rty Code) (tbl Code) (fidx i64)] (-> Code)
@@ -726,8 +733,8 @@
 (defn gen-counter-arms [(tbl Code) (k i64) (n i64)] (-> Code)
   (let [f
           `(primitive/fnptr-of ~(primitive/syntax->datum (primitive/code-symbol "count$"
-                                                                                (get (primitive/code-nth tbl
-                                                                                                         k)
+                                                                                (get (get tbl
+                                                                                          k)
                                                                                      0))))]
     (if (= k (- n 1))
         f
@@ -854,7 +861,7 @@
               ~(primitive/fresh-identifier "fh")
               ~(primitive/fresh-identifier "cls")
               ~(primitive/fresh-identifier "b")
-              ~(primitive/syntax->datum (get `(Counts) 0)))
+              ~(primitive/syntax->datum (get `(counter/Counts) 0)))
         generated
           `(do
              ~@(gen-counters tbl 0 n)
@@ -870,9 +877,9 @@
              ~(gen-field-accessor `spec-row-mqs `(slice u8) tbl 7)
              ;; The generated scanner for row i.
              (defn ~(primitive/syntax->datum `spec-row-counter) [(i i64)] (-> (fnptr c
-                                                                                     [(ptr LangSpec)
+                                                                                     [(ptr lang/LangSpec)
                                                                                       (slice u8)]
-                                                                                     Counts))
+                                                                                     counter/Counts))
                ~(gen-counter-arms tbl 0 n)))]
     (bind-scanner-identifiers scanner-names scanner-ids generated)))
 

@@ -1,8 +1,8 @@
 (module thecount.counter)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "thecount.lang" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "thecount.lang" :as lang)
 (import "thecount.util" :use [bytes-contains?])
 
 (extern memchr :cc c [(ptr u8) i32 i64] (-> (ptr u8)))
@@ -56,10 +56,14 @@
 (defn find-byte [(s (slice u8)) (from i64) (to i64) (c i64)] (-> i64)
   (if (>= from to)
       to
-      (let [p (memchr (index (slice-data s) from) (cast i32 c) (- to from))]
+      (let [p
+              (memchr (index (slice/slice-data s) from)
+                      (cast i32 c)
+                      (- to from))]
         (if (= (cast i64 p) 0)
             to
-            (+ from (- (cast i64 p) (cast i64 (index (slice-data s) from))))))))
+            (+ from
+               (- (cast i64 p) (cast i64 (index (slice/slice-data s) from))))))))
 
 ;;; Number of consecutive backslashes immediately before position q (>= lo).
 (defn backslashes-before [(s (slice u8)) (lo i64) (q i64)] (-> i64)
@@ -212,7 +216,7 @@
 ;;; The scan is line-oriented: memchr finds each newline, then each state
 ;;; advances with memchr jumps (string closes, block ends) or a byte-class
 ;;; table (normal state), so plain code bytes never reach the token matcher.
-(defn count-bytes [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
+(defn count-bytes [(spec (ptr lang/LangSpec)) (bytes (slice u8))] (-> Counts)
   (let [len (len bytes)
         lcs (.line-comments spec)
         bls (.blocks spec)
@@ -220,7 +224,7 @@
         quotes (.quotes spec)
         mqs (.multi-quotes spec)
         classes (load (field spec classes))
-        data (slice-data bytes)
+        data (slice/slice-data bytes)
         (mut i) 0
         (mut state) ST-NORMAL
         (mut block-idx) 0
@@ -228,7 +232,7 @@
         (mut quote-ch) 0
         (mut mq-idx) 0
         (mut mq-doc) false
-        (mut heredocs) (al-new [Heredoc] (malloc-allocator))
+        (mut heredocs) (arraylist/al-new [Heredoc] (alloc/malloc-allocator))
         (mut next-heredoc) 0
         (mut shell-arith-depth) 0
         (mut lines) 0
@@ -249,7 +253,7 @@
                 (when (shell-heredoc-line? bytes i end hd)
                   (set! (mut next-heredoc) (+ next-heredoc 1))
                   (when (= next-heredoc (Len::len heredocs))
-                    (al-clear! (mut heredocs))
+                    (arraylist/al-clear! (mut heredocs))
                     (set! (mut next-heredoc) 0)
                     0)
                   0))
@@ -258,7 +262,7 @@
                 (while (and (< p le)
                             (= (load (index classes
                                             (cast i64 (get bytes p))))
-                               (cast u8 CLS-WS)))
+                               (cast u8 lang/CLS-WS)))
                   (set! (mut p) (+ p 1)))
                 (if (= p le)
                     (set! (mut blank) (+ blank 1))
@@ -273,7 +277,7 @@
                       (= state ST-BLOCK)
                         (do
                           (set! (mut saw-comment) true)
-                          (let [bp (index (slice-data bls) block-idx)
+                          (let [bp (index (slice/slice-data bls) block-idx)
                                 e (.bend bp)
                                 st (.bstart bp)
                                 e0 (cast i64 (get e 0))
@@ -295,7 +299,7 @@
                                         (do
                                           (set! (mut block-depth)
                                                 (- block-depth 1))
-                                          (set! (mut pos) (+ h (slice-len e)))
+                                          (set! (mut pos) (+ h (Len::len e)))
                                           (when (= block-depth 0)
                                             (set! (mut state) ST-NORMAL)
                                             0)
@@ -306,7 +310,7 @@
                                         (do
                                           (set! (mut block-depth)
                                                 (+ block-depth 1))
-                                          (set! (mut pos) (+ h (slice-len st)))
+                                          (set! (mut pos) (+ h (Len::len st)))
                                           0)
                                       :else (do (set! (mut pos) (+ h 1)) 0))))
                             0))
@@ -356,7 +360,7 @@
                                                  1))
                                         (do
                                           (set! (mut state) ST-NORMAL)
-                                          (set! (mut pos) (+ h (slice-len tok)))
+                                          (set! (mut pos) (+ h (Len::len tok)))
                                           (set! (mut scanning) false)
                                           0)
                                         (do (set! (mut pos) (+ h 1)) 0)))))
@@ -380,7 +384,10 @@
                                              #\tab)))
                             (set! (mut word-start) (+ word-start 1)))
                           (push! (mut heredocs)
-                                 (Heredoc :word (subslice bytes word-start end)
+                                 (Heredoc :word
+                                            (slice/subslice bytes
+                                                            word-start
+                                                            end)
                                    :strip-tabs strip-tabs))
                           (set! (mut saw-code) true)
                           (set! (mut pos) end)
@@ -398,7 +405,7 @@
                                                          (cast i64
                                                                (load (index data
                                                                             pos))))))]
-                                (if (!= cls CLS-HOT)
+                                (if (!= cls lang/CLS-HOT)
                                     (do
                                       (set! (mut acc) (| acc (- 1 (>> cls 1))))
                                       (set! (mut pos) (+ pos 1))
@@ -457,9 +464,8 @@
                                               (set! (mut block-depth) 1)
                                               (set! (mut pos)
                                                     (+ pos
-                                                       (slice-len (load (field (index (slice-data bls)
-                                                                                      bs)
-                                                                               bstart)))))
+                                                       (Len::len (.bstart (index (slice/slice-data bls)
+                                                                                 bs)))))
                                               0)
                                             (let [mq (match-any bytes pos mqs)]
                                               (if (>= mq 0)
@@ -482,8 +488,8 @@
                                                     (set! (mut mq-idx) mq)
                                                     (set! (mut pos)
                                                           (+ pos
-                                                             (slice-len (slice-get mqs
-                                                                                   mq))))
+                                                             (Len::len (get mqs
+                                                                            mq))))
                                                     0)
                                                   (let [lc
                                                           (match-any bytes
@@ -577,7 +583,7 @@
                   0)
                 0)
               (set! (mut i) (+ le 1))))))
-    (al-free! (mut heredocs))
+    (arraylist/al-free! (mut heredocs))
     (Counts
       :lines lines
       :blank blank
@@ -585,9 +591,9 @@
       :code code)))
 
 ;;; Index of the block pair whose start matches at i, or -1.
-(defn block-start-at [(s (slice u8)) (i i64) (bls (slice BlockPair))] (-> i64)
+(defn block-start-at [(s (slice u8)) (i i64) (bls (slice lang/BlockPair))] (-> i64)
   (block :found
          (for [k 0 (len bls)]
-           (when (match-at s i (.bstart (index (slice-data bls) k)))
+           (when (match-at s i (.bstart (index (slice/slice-data bls) k)))
              (return-from :found k)))
          -1))

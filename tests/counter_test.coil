@@ -1,32 +1,38 @@
 (module thecount.counter-test)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.counter" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "thecount.lang" :as lang)
+(import "thecount.counter" :as counter)
 
-(defn c-spec [] (-> LangSpec)
-  (lang-from-strings (malloc-allocator) "C" "//" "/* */" false "\"'" ""))
+(defn c-spec [] (-> lang/LangSpec)
+  (lang/lang-from-strings (alloc/malloc-allocator)
+                          "C"
+                          "//"
+                          "/* */"
+                          false
+                          "\"'"
+                          ""))
 
-(defn py-spec [] (-> LangSpec)
-  (lang-from-strings (malloc-allocator)
-                     "Python"
-                     "#"
-                     ""
-                     false
-                     "\"'"
-                     "\"\"\" '''"))
+(defn py-spec [] (-> lang/LangSpec)
+  (lang/lang-from-strings (alloc/malloc-allocator)
+                          "Python"
+                          "#"
+                          ""
+                          false
+                          "\"'"
+                          "\"\"\" '''"))
 
-(defn c-spec-ptr [] (-> (ptr LangSpec))
-  (box! (malloc-allocator) LangSpec (c-spec)))
+(defn c-spec-ptr [] (-> (ptr lang/LangSpec))
+  (alloc/box! (alloc/malloc-allocator) lang/LangSpec (c-spec)))
 
-(defn py-spec-ptr [] (-> (ptr LangSpec))
-  (box! (malloc-allocator) LangSpec (py-spec)))
+(defn py-spec-ptr [] (-> (ptr lang/LangSpec))
+  (alloc/box! (alloc/malloc-allocator) lang/LangSpec (py-spec)))
 
 (deftest simple-c
          (let [spec-p (c-spec-ptr)
                src
                  "int main() {\n  // a comment\n  return 0; // trailing\n\n  /* block\n     more block */\n}\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            ;; lines: int main {, //comment, return, blank, /*block, more block*/, }
            (assert-eq (.lines c) 7)
            (assert-eq (.comments c) 3)
@@ -36,35 +42,35 @@
 (deftest comment-token-inside-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"http://x\";\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.code c) 1)
            (assert-eq (.comments c) 0)))
 
 (deftest block-comment-inside-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"/* not a comment */\";\nint x;\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.code c) 2)
            (assert-eq (.comments c) 0)))
 
 (deftest code-then-block-is-code
          (let [spec-p (c-spec-ptr)
                src "int x; /* c1\n c2 */\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.code c) 1)
            (assert-eq (.comments c) 1)))
 
 (deftest no-trailing-newline
          (let [spec-p (c-spec-ptr)
                src "int x;"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 1)
            (assert-eq (.code c) 1)))
 
 (deftest escaped-quote-in-string
          (let [spec-p (c-spec-ptr)
                src "char *s = \"a\\\"b // no\";\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.code c) 1)
            (assert-eq (.comments c) 0)))
 
@@ -74,7 +80,7 @@
          (let [spec-p (py-spec-ptr)
                src
                  "# comment\nx = 1\n\"\"\"doc\n# not a comment\ndoc end\"\"\"\ny = 2\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 6)
            (assert-eq (.comments c) 4)
            (assert-eq (.code c) 2)))
@@ -83,7 +89,7 @@
          ;; a triple-quote preceded by code on its line is a plain string
          (let [spec-p (py-spec-ptr)
                src "x = \"\"\"not a docstring\n\nstill string\"\"\"\ny = 2\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 4)
            (assert-eq (.comments c) 0)
            (assert-eq (.code c) 4)))
@@ -93,53 +99,54 @@
          (let [spec-p (py-spec-ptr)
                src
                  "def f():\n    \"\"\"Doc with \"quotes\" inside.\"\"\"\n    return 1\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.comments c) 1)
            (assert-eq (.code c) 2)))
 
 (deftest empty-file
          (let [spec-p (c-spec-ptr)
                src ""
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 0)))
 
 (deftest blank-lines-only
          (let [spec-p (c-spec-ptr)
                src "\n  \n\t\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 3)
            (assert-eq (.blank c) 3)))
 
 (deftest form-feed-and-vertical-tab-are-whitespace
          (let [spec-p (c-spec-ptr)
                src "\x0C;\n\x0B;\n\x0C;/* comment */\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 3)
            (assert-eq (.blank c) 2)
            (assert-eq (.comments c) 1)
            (assert-eq (.code c) 0)))
 
 (deftest shell-heredoc-delimiter
-         (assert-eq (shell-heredoc-end "cat << EOF" 4 10) 10)
-         (assert-eq (shell-heredoc-end "cat <<< word" 4 12) -1)
-         (assert (shell-heredoc-line? "EOF"
-                                      0
-                                      3
-                                      (Heredoc :word "EOF" :strip-tabs false)))
+         (assert-eq (counter/shell-heredoc-end "cat << EOF" 4 10) 10)
+         (assert-eq (counter/shell-heredoc-end "cat <<< word" 4 12) -1)
+         (assert (counter/shell-heredoc-line? "EOF"
+                                              0
+                                              3
+                                              (counter/Heredoc :word "EOF"
+                                                :strip-tabs false)))
          (let [(mut spec)
-                 (lang-from-strings (malloc-allocator)
-                                    "Shell"
-                                    "#"
-                                    ""
-                                    false
-                                    "\"'"
-                                    "")]
+                 (lang/lang-from-strings (alloc/malloc-allocator)
+                                         "Shell"
+                                         "#"
+                                         ""
+                                         false
+                                         "\"'"
+                                         "")]
            (set! (.shell-heredocs (mut spec)) true)
            (set! (.multiline-quote-chars (mut spec)) "\"'")
-           (rebuild-classes! (malloc-allocator) (mut spec))
+           (lang/rebuild-classes! (alloc/malloc-allocator) (mut spec))
            (let [c
-                   (count-bytes (mut spec)
-                                "cat << EOF\nline with \" quote\n\n# literal data\nEOF\n# comment\n")]
+                   (counter/count-bytes (mut spec)
+                                        "cat << EOF\nline with \" quote\n\n# literal data\nEOF\n# comment\n")]
              (assert-eq (.lines c) 6)
              (assert-eq (.code c) 4)
              (assert-eq (.blank c) 1)
@@ -147,19 +154,19 @@
 
 (deftest shell-quoted-and-tab-stripped-heredocs
          (let [(mut spec)
-                 (lang-from-strings (malloc-allocator)
-                                    "Shell"
-                                    "#"
-                                    ""
-                                    false
-                                    "\"'"
-                                    "")]
+                 (lang/lang-from-strings (alloc/malloc-allocator)
+                                         "Shell"
+                                         "#"
+                                         ""
+                                         false
+                                         "\"'"
+                                         "")]
            (set! (.shell-heredocs (mut spec)) true)
            (set! (.multiline-quote-chars (mut spec)) "\"'")
-           (rebuild-classes! (malloc-allocator) (mut spec))
+           (lang/rebuild-classes! (alloc/malloc-allocator) (mut spec))
            (let [c
-                   (count-bytes (mut spec)
-                                "cat <<-'END'\n\t# literal text\n\tEND\necho $((1 << 2))\necho $((1 +\n 2 << 3))\n# comment\n")]
+                   (counter/count-bytes (mut spec)
+                                        "cat <<-'END'\n\t# literal text\n\tEND\necho $((1 << 2))\necho $((1 +\n 2 << 3))\n# comment\n")]
              (assert-eq (.lines c) 7)
              (assert-eq (.code c) 6)
              (assert-eq (.blank c) 0)
@@ -172,7 +179,7 @@
          (let [spec-p (c-spec-ptr)
                src
                  "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 4)
            (assert-eq (.comments c) 0)
            (assert-eq (.code c) 4)))
@@ -182,7 +189,7 @@
 (deftest c-string-not-continued-by-escaped-backslash
          (let [spec-p (c-spec-ptr)
                src "char *s = \"a\\\\\n// real comment\nint x;\n"
-               c (count-bytes spec-p src)]
+               c (counter/count-bytes spec-p src)]
            (assert-eq (.lines c) 3)
            (assert-eq (.comments c) 1)
            (assert-eq (.code c) 2)))
