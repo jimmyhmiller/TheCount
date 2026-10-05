@@ -1,24 +1,24 @@
 (module thecount.cscan)
-(import "coil.slice" :use *)
-(import "thecount.counter" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.simd" :use *)
+(import "coil.slice" :as slice)
+(import "thecount.counter" :as counter)
+(import "thecount.lang" :as lang)
+(import "thecount.simd" :as simd)
 
 (const ST-LINE-COMMENT 4)
 
 ;;; Fused physical-line and syntax traversal for non-nesting C-style languages.
 ;;; Vectors contain only candidate positions; delimiter recognition still checks
 ;;; the original bytes, including pairs split across vector boundaries.
-(defn count-c-events [(spec (ptr LangSpec)) (bytes (slice u8))] (-> Counts)
-  (let [data (slice-data bytes)
+(defn count-c-events [(spec (ptr lang/LangSpec)) (bytes (slice u8))] (-> counter/Counts)
+  (let [data (slice/slice-data bytes)
         len (len bytes)
         (mut pos) 0
         (mut line-start) 0
-        (mut state) ST-NORMAL
+        (mut state) counter/ST-NORMAL
         (mut quote) 0
         (mut saw-code) false
         (mut saw-comment) false
-        (mut result) (counts-zero)]
+        (mut result) (counter/counts-zero)]
     (while (< pos len)
       (let [base pos
             width (if (<= (+ pos 64) len) 64 (- len pos))
@@ -29,17 +29,17 @@
             (mut ws-ready) false]
         (if (= width 64)
             (do
-              (set! newlines (v64-eq-mask (index data base) #\newline))
+              (set! newlines (simd/v64-eq-mask (index data base) #\newline))
               (set! syntax
-                    (| (v64-eq-mask (index data base) #\/)
-                       (| (v64-eq-mask (index data base) #\")
-                          (v64-eq-mask (index data base) #\'))))
+                    (| (simd/v64-eq-mask (index data base) #\/)
+                       (| (simd/v64-eq-mask (index data base) #\")
+                          (simd/v64-eq-mask (index data base) #\'))))
               (set! events
                     (| newlines
-                       (| (v64-eq-mask (index data base) #\/)
-                          (| (v64-eq-mask (index data base) #\*)
-                             (| (v64-eq-mask (index data base) #\")
-                                (v64-eq-mask (index data base) #\'))))))
+                       (| (simd/v64-eq-mask (index data base) #\/)
+                          (| (simd/v64-eq-mask (index data base) #\*)
+                             (| (simd/v64-eq-mask (index data base) #\")
+                                (simd/v64-eq-mask (index data base) #\'))))))
               0)
             (for [j 0 width]
               (let [b (cast i64 (load (index data (+ base j))))]
@@ -59,15 +59,15 @@
           ;; With no syntax transitions, subtracting non-whitespace bits from
           ;; newline bits borrows through each nonblank line to its terminator.
           ;; All line classifications in the vector can then be counted at once.
-          (when (= state ST-NORMAL)
+          (when (= state counter/ST-NORMAL)
             (let [start (- pos base)
                   upcoming (& syntax (<< -1 start))
-                  stop (if (= upcoming 0) width (ctz upcoming))
+                  stop (if (= upcoming 0) width (simd/ctz upcoming))
                   newlines
                     (& newlines
                        (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1))))]
               (when (= ws-ready false)
-                (set! whitespace (v64-ws-mask (index data base)))
+                (set! whitespace (simd/v64-ws-mask (index data base)))
                 (set! ws-ready true))
               (let [valid
                       (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1)))
@@ -75,12 +75,12 @@
                     (mut codes) (& newlines (^ (- newlines nonws) -1))]
                 (when (!= newlines 0)
                   (let [first (& newlines (- 0 newlines))
-                        last (- 63 (clz newlines))]
+                        last (- 63 (simd/clz newlines))]
                     (when saw-code (set! codes (| codes first)))
                     (let [comments
                             (if (and saw-comment (= (& codes first) 0)) 1 0)
-                          lines (popcount newlines)
-                          code (popcount codes)]
+                          lines (simd/popcount newlines)
+                          code (simd/popcount codes)]
                       (set! (.lines (mut result)) (+ (.lines result) lines))
                       (set! (.code (mut result)) (+ (.code result) code))
                       (set! (.comments (mut result))
@@ -98,15 +98,17 @@
           (when (< pos (+ base width))
             (let [lo (- pos base)
                   remaining (& events (<< -1 lo))
-                  hi (if (= remaining 0) width (ctz remaining))
+                  hi (if (= remaining 0) width (simd/ctz remaining))
                   span (& (<< -1 lo) (if (= hi 64) -1 (^ (<< -1 hi) -1)))]
-              (when (all (= state ST-NORMAL) (= saw-code false) (!= span 0))
+              (when (all (= state counter/ST-NORMAL)
+                         (= saw-code false)
+                         (!= span 0))
                 (let [b (cast i64 (load (index data pos)))]
                   (if (and (!= b 32) (or (< b 9) (> b 13)))
                       (set! saw-code true)
                       (do
                         (when (= ws-ready false)
-                          (set! whitespace (v64-ws-mask (index data base)))
+                          (set! whitespace (simd/v64-ws-mask (index data base)))
                           (set! ws-ready true))
                         (when (!= (& span (^ whitespace -1)) 0)
                           (set! saw-code true))))))
@@ -120,18 +122,18 @@
                   (cond (= b #\newline)
                           (do
                             (set! (.lines (mut result)) (+ (.lines result) 1))
-                            (cond (or saw-code (= state ST-STRING))
+                            (cond (or saw-code (= state counter/ST-STRING))
                                     (set! (.code (mut result))
                                           (+ (.code result) 1))
                                   (or saw-comment
-                                      (= state ST-BLOCK)
+                                      (= state counter/ST-BLOCK)
                                       (= state ST-LINE-COMMENT))
                                     (set! (.comments (mut result))
                                           (+ (.comments result) 1))
                                   :else
                                     (set! (.blank (mut result))
                                           (+ (.blank result) 1)))
-                            (when (= state ST-STRING)
+                            (when (= state counter/ST-STRING)
                               (let [end
                                       (if (and (> pos line-start)
                                                (= (cast i64
@@ -140,40 +142,42 @@
                                                   13))
                                           (- pos 1)
                                           pos)]
-                                (when (= (% (backslashes-before bytes
-                                                                line-start
-                                                                end)
+                                (when (= (% (counter/backslashes-before bytes
+                                                                        line-start
+                                                                        end)
                                             2)
                                          0)
-                                  (set! state ST-NORMAL))))
+                                  (set! state counter/ST-NORMAL))))
                             (when (= state ST-LINE-COMMENT)
-                              (set! state ST-NORMAL))
+                              (set! state counter/ST-NORMAL))
                             (set! saw-code false)
                             (set! saw-comment false)
                             (set! line-start (+ pos 1))
                             (set! pos (+ pos 1)))
-                        (= state ST-BLOCK)
+                        (= state counter/ST-BLOCK)
                           (do
                             (set! saw-comment true)
                             (if (and (= b #\*) (= next #\/))
-                                (do (set! state ST-NORMAL) (set! pos (+ pos 2)))
+                                (do
+                                  (set! state counter/ST-NORMAL)
+                                  (set! pos (+ pos 2)))
                                 (set! pos (+ pos 1))))
-                        (= state ST-STRING)
+                        (= state counter/ST-STRING)
                           (do
                             (set! saw-code true)
                             (when (and (= b quote)
-                                       (= (% (backslashes-before bytes
-                                                                 line-start
-                                                                 pos)
+                                       (= (% (counter/backslashes-before bytes
+                                                                         line-start
+                                                                         pos)
                                              2)
                                           0))
-                              (set! state ST-NORMAL))
+                              (set! state counter/ST-NORMAL))
                             (set! pos (+ pos 1)))
                         (= state ST-LINE-COMMENT) (set! pos (+ pos 1))
                         (and (= b #\/) (= next #\*))
                           (do
                             (set! saw-comment true)
-                            (set! state ST-BLOCK)
+                            (set! state counter/ST-BLOCK)
                             (set! pos (+ pos 2)))
                         (and (= b #\/) (= next #\/))
                           (do
@@ -183,20 +187,22 @@
                         (or (= b #\") (= b #\'))
                           (do
                             (set! saw-code true)
-                            (when (= (% (backslashes-before bytes
-                                                            line-start
-                                                            pos)
+                            (when (= (% (counter/backslashes-before bytes
+                                                                    line-start
+                                                                    pos)
                                         2)
                                      0)
                               (set! quote b)
-                              (set! state ST-STRING))
+                              (set! state counter/ST-STRING))
                             (set! pos (+ pos 1)))
                         :else (do (set! saw-code true) (set! pos (+ pos 1)))))))))))
     (when (< line-start len)
       (set! (.lines (mut result)) (+ (.lines result) 1))
-      (cond (or saw-code (= state ST-STRING))
+      (cond (or saw-code (= state counter/ST-STRING))
               (set! (.code (mut result)) (+ (.code result) 1))
-            (or saw-comment (= state ST-BLOCK) (= state ST-LINE-COMMENT))
+            (or saw-comment
+                (= state counter/ST-BLOCK)
+                (= state ST-LINE-COMMENT))
               (set! (.comments (mut result)) (+ (.comments result) 1))
             :else (set! (.blank (mut result)) (+ (.blank result) 1))))
     result))

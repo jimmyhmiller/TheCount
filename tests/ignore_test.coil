@@ -1,48 +1,51 @@
 (module thecount.ignore-test)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.arraylist" :use *)
-(import "thecount.ignore" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.arraylist" :as arraylist)
+(import "thecount.ignore" :as ignore)
 
 (deftest glob-basics
-         (assert (glob-match "*.pyc" "foo.pyc"))
-         (assert (not (glob-match "*.pyc" "foo.py")))
-         (assert (glob-match "foo" "foo"))
-         (assert (not (glob-match "foo" "foobar")))
-         (assert (glob-match "f?o" "foo"))
-         (assert (not (glob-match "*.o" "dir/x.o")))  ; * must not cross /
-         (assert (glob-match "build/*.o" "build/x.o"))
-         (assert (not (glob-match "build/*.o" "build/sub/x.o"))))
+         (assert (ignore/glob-match "*.pyc" "foo.pyc"))
+         (assert (not (ignore/glob-match "*.pyc" "foo.py")))
+         (assert (ignore/glob-match "foo" "foo"))
+         (assert (not (ignore/glob-match "foo" "foobar")))
+         (assert (ignore/glob-match "f?o" "foo"))
+         (assert (not (ignore/glob-match "*.o" "dir/x.o")))  ; * must not cross /
+         (assert (ignore/glob-match "build/*.o" "build/x.o"))
+         (assert (not (ignore/glob-match "build/*.o" "build/sub/x.o"))))
 
 (deftest glob-doublestar
-         (assert (glob-match "**/foo" "a/b/foo"))
-         (assert (glob-match "**/foo" "foo"))
-         (assert (glob-match "a/**/b" "a/b"))
-         (assert (glob-match "a/**/b" "a/x/y/b"))
-         (assert (glob-match "docs/**" "docs/a/b.md")))
+         (assert (ignore/glob-match "**/foo" "a/b/foo"))
+         (assert (ignore/glob-match "**/foo" "foo"))
+         (assert (ignore/glob-match "a/**/b" "a/b"))
+         (assert (ignore/glob-match "a/**/b" "a/x/y/b"))
+         (assert (ignore/glob-match "docs/**" "docs/a/b.md")))
 
-(defn rules-of [(src (slice u8))] (-> (ptr (ArrayList IgnoreCtx)))
-  (let [a (malloc-allocator)
-        ctxs (box! a (ArrayList IgnoreCtx) (al-new [IgnoreCtx] a))
-        (mut ctx) (zeroed IgnoreCtx)]
+(defn rules-of [(src (slice u8))] (-> (ptr (arraylist/ArrayList ignore/IgnoreCtx)))
+  (let [a (alloc/malloc-allocator)
+        ctxs
+          (alloc/box! a
+                      (arraylist/ArrayList ignore/IgnoreCtx)
+                      (arraylist/al-new [ignore/IgnoreCtx] a))
+        (mut ctx) (zeroed ignore/IgnoreCtx)]
     (set! (.base (mut ctx)) "")
-    (set! (.rules (mut ctx)) (parse-ignore a src))
+    (set! (.rules (mut ctx)) (ignore/parse-ignore a src))
     (push! ctxs ctx)
     ctxs))
 
 (deftest ignore-rules
          (let [ctxs
                  (rules-of "*.log\nbuild/\n/rooted.txt\n!keep.log\n# comment\n")]
-           (assert (ignored? ctxs "x.log" "x.log" false))
-           (assert (ignored? ctxs "deep/y.log" "y.log" false))
-           (assert (not (ignored? ctxs "x.txt" "x.txt" false)))
-           (assert (ignored? ctxs "build" "build" true))
-           (assert (not (ignored? ctxs "build" "build" false)))  ; dir-only
-           (assert (ignored? ctxs "rooted.txt" "rooted.txt" false))
-           (assert (not (ignored? ctxs "keep.log" "keep.log" false)))))  ; negation
+           (assert (ignore/ignored? ctxs "x.log" "x.log" false))
+           (assert (ignore/ignored? ctxs "deep/y.log" "y.log" false))
+           (assert (not (ignore/ignored? ctxs "x.txt" "x.txt" false)))
+           (assert (ignore/ignored? ctxs "build" "build" true))
+           (assert (not (ignore/ignored? ctxs "build" "build" false)))  ; dir-only
+           (assert (ignore/ignored? ctxs "rooted.txt" "rooted.txt" false))
+           (assert (not (ignore/ignored? ctxs "keep.log" "keep.log" false)))))  ; negation
 
 (deftest anchored-vs-basename
          (let [ctxs (rules-of "src/gen\n")]
            ;; pattern with inner slash anchors to the ignore file's directory
-           (assert (ignored? ctxs "src/gen" "gen" true))
-           (assert (not (ignored? ctxs "other/src/gen" "gen" true)))))
+           (assert (ignore/ignored? ctxs "src/gen" "gen" true))
+           (assert (not (ignore/ignored? ctxs "other/src/gen" "gen" true)))))

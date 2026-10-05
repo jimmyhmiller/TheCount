@@ -1,6 +1,6 @@
 (module thecount.engine-test)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
 (import "coil.io" :use [write])
 (import "coil.os" :as os)
 (import "thecount.engine" :use [rb-new read-fd-into! ReadBuf])
@@ -10,21 +10,21 @@
 ;;; A short positive read must not discard the remaining bytes.
 (deftest short-read-continues-until-eof
          (let [(mut fds) (zeroed (array i32 2))
-               a (malloc-allocator)]
+               a (alloc/malloc-allocator)]
            (assert-eq (os/pipe (cast (ptr i32) (mut fds))) 0)
-           (assert-eq (write (load (index (mut fds) 1))
-                             (cast (ptr i8) (slice-data "abc"))
-                             3)
+           (assert-eq (alloc/write (load (index (mut fds) 1))
+                                   (cast (ptr i8) (slice/slice-data "abc"))
+                                   3)
                       3)
-           (assert-eq (write (load (index (mut fds) 1))
-                             (cast (ptr i8) (slice-data "def"))
-                             3)
+           (assert-eq (alloc/write (load (index (mut fds) 1))
+                                   (cast (ptr i8) (slice/slice-data "def"))
+                                   3)
                       3)
            (os/close (load (index (mut fds) 1)))
            (let [rb (rb-new a)
                  size (read-fd-into! a rb (load (index (mut fds) 0)))]
              (assert-eq size 6)
-             (assert (= (slice-new (load (field rb p)) size) "abcdef")))))
+             (assert (= (slice/slice-new (load (field rb p)) size) "abcdef")))))
 
 (deftest unknown-dirent-type-resolved
          (let [dfd (os/open c"." 0)]

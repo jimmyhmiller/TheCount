@@ -1,111 +1,114 @@
 (module thecount.registry-test)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.str" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.registry" :use *)
-(import "thecount.counter" :use *)
-(import "coil.arraylist" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.str" :as str)
+(import "thecount.lang" :as lang)
+(import "thecount.registry" :as registry)
+(import "thecount.counter" :as counter)
+(import "coil.arraylist" :as arraylist)
 (import "thecount.engine"
         :use
         [dir-lang-key dir-rollup-key dir-row-key dir-base-len walk-roots-of])
 
-(defn fresh [] (-> (ptr Registry))
-  (let [r (reg-new (malloc-allocator))]
-    (add-builtins! r)
+(defn fresh [] (-> (ptr registry/Registry))
+  (let [r (registry/reg-new (alloc/malloc-allocator))]
+    (registry/add-builtins! r)
     r))
 
 (deftest ext-lookup
          (let [r (fresh)]
-           (assert (>= (reg-lookup-path r "src/main.rs") 0))
-           (assert (>= (reg-lookup-path r "a/b/c.tar.py") 0))
-           (assert-eq (reg-lookup-path r "noextension") -1)
-           (assert-eq (reg-lookup-path r "photo.jpg") -1)))
+           (assert (>= (registry/reg-lookup-path r "src/main.rs") 0))
+           (assert (>= (registry/reg-lookup-path r "a/b/c.tar.py") 0))
+           (assert-eq (registry/reg-lookup-path r "noextension") -1)
+           (assert-eq (registry/reg-lookup-path r "photo.jpg") -1)))
 
 (deftest ext-lookup-names
          (let [r (fresh)]
-           (let [rs (reg-lookup-path r "main.rs")]
-             (assert (= (.name (reg-spec r rs)) "Rust")))
-           (let [up (reg-lookup-path r "MAIN.RS")]
-             (assert (= (.name (reg-spec r up)) "Rust")))))
+           (let [rs (registry/reg-lookup-path r "main.rs")]
+             (assert (= (.name (registry/reg-spec r rs)) "Rust")))
+           (let [up (registry/reg-lookup-path r "MAIN.RS")]
+             (assert (= (.name (registry/reg-spec r up)) "Rust")))))
 
 (deftest filename-lookup
          (let [r (fresh)]
-           (let [mk (reg-lookup-path r "some/dir/Makefile")]
-             (assert (= (.name (reg-spec r mk)) "Makefile")))
-           (let [dk (reg-lookup-path r "Dockerfile")]
-             (assert (= (.name (reg-spec r dk)) "Dockerfile")))
-           (let [rk (reg-lookup-path r "proj/Rakefile")]
-             (assert (= (.name (reg-spec r rk)) "Ruby")))))
+           (let [mk (registry/reg-lookup-path r "some/dir/Makefile")]
+             (assert (= (.name (registry/reg-spec r mk)) "Makefile")))
+           (let [dk (registry/reg-lookup-path r "Dockerfile")]
+             (assert (= (.name (registry/reg-spec r dk)) "Dockerfile")))
+           (let [rk (registry/reg-lookup-path r "proj/Rakefile")]
+             (assert (= (.name (registry/reg-spec r rk)) "Ruby")))))
 
 (deftest name-lookup-case-insensitive
          (let [r (fresh)]
-           (assert (>= (reg-lookup-name r "rust") 0))
-           (assert (>= (reg-lookup-name r "RUST") 0))
-           (assert (>= (reg-lookup-name r "c++ header") 0))
-           (assert-eq (reg-lookup-name r "nope-lang") -1)))
+           (assert (>= (registry/reg-lookup-name r "rust") 0))
+           (assert (>= (registry/reg-lookup-name r "RUST") 0))
+           (assert (>= (registry/reg-lookup-name r "c++ header") 0))
+           (assert-eq (registry/reg-lookup-name r "nope-lang") -1)))
 
 (deftest override-shadows-builtin
          (let [r (fresh)
-               a (malloc-allocator)
-               custom (lang-from-strings a "MyPython" "#" "" false "\"'" "")]
-           (reg-add! r custom "py")
-           (let [idx (reg-lookup-path r "x.py")]
-             (assert (= (.name (reg-spec r idx)) "MyPython")))))
+               a (alloc/malloc-allocator)
+               custom
+                 (lang/lang-from-strings a "MyPython" "#" "" false "\"'" "")]
+           (registry/reg-add! r custom "py")
+           (let [idx (registry/reg-lookup-path r "x.py")]
+             (assert (= (.name (registry/reg-spec r idx)) "MyPython")))))
 
 (deftest dotfile-is-not-extension
          (let [r (fresh)]
            ;; .gitignore should not match a "gitignore" extension nor crash
-           (assert-eq (reg-lookup-path r ".gitignore") -1)))
+           (assert-eq (registry/reg-lookup-path r ".gitignore") -1)))
 
 (deftest extension-filter-restricts-lookup
          (let [r (fresh)]
-           (reg-restrict-extensions! r "PY, c")
-           (assert (>= (reg-lookup-path r "lib/module.py") 0))
-           (assert (>= (reg-lookup-path r "src/MAIN.C") 0))
-           (assert-eq (reg-lookup-path r "src/main.rs") -1)
-           (assert-eq (reg-lookup-path r "Makefile") -1)))
+           (registry/reg-restrict-extensions! r "PY, c")
+           (assert (>= (registry/reg-lookup-path r "lib/module.py") 0))
+           (assert (>= (registry/reg-lookup-path r "src/MAIN.C") 0))
+           (assert-eq (registry/reg-lookup-path r "src/main.rs") -1)
+           (assert-eq (registry/reg-lookup-path r "Makefile") -1)))
 
 (deftest nim-nested-block-vs-line
          ;; #[ must win over # so nested block comments count as comments
          (let [r (fresh)
-               idx (reg-lookup-name r "nim")
+               idx (registry/reg-lookup-name r "nim")
                src "#[ outer\n#[ inner ]#\nstill comment ]#\nx = 1\n"
-               c (count-bytes (reg-spec r idx) src)]
+               c (counter/count-bytes (registry/reg-spec r idx) src)]
            (assert-eq (.comments c) 3)
            (assert-eq (.code c) 1)))
 
 (deftest lua-block-vs-line
          (let [r (fresh)
-               idx (reg-lookup-name r "lua")
+               idx (registry/reg-lookup-name r "lua")
                src "--[[ block\nstill ]]\nx = 1 -- line\n-- whole line\n"
-               c (count-bytes (reg-spec r idx) src)]
+               c (counter/count-bytes (registry/reg-spec r idx) src)]
            (assert-eq (.comments c) 3)
            (assert-eq (.code c) 1)))
 
 (deftest assembly-slash-comments
          (let [r (fresh)
-               idx (reg-lookup-name r "Assembly")
+               idx (registry/reg-lookup-name r "Assembly")
                c
-                 (count-bytes (reg-spec r idx)
-                              "// heading\nmov %eax, %ebx // tail\n; another comment\n")]
+                 (counter/count-bytes (registry/reg-spec r idx)
+                                      "// heading\nmov %eax, %ebx // tail\n; another comment\n")]
            (assert-eq (.lines c) 3)
            (assert-eq (.code c) 1)
            (assert-eq (.comments c) 2)))
 
 (deftest shell-and-rust-multiline-strings
          (let [r (fresh)
-               sh (reg-lookup-name r "Shell")
-               rs (reg-lookup-name r "Rust")
+               sh (registry/reg-lookup-name r "Shell")
+               rs (registry/reg-lookup-name r "Rust")
                shell-count
-                 (count-bytes (reg-spec r sh)
-                              "value=\"first\n\n# data\nlast\"\n# comment\n")
+                 (counter/count-bytes (registry/reg-spec r sh)
+                                      "value=\"first\n\n# data\nlast\"\n# comment\n")
                rust-count
-                 (count-bytes (reg-spec r rs)
-                              "let s = \"first\n/// data\nlast\";\n// comment\n")]
-           (assert (= (.shell-heredocs (reg-spec r sh)) true))
-           (assert-eq (load (index (load (field (reg-spec r sh) classes)) #\<))
-                      (cast u8 CLS-HOT))
+                 (counter/count-bytes (registry/reg-spec r rs)
+                                      "let s = \"first\n/// data\nlast\";\n// comment\n")]
+           (assert (= (.shell-heredocs (registry/reg-spec r sh)) true))
+           (assert-eq (load (index (load (field (registry/reg-spec r sh)
+                                                classes))
+                                   #\<))
+                      (cast u8 lang/CLS-HOT))
            (assert-eq (.lines shell-count) 5)
            (assert-eq (.code shell-count) 4)
            (assert-eq (.comments shell-count) 1)
@@ -115,20 +118,20 @@
 
 (deftest rust-character-literals-and-lifetimes
          (let [r (fresh)
-               rs (reg-lookup-name r "Rust")
+               rs (registry/reg-lookup-name r "Rust")
                c
-                 (count-bytes (reg-spec r rs)
-                              "let c = '\"';\n// comment\nlet q = '\\'';\nfn f<'a>(x: &'a str) {} // tail\n")]
+                 (counter/count-bytes (registry/reg-spec r rs)
+                                      "let c = '\"';\n// comment\nlet q = '\\'';\nfn f<'a>(x: &'a str) {} // tail\n")]
            (assert-eq (.lines c) 4)
            (assert-eq (.code c) 3)
            (assert-eq (.comments c) 1)))
 
 (deftest shell-escaped-quote-outside-string
          (let [r (fresh)
-               sh (reg-lookup-name r "Shell")
+               sh (registry/reg-lookup-name r "Shell")
                c
-                 (count-bytes (reg-spec r sh)
-                              "value=${value//\\\"/}\n\n# real comment\n")]
+                 (counter/count-bytes (registry/reg-spec r sh)
+                                      "value=${value//\\\"/}\n\n# real comment\n")]
            (assert-eq (.lines c) 3)
            (assert-eq (.code c) 1)
            (assert-eq (.blank c) 1)
@@ -139,7 +142,7 @@
 ;; separate the two halves unambiguously — otherwise a directory whose name
 ;; ends where a language name begins would merge two different rows.
 (deftest dir-lang-key-separates-halves
-         (let [a (malloc-allocator)]
+         (let [a (alloc/malloc-allocator)]
            (assert (= (dir-lang-key a "src" "C") (dir-lang-key a "src" "C")))
            (assert (= (= (dir-lang-key a "src" "C")
                          (dir-lang-key a "src" "C++"))
@@ -151,7 +154,7 @@
                       false))))
 
 (deftest dir-lang-key-handles-root-and-empty
-         (let [a (malloc-allocator)]
+         (let [a (alloc/malloc-allocator)]
            (assert (= (len (dir-lang-key a "." "Markdown")) 10))
            (assert (= (= (dir-lang-key a "." "C") (dir-lang-key a "." "D"))
                       false))))
@@ -172,23 +175,26 @@
          (assert (= (dir-rollup-key "a/b/c" 3 1) "a/b/c")))
 
 (deftest dir-row-key-makes-named-root-explicit
-         (let [a (malloc-allocator)]
+         (let [a (alloc/malloc-allocator)]
            (assert (= (dir-row-key a "src" 3 1) "src/."))
            (assert (= (dir-row-key a "src/bus" 3 1) "src/bus"))
            (assert (= (dir-row-key a "" 0 1) "."))))
 
-(defn roots3 [(a (dyn Allocator))
+(defn roots3 [(a (dyn alloc/Allocator))
               (x (slice u8))
               (y (slice u8))
-              (z (slice u8))] (-> (ptr (ArrayList (slice u8))))
-  (let [l (box! a (ArrayList (slice u8)) (al-new [(slice u8)] a))]
+              (z (slice u8))] (-> (ptr (arraylist/ArrayList (slice u8))))
+  (let [l
+          (alloc/box! a
+                      (arraylist/ArrayList (slice u8))
+                      (arraylist/al-new [(slice u8)] a))]
     (push! l x)
     (push! l y)
     (push! l z)
     l))
 
 (deftest dir-base-len-longest-component-match
-         (let [a (malloc-allocator)
+         (let [a (alloc/malloc-allocator)
                rs (roots3 a "src" "src/bus" "vendor")]
            (assert-eq (dir-base-len rs "src") 3)
            (assert-eq (dir-base-len rs "src/tui") 3)
@@ -197,15 +203,15 @@
            (assert-eq (dir-base-len rs "other") 0)))
 
 (deftest walk-roots-dot-becomes-empty
-         (let [a (malloc-allocator)
+         (let [a (alloc/malloc-allocator)
                w (walk-roots-of a (roots3 a "." "src" "vendor"))]
-           (assert-eq (len (al-get (load w) 0)) 0)
+           (assert-eq (len (get (load w) 0)) 0)
            (assert (= (get (load w) 1) "src"))
            (assert-eq (dir-base-len w "anything/here") 0)))
 
 (deftest fortran-2008-extension
          (let [r (fresh)
-               idx (reg-lookup-path r "fixture.f08")]
+               idx (registry/reg-lookup-path r "fixture.f08")]
            (assert (>= idx 0))
-           (assert (= (.name (reg-spec r idx)) "Fortran"))
-           (assert-eq idx (reg-lookup-path r "fixture.F08"))))
+           (assert (= (.name (registry/reg-spec r idx)) "Fortran"))
+           (assert-eq idx (registry/reg-lookup-path r "fixture.F08"))))

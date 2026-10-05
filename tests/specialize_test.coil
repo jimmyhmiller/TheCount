@@ -10,45 +10,45 @@
 ;; tallies. The sources deliberately hit the edges: delimiters split across the
 ;; end of the buffer, escaped and unterminated strings, block comments that never
 ;; close, docstrings, and comment tokens inside strings.
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.str" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.counter" :use *)
-(import "thecount.specialize" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.str" :as str)
+(import "thecount.lang" :as lang)
+(import "thecount.counter" :as counter)
+(import "thecount.specialize" :as specialize)
 (import "thecount.util" :use [must-alloc])
 
 ;;; Index of the table row named `name`, or -1.
 (defn row-of [(name (slice u8))] (-> i64)
-  (let [n (spec-row-count)
+  (let [n (specialize/spec-row-count)
         (mut k) 0
         (mut found) -1]
     (while (and (< k n) (= found -1))
-      (when (= (spec-row-name k) name)
+      (when (= (specialize/spec-row-name k) name)
         (set! (mut found) k))
       (set! (mut k) (+ k 1)))
     (load found)))
 
 ;;; The LangSpec for a table row, built through the ordinary runtime path.
-(defn row-spec-ptr [(i i64)] (-> (ptr LangSpec))
-  (let [a (malloc-allocator)
+(defn row-spec-ptr [(i i64)] (-> (ptr lang/LangSpec))
+  (let [a (alloc/malloc-allocator)
         value
-          (lang-from-strings a
-                             (spec-row-name i)
-                             (spec-row-lcs i)
-                             (spec-row-blocks i)
-                             (spec-row-nested i)
-                             (spec-row-quotes i)
-                             (spec-row-mqs i))]
-    (box! a LangSpec value)))
+          (lang/lang-from-strings a
+                                  (specialize/spec-row-name i)
+                                  (specialize/spec-row-lcs i)
+                                  (specialize/spec-row-blocks i)
+                                  (specialize/spec-row-nested i)
+                                  (specialize/spec-row-quotes i)
+                                  (specialize/spec-row-mqs i))]
+    (alloc/box! a lang/LangSpec value)))
 
 ;;; Run both scanners for language `name` over `src` and assert they agree.
 (defn same? [(name (slice u8)) (src (slice u8))] (-> i64)
   (let [i (row-of name)]
     (assert (>= i 0))
     (let [spec-p (row-spec-ptr i)
-          generic (count-bytes spec-p src)
-          special (call-ptr (spec-row-counter i) spec-p src)]
+          generic (counter/count-bytes spec-p src)
+          special (call-ptr (specialize/spec-row-counter i) spec-p src)]
       (assert-eq (.lines special) (.lines generic))
       (assert-eq (.blank special) (.blank generic))
       (assert-eq (.comments special)
@@ -58,13 +58,13 @@
 
 ;;; Exercise hot-token positions at both sides of a 64-byte vector boundary.
 (defn spaces-then [(n i64) (suffix (slice u8))] (-> (slice u8))
-  (let [a (malloc-allocator)
+  (let [a (alloc/malloc-allocator)
         total (+ n (len suffix))
         p (must-alloc [u8] a total)]
     (for [k 0 n] (set! (index p k) (cast u8 #\space)))
     (for [k 0 (len suffix)]
-      (set! (index p (+ n k)) (slice-get suffix k)))
-    (slice-new p total)))
+      (set! (index p (+ n k)) (get suffix k)))
+    (slice/slice-new p total)))
 
 (deftest c-hot-token-around-64-byte-boundary
          (for [n 62 67]
@@ -261,7 +261,7 @@
 
 ;;; Differential syntax coverage across vector boundaries and final tails.
 (deftest c-event-randomized-differential
-         (let [a (malloc-allocator)
+         (let [a (alloc/malloc-allocator)
                p (must-alloc [u8] a 1024)
                alphabet "abc /\"'*\\\n\r\t"
                (mut seed) 1234567]
@@ -269,12 +269,11 @@
              (for [j 0 1024]
                (set! seed (& (+ (* seed 1664525) 1013904223) 4294967295))
                (set! (index p j)
-                     (slice-get alphabet
-                                (% (>> seed 16) (slice-len alphabet)))))
-             (same? "C" (slice-new p (% seed 1025))))))
+                     (get alphabet (% (>> seed 16) (len alphabet)))))
+             (same? "C" (slice/slice-new p (% seed 1025))))))
 
 (deftest c-event-plain-lines-all-tails
-         (let [a (malloc-allocator)
+         (let [a (alloc/malloc-allocator)
                p (must-alloc [u8] a 256)]
            (for [j 0 256]
              (set! (index p j)
@@ -284,7 +283,7 @@
                                :else #\space))))
            (set! (index p 63) (cast u8 #\newline))
            (set! (index p 127) (cast u8 #\newline))
-           (for [n 0 257] (same? "C" (slice-new p n)))))
+           (for [n 0 257] (same? "C" (slice/slice-new p n)))))
 
 (deftest c-event-comment-to-plain-line
          (same? "C" "/* comment */\n\ncode\n /* comment */   \n\ncode\n")

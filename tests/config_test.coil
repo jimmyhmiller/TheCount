@@ -1,72 +1,72 @@
 (module thecount.config-test)
-(import "coil.slice" :use *)
-(import "coil.alloc" :use *)
-(import "coil.str" :use *)
-(import "thecount.lang" :use *)
-(import "thecount.registry" :use *)
-(import "thecount.counter" :use *)
-(import "thecount.config" :use *)
+(import "coil.slice" :as slice)
+(import "coil.alloc" :as alloc)
+(import "coil.str" :as str)
+(import "thecount.lang" :as lang)
+(import "thecount.registry" :as registry)
+(import "thecount.counter" :as counter)
+(import "thecount.config" :as config)
 
-(defn fresh [] (-> (ptr Registry))
-  (let [r (reg-new (malloc-allocator))]
-    (add-builtins! r)
+(defn fresh [] (-> (ptr registry/Registry))
+  (let [r (registry/reg-new (alloc/malloc-allocator))]
+    (registry/add-builtins! r)
     r))
 
 (deftest full-stanza
          (let [r (fresh)
                cfg
                  "# my languages\nlang Foo Script\next foo fooz\nline ;;\nblock {- -}\nnested\nquotes \" '\n"]
-           (load-config! r cfg)
-           (let [idx (reg-lookup-path r "x.foo")]
+           (config/load-config! r cfg)
+           (let [idx (registry/reg-lookup-path r "x.foo")]
              (assert (>= idx 0))
-             (assert (= (.name (reg-spec r idx)) "Foo Script"))
+             (assert (= (.name (registry/reg-spec r idx)) "Foo Script"))
              (let [src ";; comment\n{- b1\n b2 -}\nx = ';; not comment'\n"
-                   c (count-bytes (reg-spec r idx) src)]
+                   c (counter/count-bytes (registry/reg-spec r idx) src)]
                (assert-eq (.comments c) 3)
                (assert-eq (.code c) 1)))
-           (assert (>= (reg-lookup-path r "y.FOOZ") 0))))
+           (assert (>= (registry/reg-lookup-path r "y.FOOZ") 0))))
 
 (deftest like-inherits
          (let [r (fresh)
                cfg "lang Jai\nlike c\next jai\n"]
-           (load-config! r cfg)
-           (let [idx (reg-lookup-path r "m.jai")]
+           (config/load-config! r cfg)
+           (let [idx (registry/reg-lookup-path r "m.jai")]
              (assert (>= idx 0))
-             (assert (= (.name (reg-spec r idx)) "Jai"))
+             (assert (= (.name (registry/reg-spec r idx)) "Jai"))
              (let [src "// comment\nint x; /* b */\n"
-                   c (count-bytes (reg-spec r idx) src)]
+                   c (counter/count-bytes (registry/reg-spec r idx) src)]
                (assert-eq (.comments c) 1)
                (assert-eq (.code c) 1)))))
 
 (deftest like-with-override
          (let [r (fresh)
                cfg "lang Slashless\nlike c\next sfoo\nline #\n"]
-           (load-config! r cfg)
-           (let [idx (reg-lookup-path r "a.sfoo")
+           (config/load-config! r cfg)
+           (let [idx (registry/reg-lookup-path r "a.sfoo")
                  src "# comment\n// no longer a comment\n/* still block */\n"
-                 c (count-bytes (reg-spec r idx) src)]
+                 c (counter/count-bytes (registry/reg-spec r idx) src)]
              (assert-eq (.comments c) 2)
              (assert-eq (.code c) 1))))
 
 (deftest user-lang-overrides-builtin-ext
          (let [r (fresh)
                cfg "lang NotRust\nlike python\next rs\n"]
-           (load-config! r cfg)
-           (let [idx (reg-lookup-path r "main.rs")]
-             (assert (= (.name (reg-spec r idx)) "NotRust")))))
+           (config/load-config! r cfg)
+           (let [idx (registry/reg-lookup-path r "main.rs")]
+             (assert (= (.name (registry/reg-spec r idx)) "NotRust")))))
 
 (deftest file-directive
          (let [r (fresh)
                cfg "lang Justfile\nlike makefile\nfile Justfile justfile\n"]
-           (load-config! r cfg)
-           (let [idx (reg-lookup-path r "proj/Justfile")]
+           (config/load-config! r cfg)
+           (let [idx (registry/reg-lookup-path r "proj/Justfile")]
              (assert (>= idx 0))
-             (assert (= (.name (reg-spec r idx)) "Justfile")))))
+             (assert (= (.name (registry/reg-spec r idx)) "Justfile")))))
 
 (deftest multiple-stanzas
          (let [r (fresh)
                cfg
                  "lang A1\nlike c\next aone\n\nlang B2\nlike python\next btwo\n"]
-           (load-config! r cfg)
-           (assert (>= (reg-lookup-path r "x.aone") 0))
-           (assert (>= (reg-lookup-path r "x.btwo") 0))))
+           (config/load-config! r cfg)
+           (assert (>= (registry/reg-lookup-path r "x.aone") 0))
+           (assert (>= (registry/reg-lookup-path r "x.btwo") 0))))
