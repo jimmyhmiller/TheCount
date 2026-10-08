@@ -13,113 +13,65 @@
 ;; instead of walking to it. This is the core trick behind simdjson's structural
 ;; character scan.
 ;;
-;; Everything here is a thin (primitive/llvm-ir …) wrapper — no compiler
-;; support, same approach as coil.simd. Two notes on the IR:
+;; This used to be a thin (primitive/llvm-ir …) wrapper, written by hand because
+;; coil.simd didn't exist yet. It now builds on coil.simd directly: `vloadu`
+;; for the unaligned load (these pointers are arbitrary offsets into a file
+;; buffer, never guaranteed to be vector aligned), `v=`/`vor`/`byte-in-range?`
+;; for the comparisons, and `mask->bits` for lane extraction — which emits the
+;; same `bitcast <N x i1> to iN` on both x86 and arm64 that this module used to
+;; write directly. `ctz`/`popcount`/`clz` are coil.primitive's scalar ops,
+;; confirmed to compile to the identical rbit/clz, cnt/addv, and clz sequences
+;; this module's hand-written llvm.cttz/ctpop/ctlz calls did.
 ;;
-;;   * the load is `align 1`: these pointers are arbitrary offsets into a file
-;;     buffer, never guaranteed to be vector aligned;
-;;   * mask extraction bitcasts lane comparisons to an integer. x86 has mask
-;;     instructions for this; arm64 has no such instruction, but LLVM knows the
-;;     NEON sequence, so writing it at the IR level gets the right code on both.
+;; coil.simd's own `ascii-whitespace?` isn't a direct replacement for the ws
+;; masks below: it matches bytes 9-13, which includes newline (10), and a
+;; scanned line's newline must stay out of its own whitespace mask. So the ws
+;; masks are still written by hand, just from coil.simd pieces instead of raw
+;; IR: tab (9) and space (32) by equality, carriage-return/vertical-tab/form-feed
+;; (11-13) as one inclusive range that skips 10.
 ;;
 ;; The byte operands are compile-time literals at every call site
 ;; (thecount.specialize generates them), so -O3 inlines these bodies and folds
 ;; the splat to a constant vector.
+(import "coil.simd" :as v)
 (import "coil.primitive" :as primitive)
 
 ;;; Bit i is set iff the byte at p[i] equals b, for i in 0..15.
 (defn v16-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [p b]
-                     "%bt = trunc $t1 $1 to i8
-%s0 = insertelement <16 x i8> undef, i8 %bt, i32 0
-%sv = shufflevector <16 x i8> %s0, <16 x i8> undef, <16 x i32> zeroinitializer
-%v = load <16 x i8>, ptr $0, align 1
-%c = icmp eq <16 x i8> %v, %sv
-%m = bitcast <16 x i1> %c to i16
-%r = zext i16 %m to i64
-ret i64 %r"))
+  (cast i64
+        (v/mask->bits (v/v= (v/vloadu [u8 16] p) (v/vsplat [u8 16] (cast u8 b))))))
 
 ;;; Bit i is set iff p[i] is horizontal whitespace: space, tab, carriage
 ;;; return, vertical tab, or form feed. Newline terminates a scanned line.
 (defn v16-ws-mask [(p (ptr u8))] (-> i64)
-  (primitive/llvm-ir i64
-                     [p]
-                     "%v = load <16 x i8>, ptr $0, align 1
-%c1 = icmp eq <16 x i8> %v, <i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32, i8 32>
-%c2 = icmp eq <16 x i8> %v, <i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9, i8 9>
-%c3 = icmp eq <16 x i8> %v, <i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13, i8 13>
-%c4 = icmp eq <16 x i8> %v, <i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11>
-%c5 = icmp eq <16 x i8> %v, <i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12, i8 12>
-%o1 = or <16 x i1> %c1, %c2
-%o2 = or <16 x i1> %o1, %c3
-%o3 = or <16 x i1> %o2, %c4
-%o4 = or <16 x i1> %o3, %c5
-%m = bitcast <16 x i1> %o4 to i16
-%r = zext i16 %m to i64
-ret i64 %r"))
+  (let [bytes (v/vloadu [u8 16] p)]
+    (cast i64
+          (v/mask->bits (v/vor (v/v= bytes (v/vsplat [u8 16] 9))
+                               (v/vor (v/byte-in-range? bytes 11 13)
+                                      (v/v= bytes (v/vsplat [u8 16] 32))))))))
 
 (defn v32-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [p b]
-                     "%bt = trunc $t1 $1 to i8
-%s0 = insertelement <32 x i8> undef, i8 %bt, i32 0
-%sv = shufflevector <32 x i8> %s0, <32 x i8> undef, <32 x i32> zeroinitializer
-%v = load <32 x i8>, ptr $0, align 1
-%c = icmp eq <32 x i8> %v, %sv
-%m = bitcast <32 x i1> %c to i32
-%r = zext i32 %m to i64
-ret i64 %r"))
+  (cast i64
+        (v/mask->bits (v/v= (v/vloadu [u8 32] p) (v/vsplat [u8 32] (cast u8 b))))))
 
 (defn v32-ws-mask [(p (ptr u8))] (-> i64)
   (| (v16-ws-mask p)
      (<< (v16-ws-mask (index p 16)) 16)))
 
 (defn v64-eq-mask [(p (ptr u8)) (b i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [p b]
-                     "%bt = trunc $t1 $1 to i8
-%s0 = insertelement <64 x i8> undef, i8 %bt, i32 0
-%sv = shufflevector <64 x i8> %s0, <64 x i8> undef, <64 x i32> zeroinitializer
-%v = load <64 x i8>, ptr $0, align 1
-%c = icmp eq <64 x i8> %v, %sv
-%m = bitcast <64 x i1> %c to i64
-ret i64 %m"))
+  (cast i64
+        (v/mask->bits (v/v= (v/vloadu [u8 64] p) (v/vsplat [u8 64] (cast u8 b))))))
 
 (defn v64-ws-mask [(p (ptr u8))] (-> i64)
-  (primitive/llvm-ir i64
-                     [p]
-                     "%v = load <64 x i8>, ptr $0, align 1
-%s0 = insertelement <64 x i8> undef, i8 32, i32 0
-%sp = shufflevector <64 x i8> %s0, <64 x i8> undef, <64 x i32> zeroinitializer
-%t0 = insertelement <64 x i8> undef, i8 9, i32 0
-%tb = shufflevector <64 x i8> %t0, <64 x i8> undef, <64 x i32> zeroinitializer
-%r0 = insertelement <64 x i8> undef, i8 13, i32 0
-%cr = shufflevector <64 x i8> %r0, <64 x i8> undef, <64 x i32> zeroinitializer
-%v0 = insertelement <64 x i8> undef, i8 11, i32 0
-%vt = shufflevector <64 x i8> %v0, <64 x i8> undef, <64 x i32> zeroinitializer
-%f0 = insertelement <64 x i8> undef, i8 12, i32 0
-%ff = shufflevector <64 x i8> %f0, <64 x i8> undef, <64 x i32> zeroinitializer
-%c1 = icmp eq <64 x i8> %v, %sp
-%c2 = icmp eq <64 x i8> %v, %tb
-%c3 = icmp eq <64 x i8> %v, %cr
-%c4 = icmp eq <64 x i8> %v, %vt
-%c5 = icmp eq <64 x i8> %v, %ff
-%o1 = or <64 x i1> %c1, %c2
-%o2 = or <64 x i1> %o1, %c3
-%o3 = or <64 x i1> %o2, %c4
-%o4 = or <64 x i1> %o3, %c5
-%m = bitcast <64 x i1> %o4 to i64
-ret i64 %m"))
+  (let [bytes (v/vloadu [u8 64] p)]
+    (cast i64
+          (v/mask->bits (v/vor (v/v= bytes (v/vsplat [u8 64] 9))
+                               (v/vor (v/byte-in-range? bytes 11 13)
+                                      (v/v= bytes (v/vsplat [u8 64] 32))))))))
 
-;;; Index of the lowest set bit. Only called on a non-zero mask, so the
-;;; is_zero_poison flag is safe and saves a branch.
+;;; Index of the lowest set bit. Only called on a non-zero mask.
 (defn ctz [(x i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [x]
-                     "declare i64 @llvm.cttz.i64(i64, i1)
-%r = call i64 @llvm.cttz.i64(i64 $0, i1 true)
-ret i64 %r"))
+  (primitive/ctz x))
 
 ;;; Find the next physical newline without a libc call for each source line.
 (defn find-newline [(data (ptr u8)) (start i64) (len i64)] (-> i64)
@@ -147,15 +99,7 @@ ret i64 %r"))
            len)))
 
 (defn popcount [(x i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [x]
-                     "declare i64 @llvm.ctpop.i64(i64)
-%r = call i64 @llvm.ctpop.i64(i64 $0)
-ret i64 %r"))
+  (primitive/popcount x))
 
 (defn clz [(x i64)] (-> i64)
-  (primitive/llvm-ir i64
-                     [x]
-                     "declare i64 @llvm.ctlz.i64(i64, i1)
-%r = call i64 @llvm.ctlz.i64(i64 $0, i1 true)
-ret i64 %r"))
+  (primitive/clz x))
