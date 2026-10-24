@@ -3,8 +3,17 @@
 (import "coil.alloc" :as alloc)
 (import "coil.io" :use [write])
 (import "coil.os" :as os)
-(import "thecount.engine" :use [rb-new read-fd-into! ReadBuf])
-(import "thecount.walk" :use [resolved-dirent-type DT-UNKNOWN DT-DIR DT-REG])
+(import "coil.fs" :as fs)
+(import "thecount.engine"
+        :use
+        [rb-new read-fd-into! read-into! read-into-at! ReadBuf])
+(import "thecount.walk"
+        :use
+        [resolved-dirent-type
+         resolved-directory-entry-type
+         DT-UNKNOWN
+         DT-DIR
+         DT-REG])
 
 ;;; A pipe reliably returns fewer bytes than the reusable file buffer holds.
 ;;; A short positive read must not discard the remaining bytes.
@@ -34,3 +43,30 @@
                       DT-REG)
            (assert-eq (resolved-dirent-type dfd c"src" DT-DIR) DT-DIR)
            (os/close dfd)))
+
+;;; Opening a basename through the capability must match reading its full path.
+(deftest directory-relative-read
+         (let [a (alloc/malloc-allocator)
+               direct (rb-new a)
+               relative (rb-new a)
+               size (read-into! a direct c"src/main.coil")]
+           (assert (> size 0))
+           (match (fs/directory-open a "src")
+             (Err [_] (assert false))
+             (Ok [opened]
+                 (let [(mut directory) opened]
+                   (assert-eq (read-into-at! a
+                                             relative
+                                             (mut directory)
+                                             c"main.coil")
+                              size)
+                   (assert (= (slice/slice-new (.p direct) size)
+                              (slice/slice-new (.p relative) size)))
+                   (assert-eq (read-into-at! a
+                                             relative
+                                             (mut directory)
+                                             c"thecount-no-such-file")
+                              -1)
+                   (match (fs/directory-close! (mut directory))
+                     (Ok [_] (assert true))
+                     (Err [_] (assert false))))))))

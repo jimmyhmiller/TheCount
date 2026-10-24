@@ -3,7 +3,7 @@
 (import "coil.alloc" :as alloc)
 (import "coil.arraylist" :as arraylist)
 (import "coil.str" :as str)
-(import "coil.fs" :use [os-pick])
+(import "coil.fs" :as fs :use [os-pick])
 (import "coil.primitive" :as primitive)
 (import "coil.mem" :use [mem-copy])
 (import "thecount.util" :use [must-alloc])
@@ -58,6 +58,22 @@
               (cond (= kind 16384) DT-DIR
                     (= kind 32768) DT-REG
                     :else DT-UNKNOWN))))))
+
+;;; Resolve unknown entry kinds without following symlinks. Open "." through
+;;; the capability to obtain a separate owned descriptor for fstatat; no raw
+;;; directory-stream layout or dirfd binding is needed.
+(defn resolved-directory-entry-type [(directory (ptr fs/Directory))
+                                     (name (ptr i8))] (-> i64)
+  (match (fs/file-open-at directory c"." 0 0)
+    (Err [_] DT-UNKNOWN)
+    (Ok [opened]
+        (let [(mut file) opened
+              kind
+                (resolved-dirent-type (cast i32 (.fd opened)) name DT-UNKNOWN)]
+          (match (fs/file-close (mut file))
+            (Ok [_] 0)
+            (Err [_] (println "thecount: metadata directory close failed")))
+          kind))))
 
 ;;; Name length of a dirent: the d_namlen field on darwin, strlen on linux.
 (defn dirent-name-len [(ent (ptr i8))] (-> i64)
