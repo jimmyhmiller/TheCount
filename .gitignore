@@ -4,3 +4,4 @@
 /thecount
 *.o
 /build
+thecount.dSYM/

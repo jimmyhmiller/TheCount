@@ -214,3 +214,36 @@
     (assert (>= idx 0))
     (assert (= (.name (registry/reg-spec r idx)) "Fortran"))
     (assert-eq idx (registry/reg-lookup-path r "fixture.F08"))))
+
+(deftest unclaimed-files-count-as-unknown
+  (let [r (fresh)]
+    (let [lic (registry/reg-classify-path r "proj/LICENSE")]
+      (assert (= (.name (registry/reg-spec r lic)) "Unknown")))
+    (let [odd (registry/reg-classify-path r "data.weirdext")]
+      (assert (= (.name (registry/reg-spec r odd)) "Unknown")))
+    (let [rs (registry/reg-classify-path r "main.rs")]
+      (assert (= (.name (registry/reg-spec r rs)) "Rust")))
+    ;; Lookup by language stays strict: Unknown owns no extension.
+    (assert-eq (registry/reg-lookup-path r "proj/LICENSE") -1)))
+
+(deftest unknown-counts-like-plain-text
+  (let [r (fresh)
+        idx (registry/reg-classify-path r "NOTES")
+        c (registry/reg-count-bytes r idx "one // two\n\n  \n# three\n")]
+    (assert-eq (.lines c) 4)
+    (assert-eq (.blank c) 2)
+    (assert-eq (.comments c) 0)
+    (assert-eq (.code c) 2)))
+
+(deftest skip-unknown-drops-unclaimed-files
+  (let [r (fresh)]
+    (registry/reg-skip-unknown! r)
+    (assert-eq (registry/reg-classify-path r "LICENSE") -1)
+    (assert (>= (registry/reg-classify-path r "main.rs") 0))))
+
+(deftest extension-filter-drops-unknown
+  (let [r (fresh)]
+    (registry/reg-restrict-extensions! r "rs")
+    (assert-eq (registry/reg-classify-path r "LICENSE") -1)
+    (assert-eq (registry/reg-classify-path r "main.py") -1)
+    (assert (>= (registry/reg-classify-path r "main.rs") 0))))

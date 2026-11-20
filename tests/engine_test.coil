@@ -5,7 +5,10 @@
 (import "coil.fs" :as fs)
 (import "thecount.engine"
         :use
-        [rb-new read-fd-into! read-into! read-into-at! ReadBuf])
+        [rb-new read-fd-into! read-into! read-into-at! ReadBuf BINARY-SNIFF
+         READ-BINARY])
+(import "coil.mem" :use [fill])
+(import "thecount.util" :use [must-alloc])
 (import "thecount.walk"
         :use
         [resolved-dirent-type resolved-directory-entry-type DT-UNKNOWN DT-DIR
@@ -64,3 +67,34 @@
            (match (close! (mut directory))
              (Ok [_] (assert true))
              (Err [_] (assert false)))))))
+
+;;; Write `n` copies of `fill-byte` to fd, with `nul-at` (if >= 0) replaced by
+;;; a NUL byte, then close it.
+(defn write-pattern! [(fd i32) (n i64) (fill-byte u8) (nul-at i64)] (-> i64)
+  (let [a (alloc/malloc-allocator)
+        p (must-alloc [u8] a n)]
+    (fill p fill-byte n)
+    (when (>= nul-at 0)
+      (set! (index p nul-at) (: 0 u8))
+      0)
+    (assert-eq (alloc/write fd (cast (ptr i8) p) n) n)
+    (os/close fd)
+    0))
+
+(defn read-pattern [(n i64) (nul-at i64)] (-> i64)
+  (let [(mut fds) (zeroed (array i32 2))
+        a (alloc/malloc-allocator)]
+    (assert-eq (os/pipe (cast (ptr i32) (mut fds))) 0)
+    (write-pattern! (load (index (mut fds) 1)) n (: 97 u8) nul-at)
+    (read-fd-into! a (rb-new a) (load (index (mut fds) 0)))))
+
+(deftest nul-in-sniff-window-reads-as-binary
+  (assert-eq (read-pattern 5 2) READ-BINARY)
+  (assert-eq (read-pattern (+ BINARY-SNIFF 4000) 0) READ-BINARY)
+  (assert-eq (read-pattern (+ BINARY-SNIFF 4000) (- BINARY-SNIFF 1))
+             READ-BINARY))
+
+(deftest nul-past-sniff-window-is-text
+  (assert-eq (read-pattern (+ BINARY-SNIFF 4000) BINARY-SNIFF)
+             (+ BINARY-SNIFF 4000))
+  (assert-eq (read-pattern 100 -1) 100))

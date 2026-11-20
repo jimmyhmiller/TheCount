@@ -6,8 +6,8 @@ version-flag = "--version"
 args           = ["{target}"]
 json           = ["--output", "json"]
 languages      = ["--extensions", "{extensions}"]
-same-work      = ["--hidden", "--no-ignore", "--no-config"]
-same-work-note = "dotted directories entered, .gitignore disabled, and user language config disabled; extension filtering excludes exact filenames without the selected extensions"
+same-work      = ["--hidden", "--no-ignore", "--no-config", "--no-unknown"]
+same-work-note = "dotted directories entered, .gitignore disabled, user language config disabled, and files with no recognized language skipped (other tools do not count them); extension filtering excludes exact filenames without the selected extensions"
 
 [read]
 files    = "total.files"

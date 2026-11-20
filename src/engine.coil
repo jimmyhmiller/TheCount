@@ -97,8 +97,16 @@
       (None [] (alloc/oom-at c"read buffer" newcap)))
     0))
 
-;;; Read a file into rb's buffer. Returns bytes read or -1. A short read is
-;;; allowed for regular files, so only a zero read means EOF.
+;;; How many leading bytes decide whether a file is binary.
+(const BINARY-SNIFF 8000)
+
+;;; read-fd-into! result for a file that is binary: callers skip it without
+;;; counting, exactly like a read failure.
+(const READ-BINARY -2)
+
+;;; Read a file into rb's buffer. Returns bytes read, -1 on failure, or
+;;; READ-BINARY. A short read is allowed for regular files, so only a zero read
+;;; means EOF.
 (defn read-into! [(a (dyn alloc/Allocator)) (rb (ptr ReadBuf)) (cpath (ptr i8))]
   (-> i64)
   (read-fd-into! a rb (os/open cpath 0)))
@@ -123,7 +131,9 @@
       -1
       (let [(mut got) 0
             (mut done) false
-            (mut failed) false]
+            (mut failed) false
+            (mut sniffed) false
+            (mut binary) false]
         (when (= (.cap rb) 0)
           (rb-grow! a rb 4194304)
           0)
@@ -143,9 +153,26 @@
                         (set! (mut done) true)
                         0)
                     (= (cast i64 n) 0) (set! (mut done) true)
-                    :else (set! (mut got) (+ got (cast i64 n)))))))
+                    :else
+                      (do
+                        (set! (mut got) (+ got (cast i64 n)))
+                        ;; Decide binary as soon as the sniff window is in,
+                        ;; so a large image or archive costs one read, not all.
+                        (when (and (= sniffed false) (>= got BINARY-SNIFF))
+                          (set! (mut sniffed) true)
+                          (when (binary? (slice::new (load (field rb p)) got))
+                            (set! (mut binary) true)
+                            (set! (mut done) true)
+                            0)
+                          0)
+                        0)))))
         (os/close fd)
-        (if (= failed true) -1 got))))
+        (cond (= failed true) -1
+              (= binary true) READ-BINARY
+              (and (= sniffed false)
+                   (binary? (slice::new (load (field rb p)) got)))
+                READ-BINARY
+              :else got))))
 
 ;;; Aggregation state; each counter owns one, merged after the pools drain.
 (defstruct Agg
@@ -225,10 +252,11 @@
                   :depth depth
                   :roots roots))))
 
-;;; NUL byte in the first 8000 bytes = binary, skip it (same heuristic as scc).
+;;; NUL byte in the first BINARY-SNIFF bytes = binary, skip it (same heuristic
+;;; as scc).
 (defn binary? [(data (slice u8))] (-> bool)
   (let [n (len data)
-        lim (if (< n 8000) n 8000)]
+        lim (if (< n BINARY-SNIFF) n BINARY-SNIFF)]
     (< (counter/find-byte data 0 lim 0) lim)))
 
 ;;; Length of the longest walk root `dir` sits under, or 0 for none. Depth is
@@ -351,27 +379,24 @@
                      (agg (ptr Agg))
                      (rb (ptr ReadBuf))
                      (path (slice u8))] (-> i64)
-  (let [idx (registry/reg-lookup-path r path)]
+  (let [idx (registry/reg-classify-path r path)]
     (if (= idx -1)
         0
         (let [size (read-into! a rb (str/to-cstr a path))]
           (if (< size 0)
               0
-              (let [data (slice::new (load (field rb p)) size)]
-                (if (binary? data)
-                    0
-                    (let [dn (len path)
-                          last-slash
-                            (util/bytes-last-index-of path (cast u8 #\/))]
-                      (agg-file! a
-                                 r
-                                 agg
-                                 idx
-                                 (if (= last-slash -1)
-                                     ""
-                                     (slice/subslice path 0 last-slash))
-                                 (slice/subslice path (+ last-slash 1) dn)
-                                 (registry/reg-count-bytes r idx data))))))))))
+              (let [data (slice::new (load (field rb p)) size)
+                    dn (len path)
+                    last-slash (util/bytes-last-index-of path (cast u8 #\/))]
+                (agg-file! a
+                           r
+                           agg
+                           idx
+                           (if (= last-slash -1)
+                               ""
+                               (slice/subslice path 0 last-slash))
+                           (slice/subslice path (+ last-slash 1) dn)
+                           (registry/reg-count-bytes r idx data))))))))
 
 ;;; True iff path contains any of the exclude substrings.
 (defn excluded? [(excludes (ptr (arraylist/ArrayList (slice u8))))
@@ -481,15 +506,13 @@
               (let [data (slice::new (load (field rb p)) size)
                     t1 (if (.timing pool) (now-ns) 0)
                     result
-                      (if (binary? data)
-                          0
-                          (agg-file! a
-                                     r
-                                     agg
-                                     idx
-                                     dir
-                                     name
-                                     (registry/reg-count-bytes r idx data)))]
+                      (agg-file! a
+                                 r
+                                 agg
+                                 idx
+                                 dir
+                                 name
+                                 (registry/reg-count-bytes r idx data))]
                 (when (.timing pool)
                   (atomic/add (load (field pool scan-ns))
                               (- (now-ns) t1))
@@ -534,7 +557,8 @@
                                                       (chain chain)))))
                 :else
                   (let [idx
-                          (registry/reg-lookup-path (load (field pool r)) name)]
+                          (registry/reg-classify-path (load (field pool r))
+                                                      name)]
                     (when (>= idx 0)
                       ;; Language selection precedes allocation and scheduling.
                       ;; The registry is immutable during the walk; carry its

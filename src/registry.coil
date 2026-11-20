@@ -5,6 +5,7 @@
 (import "coil.arraylist" :as arraylist)
 (import "coil.hashmap" :as hashmap)
 (import "coil.str" :as str)
+(import "coil.os" :as os)
 (import "thecount.lang" :as lang)
 (import "thecount.counter" :as counter)
 (import "thecount.specialize" :as specialize)
@@ -23,7 +24,8 @@
                                               counter/Counts))))
    (by-ext (ptr (hashmap/HashMap (slice u8) i64)))
    (by-name (ptr (hashmap/HashMap (slice u8) i64)))
-   (by-file (ptr (hashmap/HashMap (slice u8) i64)))])
+   (by-file (ptr (hashmap/HashMap (slice u8) i64)))
+   (unknown i64)])  ; spec index for files no language claims, -1 = skip them
 
 (defn lower [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (len s)
@@ -52,6 +54,7 @@
     (set! (.by-ext r) by-ext)
     (set! (.by-name r) by-name)
     (set! (.by-file r) by-file)
+    (set! (.unknown r) -1)
     r))
 
 ;;; Register a language spec under space-separated extensions.
@@ -127,6 +130,9 @@
           (None [] 0))))
     (set! (.by-ext r) keep)
     (set! (.by-file r) (util/new-map a (slice u8) i64 (str/keyops)))
+    ;; Asking for specific extensions means only those: nothing falls through
+    ;; to Unknown.
+    (set! (.unknown r) -1)
     0))
 
 ;;; Spec index for a language name (case-insensitive), or -1.
@@ -165,6 +171,32 @@
                                       ext))
                         (Some [v] v)
                         (None [] -1))))))))))
+
+;;; Spec index to count a path under: its language, or the Unknown spec when no
+;;; language claims it and unknown counting is on. -1 means skip the file.
+(defn reg-classify-path [(r (ptr Registry)) (path (slice u8))] (-> i64)
+  (let [idx (reg-lookup-path r path)]
+    (if (= idx -1) (.unknown r) idx)))
+
+;;; Register the Unknown spec: no comments, no strings, so every non-blank line
+;;; is code. It reuses Plain Text's generated scanner, which has exactly those
+;;; rules. Unknown owns no extensions or filenames; only reg-classify-path
+;;; routes files to it.
+(defn add-unknown! [(r (ptr Registry))] (-> i64)
+  (let [txt (reg-lookup-name r "Plain Text")]
+    (when (= txt -1)
+      (println "thecount: Unknown needs the builtin Plain Text scanner")
+      (os/_exit 2)
+      0)
+    (let [idx (add-builtin! r "Unknown" "" "" "" false "" "")]
+      (reg-set-counter! r idx (get (load (field r counters)) txt))
+      (set! (.unknown r) idx)
+      idx)))
+
+;;; Stop counting files no language claims.
+(defn reg-skip-unknown! [(r (ptr Registry))] (-> i64)
+  (set! (.unknown r) -1)
+  0)
 
 ;; --- builtin language table -------------------------------------------------
 ;; One line per language: name, extensions, line comments, block pairs,
@@ -383,4 +415,5 @@
     (reg-add-files! r
                     sh2
                     ".bash_profile .bash_aliases .zprofile .zshenv PKGBUILD APKBUILD"))
+  (add-unknown! r)
   0)

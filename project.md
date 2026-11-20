@@ -17,6 +17,14 @@ scc doesn't have:
   instead of reporting one lump row for src. Files directly in a named root
   are labeled `src/.`, distinguishing them from rows such as `src/lib`.
 
+Files no language claims (no recognized extension or filename) are not
+silently dropped, unlike scc and tokei: they are counted under an **Unknown**
+row with Plain Text rules (every non-blank line is code), so you can see how
+much of a tree TheCount could not classify. Binary files (a NUL byte in the
+first 8000 bytes) are still skipped, and the reader stops after that first
+chunk, so large images and archives cost one read. `--no-unknown` restores the
+scc behavior; `--extensions` implies it.
+
 None of scc's estimation extras (COCOMO, complexity scores) — just counting.
 
 ## Usage
@@ -27,7 +35,8 @@ None of scc's estimation extras (COCOMO, complexity scores) — just counting.
     thecount --hidden            include hidden files
     thecount --no-ignore         don't honor .gitignore
     thecount --no-config         use built-in language definitions only
-    thecount --extensions c,py   count only these extensions
+    thecount --extensions c,py   count only these extensions (no Unknown row)
+    thecount --no-unknown        skip files no language claims
     thecount --output json       emit machine-readable totals
     thecount --files --output json  include sorted per-file counts
     thecount langs               list every known language + extensions
