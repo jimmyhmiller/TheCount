@@ -311,8 +311,10 @@
 
 ;;; Print --dirs as a hierarchy instead of repeating the directory on every
 ;;; language row. Rows arrive as one (directory, language) pair and are sorted
-;;; so each directory is contiguous, largest directory first.
-(defn print-dir-tree [(a (dyn alloc/Allocator)) (rows (slice Row))] (-> i64)
+;;; so each directory is contiguous, largest directory first. Sorts rows in
+;;; place.
+(defn render-dir-tree [(a (dyn alloc/Allocator)) (rows (slice Row))]
+  (-> (slice u8))
   (qsort (data rows) (len rows) (sizeof Row) (fnptr-of dir-row-cmp))
   (let [n (len rows)
         (mut lang-w) 8
@@ -326,66 +328,69 @@
           (set! (mut lang-w) (len (.sub r))))
         (set! (mut total-files) (+ total-files (.files r)))
         (set! (mut total-lines) (+ total-lines (.lines c)))
-        (set! (mut total-code) (+ total-code (.code c))))
-      (let [(mut b) (str/StrBuf::new a)]
-        (push-str! (mut b) "TheCount · ")
-        (push-str! (mut b) (i64->pretty a total-files))
-        (push-str! (mut b) " files · ")
-        (push-str! (mut b) (i64->pretty a total-lines))
-        (push-str! (mut b) " lines · ")
-        (push-str! (mut b) (i64->pretty a total-code))
-        (push-str! (mut b) " code\n\n")
-        (let [(mut i) 0]
-          (while (< i n)
-            (let [first (index (data rows) i)
-                  dir (.label first)
-                  (mut end) (+ i 1)]
-              (while (and (< end n)
-                          (= (str/cmp dir
-                                      (.label (index (data rows)
-                                                     end)))
-                             0))
-                (set! (mut end) (+ end 1)))
-              (let [last-dir (= end n)
-                    branch (if (= last-dir true) "└─ " "├─ ")
-                    stem (if (= last-dir true) "   " "│  ")
-                    (mut dir-files) 0
-                    (mut dir-code) 0]
-                (push-str! (mut b) branch)
-                (push-str! (mut b) dir)
-                (push-str! (mut b) "/\n")
-                (for [j (load i) (load end)]
-                  (let [r (index (data rows) j)
-                        c (field r c)
-                        last-lang (= (+ j 1) end)]
-                    (push-str! (mut b) stem)
-                    (push-str! (mut b)
-                               (if (= last-lang true)
-                                   "└─ "
-                                   "├─ "))
-                    (push-left! (mut b) (.sub r) (+ lang-w 1))
-                    (push-right! (mut b)
-                                 (i64->pretty a (.files r))
-                                 NUM-W)
-                    (push-str! (mut b)
-                               (if (= (.files r) 1)
-                                   " file"
-                                   " files"))
-                    (push-right! (mut b)
-                                 (i64->pretty a (.code c))
-                                 NUM-W)
-                    (push-str! (mut b) " code\n")
-                    (set! (mut dir-files) (+ dir-files (.files r)))
-                    (set! (mut dir-code) (+ dir-code (.code c)))))
-                (push-str! (mut b) (if (= last-dir true) "\n" "│\n"))
-                (push-str! (mut b) stem)
-                (push-left! (mut b) "subtotal" (+ lang-w 4))
-                (push-right! (mut b) (i64->pretty a dir-files) NUM-W)
-                (push-str! (mut b) (if (= dir-files 1) " file" " files"))
-                (push-right! (mut b) (i64->pretty a dir-code) NUM-W)
-                (push-str! (mut b) " code\n")
-                (when (= last-dir false)
-                  (push! (mut b) (cast u8 #\newline))))
-              (set! (mut i) (load end))))
-          (print "{s}" (str (mut b)))
-          0)))))
+        (set! (mut total-code) (+ total-code (.code c)))))
+    (let [(mut b) (str/StrBuf::new a)]
+      (push-str! (mut b) "TheCount · ")
+      (push-str! (mut b) (i64->pretty a total-files))
+      (push-str! (mut b) " files · ")
+      (push-str! (mut b) (i64->pretty a total-lines))
+      (push-str! (mut b) " lines · ")
+      (push-str! (mut b) (i64->pretty a total-code))
+      (push-str! (mut b) " code\n\n")
+      (let [(mut i) 0]
+        (while (< i n)
+          (let [first (index (data rows) i)
+                dir (.label first)
+                (mut end) (+ i 1)]
+            (while (and (< end n)
+                        (= (str/cmp dir
+                                    (.label (index (data rows)
+                                                   end)))
+                           0))
+              (set! (mut end) (+ end 1)))
+            (let [last-dir (= end n)
+                  branch (if (= last-dir true) "└─ " "├─ ")
+                  stem (if (= last-dir true) "   " "│  ")
+                  (mut dir-files) 0
+                  (mut dir-code) 0]
+              (push-str! (mut b) branch)
+              (push-str! (mut b) dir)
+              (push-str! (mut b) "/\n")
+              (for [j (load i) (load end)]
+                (let [r (index (data rows) j)
+                      c (field r c)
+                      last-lang (= (+ j 1) end)]
+                  (push-str! (mut b) stem)
+                  (push-str! (mut b)
+                             (if (= last-lang true)
+                                 "└─ "
+                                 "├─ "))
+                  (push-left! (mut b) (.sub r) (+ lang-w 1))
+                  (push-right! (mut b)
+                               (i64->pretty a (.files r))
+                               NUM-W)
+                  (push-str! (mut b)
+                             (if (= (.files r) 1)
+                                 " file"
+                                 " files"))
+                  (push-right! (mut b)
+                               (i64->pretty a (.code c))
+                               NUM-W)
+                  (push-str! (mut b) " code\n")
+                  (set! (mut dir-files) (+ dir-files (.files r)))
+                  (set! (mut dir-code) (+ dir-code (.code c)))))
+              (push-str! (mut b) (if (= last-dir true) "\n" "│\n"))
+              (push-str! (mut b) stem)
+              (push-left! (mut b) "subtotal" (+ lang-w 4))
+              (push-right! (mut b) (i64->pretty a dir-files) NUM-W)
+              (push-str! (mut b) (if (= dir-files 1) " file" " files"))
+              (push-right! (mut b) (i64->pretty a dir-code) NUM-W)
+              (push-str! (mut b) " code\n")
+              (when (= last-dir false)
+                (push! (mut b) (cast u8 #\newline))))
+            (set! (mut i) (load end))))
+        (str (mut b))))))
+
+(defn print-dir-tree [(a (dyn alloc/Allocator)) (rows (slice Row))] (-> i64)
+  (print "{s}" (render-dir-tree a rows))
+  0)

@@ -1,7 +1,11 @@
 (module thecount.output-test)
 (import "coil.alloc" :as alloc)
 (import "coil.str" :as str)
-(import "thecount.output" :use [push-json-string! utf8-width])
+(import "coil.slice" :as slice)
+(import "thecount.output"
+        :use
+        [push-json-string! utf8-width render-dir-tree mk-row Row])
+(import "thecount.counter" :use [Counts])
 (import "thecount.util" :use [must-alloc])
 
 (deftest json-escapes-invalid-filename-bytes-losslessly
@@ -21,3 +25,32 @@
     (set! (index raw 0) (: 192 u8))
     (set! (index raw 1) (: 128 u8))
     (assert-eq (utf8-width (slice::new raw 2) 0) 0)))
+
+(defn dir-row [(dir (slice u8))
+               (lang (slice u8))
+               (files i64)
+               (code i64)
+               (dir-code i64)] (-> Row)
+  (let [(mut r)
+          (mk-row dir
+                  lang
+                  files
+                  (Counts
+                    :lines code
+                    :blank 0
+                    :comments 0
+                    :code code))]
+    (set! (.group (mut r)) dir-code)
+    r))
+
+;;; Regression: the render used to sit inside the totals loop, printing the
+;;; whole tree once per row with a growing header.
+(deftest dir-tree-renders-each-directory-once
+  (let [a (alloc/malloc-allocator)
+        rows (must-alloc [Row] a 3)]
+    (set! (index rows 0) (dir-row "docs" "Markdown" 1 5 5))
+    (set! (index rows 1) (dir-row "src" "Unknown" 1 3 13))
+    (set! (index rows 2) (dir-row "src" "C" 2 10 13))
+    (let [out (render-dir-tree a (slice::new rows 3))]
+      (assert (= out
+                 "TheCount · 4 files · 18 lines · 18 code\n\n├─ src/\n│  ├─ C                 2 files        10 code\n│  └─ Unknown           1 file         3 code\n│\n│  subtotal             3 files        13 code\n\n└─ docs/\n   └─ Markdown          1 file         5 code\n\n   subtotal             1 file         5 code\n")))))
