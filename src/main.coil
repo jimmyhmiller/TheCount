@@ -68,8 +68,7 @@
                  (excludes (ptr (arraylist/ArrayList (slice u8))))] (-> i64)
   (let [n-specs (registry/reg-count r)
         clean-roots (util/new-list a (slice u8))]
-    (for root
-      (iter (load roots))
+    (for root (iter (load roots))
       (push! clean-roots (strip-trailing-slashes root)))
     (let [agg
             (engine/count-all a
@@ -84,8 +83,8 @@
                               excludes)]
       ;; emit
       (cond (= json-output true)
-              (let [files-per (slice/slice-data (.files-per agg))
-                    counts-per (slice/slice-data (.counts-per agg))
+              (let [files-per (data (.files-per agg))
+                    counts-per (data (.counts-per agg))
                     (mut files) 0
                     (mut c) (counter/counts-zero)]
                 (for [s 0 n-specs]
@@ -94,14 +93,14 @@
                 (output/print-json a
                                    files
                                    c
-                                   (arraylist/al-slice (load (load (field agg
-                                                                          file-rows))))
+                                   (slice (load (load (field agg
+                                                             file-rows))))
                                    want-files))
             (= want-files true)
               (output/print-table a
                                   "File"
-                                  (arraylist/al-slice (load (load (field agg
-                                                                         file-rows))))
+                                  (slice (load (load (field agg
+                                                            file-rows))))
                                   false
                                   true
                                   (fnptr-of output/row-cmp))
@@ -109,12 +108,12 @@
               (do
                 (engine/agg-dir-groups! a agg)
                 (output/print-dir-tree a
-                                       (arraylist/al-slice (load (load (field agg
-                                                                              dir-rows))))))
+                                       (slice (load (load (field agg
+                                                                 dir-rows))))))
             :else
               (let [rows (util/new-list a output/Row)
-                    files-per (slice/slice-data (.files-per agg))
-                    counts-per (slice/slice-data (.counts-per agg))]
+                    files-per (data (.files-per agg))
+                    counts-per (data (.counts-per agg))]
                 (for [s 0 n-specs]
                   (when (> (load (index files-per s)) 0)
                     (push! rows
@@ -125,7 +124,7 @@
                     0))
                 (output/print-table a
                                     "Language"
-                                    (arraylist/al-slice (load rows))
+                                    (slice (load rows))
                                     true
                                     false
                                     (fnptr-of output/row-cmp)))))))
@@ -134,23 +133,24 @@
   (let [n (registry/reg-count r)
         exts (util/must-alloc [str/StrBuf] a n)]
     (for [k 0 n]
-      (set! (index exts k) (str/sb-new a)))
-    (hashmap/hm-for [ext idx (load (field r by-ext))]
-                    (let [bp (index exts idx)]
-                      (when (> (len (str/sb-str (load bp))) 0)
-                        (str/sb-push-str! bp " "))
-                      (str/sb-push-str! bp ext)))
+      (set! (index exts k) (str/StrBuf::new a)))
+    (hashmap/for-entries [ext idx (load (field r by-ext))]
+                         (let [bp (index exts idx)]
+                           (when (> (len (str (load bp))) 0)
+                             (push-str! bp " "))
+                           (push-str! bp ext)))
     (for [j 0 n]
       (let [nm (.name (registry/reg-spec r j))
-            es (str/sb-str (load (index exts j)))]
+            es (str (load (index exts j)))]
         (println "{s}: {s}" nm es)))
     0))
 
-(defn push-directive! [(b (mut str/StrBuf)) (d (slice u8)) (val (slice u8))] (-> i64)
-  (str/sb-push-str! (mut b) d)
-  (str/sb-push-str! (mut b) " ")
-  (str/sb-push-str! (mut b) val)
-  (str/sb-push-str! (mut b) "\n")
+(defn push-directive! [(b (mut str/StrBuf)) (d (slice u8)) (val (slice u8))]
+  (-> i64)
+  (push-str! (mut b) d)
+  (push-str! (mut b) " ")
+  (push-str! (mut b) val)
+  (push-str! (mut b) "\n")
   0)
 
 (defn run-add-lang [(a (dyn alloc/Allocator))
@@ -162,11 +162,11 @@
       (os/_exit 2)
       0)
     (let [name (get (load args) 0)
-          (mut b) (str/sb-new a)
+          (mut b) (str/StrBuf::new a)
           (mut k) 1]
-      (str/sb-push-str! (mut b) "\nlang ")
-      (str/sb-push-str! (mut b) name)
-      (str/sb-push-str! (mut b) "\n")
+      (push-str! (mut b) "\nlang ")
+      (push-str! (mut b) name)
+      (push-str! (mut b) "\n")
       (while (< k n)
         (let [arg (get (load args) k)
               val (if (< (+ k 1) n) (get (load args) (+ k 1)) "")]
@@ -209,7 +209,7 @@
                     (set! (mut k) (+ k 2)))
                 (= arg "--nested")
                   (do
-                    (str/sb-push-str! (mut b) "nested\n")
+                    (push-str! (mut b) "nested\n")
                     (set! (mut k) (+ k 1)))
                 :else
                   (do
@@ -218,18 +218,18 @@
                     0))))
       ;; validate the combined config before writing it
       (let [old (config/config-read a)
-            (mut all) (str/sb-new a)]
-        (str/sb-push-str! (mut all) old)
-        (str/sb-push-str! (mut all) (str/sb-str b))
+            (mut all) (str/StrBuf::new a)]
+        (push-str! (mut all) old)
+        (push-str! (mut all) (str b))
         (let [check-reg (registry/reg-new a)]
           (registry/add-builtins! check-reg)
-          (config/load-config! check-reg (str/sb-str all))
+          (config/load-config! check-reg (str all))
           (when (= (registry/reg-lookup-name check-reg name) -1)
             (println "thecount add-lang: stanza did not register; not writing")
             (os/_exit 2)
             0)
           0)
-        (config/config-write a (str/sb-str all))
+        (config/config-write a (str all))
         (println "registered language: {s}" name)
         (println "config: ~/.config/thecount/languages")
         0))))
@@ -243,11 +243,11 @@
       (os/_exit 2)
       0)
     ;; join the args so multi-word names work unquoted
-    (let [(mut b) (str/sb-new a)]
+    (let [(mut b) (str/StrBuf::new a)]
       (for [k 0 n]
-        (when (> k 0) (str/sb-push-str! (mut b) " ") 0)
-        (str/sb-push-str! (mut b) (get (load args) k)))
-      (let [name (str/sb-str b)
+        (when (> k 0) (push-str! (mut b) " ") 0)
+        (push-str! (mut b) (get (load args) k)))
+      (let [name (str b)
             src (config/config-read a)]
         (match (config/remove-stanza a src name)
           (Some [out]
@@ -283,7 +283,7 @@
         (mut mode) 0  ; 0=count 1=add-lang 2=langs 3=help 4=remove-lang
         (mut k) 1]
     (while (< k nargs)
-      (let [arg (str/cstr->str (load (index argv k)))]
+      (let [arg (str/from-cstr (load (index argv k)))]
         (cond (and (= k 1) (= arg "add-lang")) (do (set! (mut mode) 1) 0)
               (and (= k 1) (= arg "remove-lang")) (do (set! (mut mode) 4) 0)
               (and (= k 1) (= arg "langs")) (do (set! (mut mode) 2) 0)
@@ -291,7 +291,7 @@
               (= arg "--exclude")
                 (do
                   (when (< (+ k 1) nargs)
-                    (push! excludes (str/cstr->str (load (index argv (+ k 1)))))
+                    (push! excludes (str/from-cstr (load (index argv (+ k 1)))))
                     (set! (mut k) (+ k 1))
                     0)
                   0)
@@ -305,7 +305,7 @@
                 (do
                   (when (< (+ k 1) nargs)
                     (set! (mut ignore-file)
-                          (str/cstr->str (load (index argv (+ k 1)))))
+                          (str/from-cstr (load (index argv (+ k 1)))))
                     (set! (mut k) (+ k 1))
                     0)
                   0)
@@ -314,7 +314,7 @@
                 (if (< (+ k 1) nargs)
                     (do
                       (set! (mut extensions)
-                            (str/cstr->str (load (index argv (+ k 1)))))
+                            (str/from-cstr (load (index argv (+ k 1)))))
                       (set! (mut k) (+ k 1))
                       0)
                     (do
@@ -323,7 +323,7 @@
                       0))
               (= arg "--output")
                 (if (< (+ k 1) nargs)
-                    (let [value (str/cstr->str (load (index argv (+ k 1))))]
+                    (let [value (str/from-cstr (load (index argv (+ k 1))))]
                       (if (= value "json")
                           (set! (mut json-output) true)
                           (if (= value "text")
@@ -343,9 +343,9 @@
               (= arg "--depth")
                 (do
                   (when (< (+ k 1) nargs)
-                    (match (str/str-parse-int (str/cstr->str (load (index argv
-                                                                          (+ k
-                                                                             1)))))
+                    (match (str/parse-int (str/from-cstr (load (index argv
+                                                                      (+ k
+                                                                         1)))))
                       (Some [d] (do (set! (mut depth) d) 0))
                       (None [] 0))
                     (set! (mut k) (+ k 1))

@@ -1,11 +1,12 @@
 (module thecount.counter)
+(import "coil.cc" :as cc)
 (import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.arraylist" :as arraylist)
 (import "thecount.lang" :as lang)
 (import "thecount.util" :use [bytes-contains?])
 
-(extern memchr :cc c [(ptr u8) i32 i64] (-> (ptr u8)))
+(extern memchr :cc (cc/C) [(ptr u8) i32 i64] (-> (ptr u8)))
 
 (defstruct Counts [(lines i64) (blank i64) (comments i64) (code i64)])
 
@@ -35,10 +36,10 @@
 ;;; Index of the first token in toks matching at i, or -1.
 (defn match-any [(s (slice u8)) (i i64) (toks (slice (slice u8)))] (-> i64)
   (block :found
-         (for [k 0 (len toks)]
-           (when (match-at s i (get toks k))
-             (return-from :found k)))
-         -1))
+    (for [k 0 (len toks)]
+      (when (match-at s i (get toks k))
+        (return-from :found k)))
+    -1))
 
 ;;; True iff byte b is one of the single-char quote delimiters.
 (defn quote-byte? [(b i64) (quotes (slice u8))] (-> bool)
@@ -57,13 +58,13 @@
   (if (>= from to)
       to
       (let [p
-              (memchr (index (slice/slice-data s) from)
+              (memchr (index (data s) from)
                       (cast i32 c)
                       (- to from))]
         (if (= (cast i64 p) 0)
             to
             (+ from
-               (- (cast i64 p) (cast i64 (index (slice/slice-data s) from))))))))
+               (- (cast i64 p) (cast i64 (index (data s) from))))))))
 
 ;;; Number of consecutive backslashes immediately before position q (>= lo).
 (defn backslashes-before [(s (slice u8)) (lo i64) (q i64)] (-> i64)
@@ -81,50 +82,50 @@
 ;;; candidates are rejected so they cannot swallow later comment markers.
 (defn single-scalar-char-end [(s (slice u8)) (at i64) (le i64)] (-> i64)
   (block :done
-         (when (or (>= (+ at 2) le)
-                   (!= (cast i64 (get s at)) #\'))
-           (return-from :done -1))
-         (let [(mut p) (+ at 1)
-               first (cast i64 (get s p))]
-           (cond (= first #\\)
-                   (do
-                     (set! (mut p) (+ p 1))
-                     (when (>= p le) (return-from :done -1))
-                     (let [escape (cast i64 (get s p))]
-                       (cond (= escape #\x)
-                               (do
-                                 (when (>= (+ p 2) le) (return-from :done -1))
-                                 (set! (mut p) (+ p 3)))
-                             (= escape #\u)
-                               (do
-                                 (when (or (>= (+ p 1) le)
-                                           (!= (cast i64 (get s (+ p 1)))
-                                               #\{))
-                                   (return-from :done -1))
-                                 (set! (mut p) (+ p 2))
-                                 (while (and (< p le)
-                                             (!= (cast i64 (get s p)) #\}))
-                                   (set! (mut p) (+ p 1)))
-                                 (when (>= p le) (return-from :done -1))
-                                 (set! (mut p) (+ p 1)))
-                             :else (set! (mut p) (+ p 1)))))
-                 (< first 128) (set! (mut p) (+ p 1))
-                 :else
-                   (let [width
-                           (cond (>= first 240) 4
-                                 (>= first 224) 3
-                                 (>= first 194) 2
-                                 :else 0)]
-                     (when (or (= width 0) (>= (+ p width) le))
-                       (return-from :done -1))
-                     (for [j 1 width]
-                       (let [b (cast i64 (get s (+ p j)))]
-                         (when (or (< b 128) (>= b 192))
-                           (return-from :done -1))))
-                     (set! (mut p) (+ p width))))
-           (if (and (< p le) (= (cast i64 (get s p)) #\'))
-               (+ p 1)
-               -1))))
+    (when (or (>= (+ at 2) le)
+              (!= (cast i64 (get s at)) #\'))
+      (return-from :done -1))
+    (let [(mut p) (+ at 1)
+          first (cast i64 (get s p))]
+      (cond (= first #\\)
+              (do
+                (set! (mut p) (+ p 1))
+                (when (>= p le) (return-from :done -1))
+                (let [escape (cast i64 (get s p))]
+                  (cond (= escape #\x)
+                          (do
+                            (when (>= (+ p 2) le) (return-from :done -1))
+                            (set! (mut p) (+ p 3)))
+                        (= escape #\u)
+                          (do
+                            (when (or (>= (+ p 1) le)
+                                      (!= (cast i64 (get s (+ p 1)))
+                                          #\{))
+                              (return-from :done -1))
+                            (set! (mut p) (+ p 2))
+                            (while (and (< p le)
+                                        (!= (cast i64 (get s p)) #\}))
+                              (set! (mut p) (+ p 1)))
+                            (when (>= p le) (return-from :done -1))
+                            (set! (mut p) (+ p 1)))
+                        :else (set! (mut p) (+ p 1)))))
+            (< first 128) (set! (mut p) (+ p 1))
+            :else
+              (let [width
+                      (cond (>= first 240) 4
+                            (>= first 224) 3
+                            (>= first 194) 2
+                            :else 0)]
+                (when (or (= width 0) (>= (+ p width) le))
+                  (return-from :done -1))
+                (for [j 1 width]
+                  (let [b (cast i64 (get s (+ p j)))]
+                    (when (or (< b 128) (>= b 192))
+                      (return-from :done -1))))
+                (set! (mut p) (+ p width))))
+      (if (and (< p le) (= (cast i64 (get s p)) #\'))
+          (+ p 1)
+          -1))))
 
 (defstruct Heredoc [(word (slice u8)) (strip-tabs bool)])
 
@@ -132,42 +133,42 @@
 ;;; Return the first byte after the word, or -1 if there is no delimiter.
 (defn shell-heredoc-end [(s (slice u8)) (at i64) (le i64)] (-> i64)
   (block :done
-         (when (or (>= (+ at 2) le)
-                   (!= (cast i64 (get s at)) #\<)
-                   (!= (cast i64 (get s (+ at 1))) #\<)
-                   (= (cast i64 (get s (+ at 2))) #\<))
-           (return-from :done -1))
-         (let [(mut p) (+ at 2)]
-           (when (= (cast i64 (get s p)) #\-)
-             (set! (mut p) (+ p 1)))
-           (while (and (< p le)
-                       (or (= (cast i64 (get s p)) #\space)
-                           (= (cast i64 (get s p)) #\tab)))
-             (set! (mut p) (+ p 1)))
-           (when (>= p le) (return-from :done -1))
-           (let [(mut quoted) 0
-                 (mut q) (load p)]
-             (while (< q le)
-               (let [ch (cast i64 (get s q))]
-                 (cond (and (!= quoted 1) (= ch #\\))
-                         (set! (mut q) (+ q (if (< (+ q 1) le) 2 1)))
-                       (and (= quoted 0) (or (= ch #\') (= ch #\")))
-                         (do (set! (mut quoted) ch) (set! (mut q) (+ q 1)))
-                       (= ch quoted)
-                         (do (set! (mut quoted) 0) (set! (mut q) (+ q 1)))
-                       (and (= quoted 0)
-                            (or (= ch #\space)
-                                (= ch #\tab)
-                                (= ch #\;)
-                                (= ch #\|)
-                                (= ch #\&)
-                                (= ch #\<)
-                                (= ch #\>)
-                                (= ch #\()
-                                (= ch #\))))
-                         (return-from :done q)
-                       :else (set! (mut q) (+ q 1)))))
-             (if (= quoted 0) q -1)))))
+    (when (or (>= (+ at 2) le)
+              (!= (cast i64 (get s at)) #\<)
+              (!= (cast i64 (get s (+ at 1))) #\<)
+              (= (cast i64 (get s (+ at 2))) #\<))
+      (return-from :done -1))
+    (let [(mut p) (+ at 2)]
+      (when (= (cast i64 (get s p)) #\-)
+        (set! (mut p) (+ p 1)))
+      (while (and (< p le)
+                  (or (= (cast i64 (get s p)) #\space)
+                      (= (cast i64 (get s p)) #\tab)))
+        (set! (mut p) (+ p 1)))
+      (when (>= p le) (return-from :done -1))
+      (let [(mut quoted) 0
+            (mut q) (load p)]
+        (while (< q le)
+          (let [ch (cast i64 (get s q))]
+            (cond (and (!= quoted 1) (= ch #\\))
+                    (set! (mut q) (+ q (if (< (+ q 1) le) 2 1)))
+                  (and (= quoted 0) (or (= ch #\') (= ch #\")))
+                    (do (set! (mut quoted) ch) (set! (mut q) (+ q 1)))
+                  (= ch quoted)
+                    (do (set! (mut quoted) 0) (set! (mut q) (+ q 1)))
+                  (and (= quoted 0)
+                       (or (= ch #\space)
+                           (= ch #\tab)
+                           (= ch #\;)
+                           (= ch #\|)
+                           (= ch #\&)
+                           (= ch #\<)
+                           (= ch #\>)
+                           (= ch #\()
+                           (= ch #\))))
+                    (return-from :done q)
+                  :else (set! (mut q) (+ q 1)))))
+        (if (= quoted 0) q -1)))))
 
 ;;; Compare the body's complete line with a delimiter word after shell quote
 ;;; removal. The word remains a view into the original source; no allocation.
@@ -175,36 +176,37 @@
                            (start i64)
                            (end i64)
                            (hd Heredoc)] (-> bool)
-  (block :match
-           (let [(mut p) start
-                 (mut w) 0
-                 (mut quoted) 0
-                 word (.word hd)]
-             (when (= (.strip-tabs hd) true)
-               (while (and (< p end) (= (cast i64 (get s p)) #\tab))
-                 (set! (mut p) (+ p 1))))
-             (while (< w (len word))
-               (let [ch (cast i64 (get word w))]
-                 (cond (and (!= quoted #\') (= ch #\\))
-                         (do
-                           (set! (mut w) (+ w 1))
-                           (when (>= w (len word))
-                             (return-from :match false))
-                           (when (or (>= p end)
-                                     (!= (get s p) (get word w)))
-                             (return-from :match false))
-                           (set! (mut p) (+ p 1)))
-                       (and (= quoted 0) (or (= ch #\') (= ch #\")))
-                         (set! (mut quoted) ch)
-                       (= ch quoted) (set! (mut quoted) 0)
-                       :else
-                         (do
-                           (when (or (>= p end)
-                                     (!= (get s p) (get word w)))
-                             (return-from :match false))
-                           (set! (mut p) (+ p 1)))))
-               (set! (mut w) (+ w 1)))
-             (= p end))))
+  (block
+    :match
+      (let [(mut p) start
+            (mut w) 0
+            (mut quoted) 0
+            word (.word hd)]
+        (when (= (.strip-tabs hd) true)
+          (while (and (< p end) (= (cast i64 (get s p)) #\tab))
+            (set! (mut p) (+ p 1))))
+        (while (< w (len word))
+          (let [ch (cast i64 (get word w))]
+            (cond (and (!= quoted #\') (= ch #\\))
+                    (do
+                      (set! (mut w) (+ w 1))
+                      (when (>= w (len word))
+                        (return-from :match false))
+                      (when (or (>= p end)
+                                (!= (get s p) (get word w)))
+                        (return-from :match false))
+                      (set! (mut p) (+ p 1)))
+                  (and (= quoted 0) (or (= ch #\') (= ch #\")))
+                    (set! (mut quoted) ch)
+                  (= ch quoted) (set! (mut quoted) 0)
+                  :else
+                    (do
+                      (when (or (>= p end)
+                                (!= (get s p) (get word w)))
+                        (return-from :match false))
+                      (set! (mut p) (+ p 1)))))
+          (set! (mut w) (+ w 1)))
+        (= p end))))
 
 ;;; Classify every line of bytes as code, comment, or blank, scc-style:
 ;;; a line with any code is code; else any comment content makes it a comment;
@@ -224,7 +226,7 @@
         quotes (.quotes spec)
         mqs (.multi-quotes spec)
         classes (load (field spec classes))
-        data (slice/slice-data bytes)
+        data (data bytes)
         (mut i) 0
         (mut state) ST-NORMAL
         (mut block-idx) 0
@@ -232,7 +234,8 @@
         (mut quote-ch) 0
         (mut mq-idx) 0
         (mut mq-doc) false
-        (mut heredocs) (arraylist/al-new [Heredoc] (alloc/malloc-allocator))
+        (mut heredocs)
+          (arraylist/ArrayList::new [Heredoc] (alloc/malloc-allocator))
         (mut next-heredoc) 0
         (mut shell-arith-depth) 0
         (mut lines) 0
@@ -253,7 +256,7 @@
                 (when (shell-heredoc-line? bytes i end hd)
                   (set! (mut next-heredoc) (+ next-heredoc 1))
                   (when (= next-heredoc (Len::len heredocs))
-                    (arraylist/al-clear! (mut heredocs))
+                    (clear! (mut heredocs))
                     (set! (mut next-heredoc) 0)
                     0)
                   0))
@@ -277,7 +280,7 @@
                       (= state ST-BLOCK)
                         (do
                           (set! (mut saw-comment) true)
-                          (let [bp (index (slice/slice-data bls) block-idx)
+                          (let [bp (index (slice::data bls) block-idx)
                                 e (.bend bp)
                                 st (.bstart bp)
                                 e0 (cast i64 (get e 0))
@@ -384,10 +387,11 @@
                                              #\tab)))
                             (set! (mut word-start) (+ word-start 1)))
                           (push! (mut heredocs)
-                                 (Heredoc :word
-                                            (slice/subslice bytes
-                                                            word-start
-                                                            end)
+                                 (Heredoc
+                                   :word
+                                     (slice/subslice bytes
+                                                     word-start
+                                                     end)
                                    :strip-tabs strip-tabs))
                           (set! (mut saw-code) true)
                           (set! (mut pos) end)
@@ -464,7 +468,7 @@
                                               (set! (mut block-depth) 1)
                                               (set! (mut pos)
                                                     (+ pos
-                                                       (Len::len (.bstart (index (slice/slice-data bls)
+                                                       (Len::len (.bstart (index (slice::data bls)
                                                                                  bs)))))
                                               0)
                                             (let [mq (match-any bytes pos mqs)]
@@ -583,7 +587,7 @@
                   0)
                 0)
               (set! (mut i) (+ le 1))))))
-    (arraylist/al-free! (mut heredocs))
+    (free! (mut heredocs))
     (Counts
       :lines lines
       :blank blank
@@ -591,9 +595,10 @@
       :code code)))
 
 ;;; Index of the block pair whose start matches at i, or -1.
-(defn block-start-at [(s (slice u8)) (i i64) (bls (slice lang/BlockPair))] (-> i64)
+(defn block-start-at [(s (slice u8)) (i i64) (bls (slice lang/BlockPair))]
+  (-> i64)
   (block :found
-         (for [k 0 (len bls)]
-           (when (match-at s i (.bstart (index (slice/slice-data bls) k)))
-             (return-from :found k)))
-         -1))
+    (for [k 0 (len bls)]
+      (when (match-at s i (.bstart (index (data bls) k)))
+        (return-from :found k)))
+    -1))

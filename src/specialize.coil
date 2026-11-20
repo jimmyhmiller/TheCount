@@ -1,4 +1,5 @@
 (module thecount.specialize)
+(import "coil.cc" :as cc)
 
 ;; Compile-time specialization of the line counter.
 ;;
@@ -33,7 +34,6 @@
 ;;
 ;; Read the generated code with:  coil expand src/specialize.coil
 (import "coil.primitive" :as primitive)
-(import "coil.slice" :as slice)
 (import "thecount.lang" :as lang)
 (import "thecount.counter" :as counter)
 (import "thecount.simd" :as simd)
@@ -134,14 +134,14 @@
           (- (load j) st)))))
 
 ;; ---------------------------------------------------------------------------
-;; Code emitters. `data`, `len`, `pos` etc. are the names bound in the generated
+;; Code emitters. `bytes-ptr`, `nbytes`, `pos` etc. are the names bound in the generated
 ;; function; these fragments are only ever spliced into it.
 
-;;; data[posc + j] == b
+;;; bytes-ptr[posc + j] == b
 (defn ct-cmp [(b i64) (posc Code) (j i64)] (-> Code)
   (if (= j 0)
-      `(= (cast i64 (load (index data ~posc))) ~b)
-      `(= (cast i64 (load (index data (+ ~posc ~j)))) ~b)))
+      `(= (cast i64 (load (index bytes-ptr ~posc))) ~b)
+      `(= (cast i64 (load (index bytes-ptr (+ ~posc ~j)))) ~b)))
 
 (defn ct-cmps [(s (slice u8)) (st i64) (j i64) (n i64) (posc Code)] (-> Code)
   (if (>= j n)
@@ -152,12 +152,12 @@
                                                                 n
                                                                 posc))))
 
-;;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`len`),
+;;; Token k of s occurs at posc. Bounds-checked against the whole buffer (`nbytes`),
 ;;; exactly as the interpreter's match-at does — not against the line end.
 (defn ct-match [(s (slice u8)) (k i64) (posc Code)] (-> Code)
   (let [st (ct-tok-start s k)
         n (ct-tok-len s k)]
-    `(all (<= (+ ~posc ~n) len) ~@(ct-cmps s st 0 n posc))))
+    `(all (<= (+ ~posc ~n) nbytes) ~@(ct-cmps s st 0 n posc))))
 
 (defn ct-matches [(s (slice u8)) (k i64) (n i64) (posc Code)] (-> Code)
   (if (>= k n)
@@ -195,8 +195,9 @@
               `(if (any ~@(ct-quote-tests quotes
                                           0
                                           n-q
-                                          `(cast i64 (load (index data pos)))))
-                   (let [ch (cast i64 (load (index data pos)))
+                                          `(cast i64
+                                                 (load (index bytes-ptr pos)))))
+                   (let [ch (cast i64 (load (index bytes-ptr pos)))
                          char-end
                            (if (and (= (load (field spec
                                                     single-scalar-char-literals))
@@ -219,7 +220,7 @@
                                ~@(if (> n-q 1)
                                      `((store! (mut qch)
                                                (cast i64
-                                                     (load (index data pos)))))
+                                                     (load (index bytes-ptr pos)))))
                                      `())
                                (store! (mut pos) (+ pos 1))
                                0))
@@ -456,7 +457,7 @@
          (when (all (= saw-code false) (= pos i) (< pos le))
            (when (= (cast i64
                           (load (index cls-tab
-                                       (cast i64 (load (index data pos))))))
+                                       (cast i64 (load (index bytes-ptr pos))))))
                     lang/CLS-PLAIN)
              (store! (mut saw-code) true)
              0)
@@ -474,9 +475,9 @@
                                                      quotes
                                                      mqs
                                                      0
-                                                     `(index data pos))
+                                                     `(index bytes-ptr pos))
                                   0)
-                   nonws (^ (simd/v64-ws-mask (index data pos)) -1)]
+                   nonws (^ (simd/v64-ws-mask (index bytes-ptr pos)) -1)]
                (if (= hm 0)
                    (do
                      (when (!= nonws 0) (store! (mut acc) 1) 0)
@@ -500,7 +501,7 @@
                                                      quotes
                                                      mqs
                                                      0
-                                                     `(index data pos))
+                                                     `(index bytes-ptr pos))
                                   0)]
                (if (= hm 0)
                    (store! (mut pos) (+ pos 64))
@@ -511,7 +512,7 @@
            ;; The last 1..63 bytes of a line may be read as a full vector when
            ;; the file has following bytes. Mask off lanes at and beyond the
            ;; newline, so no token from the next line enters this one.
-           (when (all (= hot false) (< pos le) (<= (+ pos 64) len))
+           (when (all (= hot false) (< pos le) (<= (+ pos 64) nbytes))
              (let [valid (^ (<< -1 (- le pos)) -1)
                    hm
                      (& ~(ct-or-fold (ct-hot-mask-calls lcs
@@ -519,13 +520,13 @@
                                                         quotes
                                                         mqs
                                                         0
-                                                        `(index data pos))
+                                                        `(index bytes-ptr pos))
                                      0)
                         valid)
                    nonws
                      (if (or (!= acc 0) (= saw-code true))
                          0
-                         (& (^ (simd/v64-ws-mask (index data pos)) -1)
+                         (& (^ (simd/v64-ws-mask (index bytes-ptr pos)) -1)
                             valid))]
                (if (= hm 0)
                    (do
@@ -544,7 +545,7 @@
              (let [cls
                      (cast i64
                            (load (index cls-tab
-                                        (cast i64 (load (index data pos))))))]
+                                        (cast i64 (load (index bytes-ptr pos))))))]
                (if (!= cls lang/CLS-HOT)
                    (do
                      (store! (mut acc) (| acc (- 1 (>> cls 1))))
@@ -558,11 +559,11 @@
       `(do
          (let [(mut acc) 0]
            (while (all (= acc 0) (<= (+ pos 16) le))
-             (if (= (^ (simd/v16-ws-mask (index data pos)) 65535) 0)
+             (if (= (^ (simd/v16-ws-mask (index bytes-ptr pos)) 65535) 0)
                  (store! (mut pos) (+ pos 16))
                  (store! (mut acc) 1)))
            (while (all (< pos le) (= acc 0))
-             (let [b (cast i64 (load (index data pos)))]
+             (let [b (cast i64 (load (index bytes-ptr pos)))]
                (if (any (= b #\space)
                         (= b #\tab)
                         (= b #\return)
@@ -605,12 +606,14 @@
              (= mqs "")
              (= nested false))
         `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr lang/LangSpec))
-                                                                                  (bytes (slice u8))] (-> counter/Counts)
+                                                                                  (bytes (slice u8))]
+           (-> counter/Counts)
            (cscan/count-c-events spec bytes))
         `(defn ~(primitive/syntax->datum (primitive/code-symbol "count$" ident)) [(spec (ptr lang/LangSpec))
-                                                                                  (bytes (slice u8))] (-> counter/Counts)
-           (let [len (slice/slice-len bytes)
-                 data (slice/slice-data bytes)
+                                                                                  (bytes (slice u8))]
+           (-> counter/Counts)
+           (let [nbytes (len bytes)
+                 bytes-ptr (data bytes)
                  ~@(if has-hot `(cls-tab (load (field spec classes))) `())
                    (mut i)
                  0 ~@(if has-state `((mut state) counter/ST-NORMAL) `())
@@ -622,8 +625,8 @@
                  (mut n-blank) 0
                  (mut n-comments) 0
                  (mut n-code) 0]
-             (while (< i len)
-               (let [le (simd/find-newline data i len)
+             (while (< i nbytes)
+               (let [le (simd/find-newline bytes-ptr i nbytes)
                      (mut pos) (load i)
                      (mut saw-code) false
                      (mut saw-comment) false]
@@ -681,7 +684,8 @@
                            (let [e
                                    (if (all (> le i)
                                             (= (cast i64
-                                                     (load (index data (- le 1))))
+                                                     (load (index bytes-ptr
+                                                                  (- le 1))))
                                                #\u0D))
                                        (- le 1)
                                        le)]
@@ -798,8 +802,8 @@
         ;; exactly once and reused at every binder/reference site.
         scanner-names
           `("spec" "bytes"
-                   "len"
-                   "data"
+                   "nbytes"
+                   "bytes-ptr"
                    "cls-tab"
                    "i"
                    "le"
@@ -831,8 +835,8 @@
                    "Counts")
         scanner-ids
           `(~(primitive/fresh-identifier "spec") ~(primitive/fresh-identifier "bytes")
-              ~(primitive/fresh-identifier "len")
-              ~(primitive/fresh-identifier "data")
+              ~(primitive/fresh-identifier "nbytes")
+              ~(primitive/fresh-identifier "bytes-ptr")
               ~(primitive/fresh-identifier "cls-tab")
               ~(primitive/fresh-identifier "i")
               ~(primitive/fresh-identifier "le")
@@ -876,10 +880,10 @@
              ~(gen-field-accessor `spec-row-quotes `(slice u8) tbl 6)
              ~(gen-field-accessor `spec-row-mqs `(slice u8) tbl 7)
              ;; The generated scanner for row i.
-             (defn ~(primitive/syntax->datum `spec-row-counter) [(i i64)] (-> (fnptr c
-                                                                                     [(ptr lang/LangSpec)
-                                                                                      (slice u8)]
-                                                                                     counter/Counts))
+             (defn ~(primitive/syntax->datum `spec-row-counter) [(i i64)]
+               (-> (fnptr (cc/C)
+                          [(ptr lang/LangSpec) (slice u8)]
+                          counter/Counts))
                ~(gen-counter-arms tbl 0 n)))]
     (bind-scanner-identifiers scanner-names scanner-ids generated)))
 

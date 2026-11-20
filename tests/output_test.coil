@@ -1,24 +1,23 @@
 (module thecount.output-test)
-(import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.str" :as str)
 (import "thecount.output" :use [push-json-string! utf8-width])
 (import "thecount.util" :use [must-alloc])
 
 (deftest json-escapes-invalid-filename-bytes-losslessly
-         (let [a (alloc/malloc-allocator)
-               raw (must-alloc [u8] a 4)
-               (mut out) (str/sb-new a)]
-           (set! (index raw 0) (cast u8 195))
-           (set! (index raw 1) (cast u8 169))
-           (set! (index raw 2) (cast u8 255))
-           (set! (index raw 3) (cast u8 10))
-           (push-json-string! (mut out) (slice/slice-new raw 4))
-           (assert (= (str/sb-str out) "\"é\\udcff\\n\""))))
+  (let [a (alloc/malloc-allocator)
+        raw (must-alloc [u8] a 4)
+        (mut out) (str/StrBuf::new a)]
+    (set! (index raw 0) (: 195 u8))
+    (set! (index raw 1) (: 169 u8))
+    (set! (index raw 2) (: 255 u8))
+    (set! (index raw 3) (: 10 u8))
+    (push-json-string! (mut out) (slice::new raw 4))
+    (assert (= (str out) "\"é\\udcff\\n\""))))
 
 (deftest json-rejects-overlong-utf8
-         (let [a (alloc/malloc-allocator)
-               raw (must-alloc [u8] a 2)]
-           (set! (index raw 0) (cast u8 192))
-           (set! (index raw 1) (cast u8 128))
-           (assert-eq (utf8-width (slice/slice-new raw 2) 0) 0)))
+  (let [a (alloc/malloc-allocator)
+        raw (must-alloc [u8] a 2)]
+    (set! (index raw 0) (: 192 u8))
+    (set! (index raw 1) (: 128 u8))
+    (assert-eq (utf8-width (slice::new raw 2) 0) 0)))

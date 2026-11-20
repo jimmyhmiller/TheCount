@@ -1,22 +1,23 @@
 (module thecount.walk)
-(import "coil.slice" :as slice)
+(import "coil.cc" :as cc)
 (import "coil.alloc" :as alloc)
 (import "coil.arraylist" :as arraylist)
 (import "coil.str" :as str)
-(import "coil.fs" :as fs :use [os-pick])
+(import "coil.fs" :as fs)
+(import "coil.os" :use [os-pick])
 (import "coil.primitive" :as primitive)
-(import "coil.mem" :use [mem-copy])
+(import "coil.mem" :use [copy])
 (import "thecount.util" :use [must-alloc])
 
-(extern strlen :cc c [(ptr i8)] (-> i64))
+(extern strlen :cc (cc/C) [(ptr i8)] (-> i64))
 
-(extern opendir :cc c [(ptr i8)] (-> (ptr i8)))
+(extern opendir :cc (cc/C) [(ptr i8)] (-> (ptr i8)))
 
-(extern readdir :cc c [(ptr i8)] (-> (ptr i8)))
+(extern readdir :cc (cc/C) [(ptr i8)] (-> (ptr i8)))
 
-(extern closedir :cc c [(ptr i8)] (-> i32))
+(extern closedir :cc (cc/C) [(ptr i8)] (-> i32))
 
-(extern fstatat :cc c [i32 (ptr i8) (ptr i8) i32] (-> i32))
+(extern fstatat :cc (cc/C) [i32 (ptr i8) (ptr i8) i32] (-> i32))
 
 ;;; struct dirent layout, selected at compile time for the target OS.
 ;;; darwin (64-bit inode; plain readdir IS the 64-bit variant on arm64):
@@ -24,9 +25,9 @@
 ;;;   d_namlen u16 @18, d_type u8 @20, d_name char[] @21
 ;;; linux (LP64 glibc): d_ino @0, d_off @8, d_reclen u16 @16,
 ;;;   d_type u8 @18, d_name @19 — and no d_namlen field at all.
-(const DIRENT-TYPE-OFF (os-pick 18 20))
+(const DIRENT-TYPE-OFF (os-pick 18 20 20))
 
-(const DIRENT-NAME-OFF (os-pick 19 21))
+(const DIRENT-NAME-OFF (os-pick 19 21 21))
 
 (const DT-DIR 4)
 
@@ -41,6 +42,7 @@
   (os-pick (cast i64
                  (load (cast (ptr u32)
                              (index raw (linux-stat-mode-offset)))))
+           (cast i64 (load (cast (ptr u16) (index raw 4))))
            (cast i64 (load (cast (ptr u16) (index raw 4))))))
 
 ;;; Filesystems may leave d_type unknown. Resolve only those entries without
@@ -51,7 +53,7 @@
   (if (!= dtype DT-UNKNOWN)
       dtype
       (let [(mut raw) (zeroed (array u64 32))
-            nofollow (cast i32 (os-pick 256 32))]
+            nofollow (cast i32 (os-pick 256 32 32))]
         (if (< (fstatat dfd cname (cast (ptr i8) (mut raw)) nofollow) 0)
             DT-UNKNOWN
             (let [kind (& (stat-mode (cast (ptr u8) (mut raw))) 61440)]
@@ -64,13 +66,13 @@
 ;;; directory-stream layout or dirfd binding is needed.
 (defn resolved-directory-entry-type [(directory (ptr fs/Directory))
                                      (name (ptr i8))] (-> i64)
-  (match (fs/file-open-at directory c"." 0 0)
+  (match (fs/File::open-at directory c"." 0 0)
     (Err [_] DT-UNKNOWN)
     (Ok [opened]
         (let [(mut file) opened
               kind
                 (resolved-dirent-type (cast i32 (.fd opened)) name DT-UNKNOWN)]
-          (match (fs/file-close (mut file))
+          (match (close (mut file))
             (Ok [_] 0)
             (Err [_] (println "thecount: metadata directory close failed")))
           kind))))
@@ -78,6 +80,7 @@
 ;;; Name length of a dirent: the d_namlen field on darwin, strlen on linux.
 (defn dirent-name-len [(ent (ptr i8))] (-> i64)
   (os-pick (strlen (cast (ptr i8) (index ent DIRENT-NAME-OFF)))
+           (cast i64 (load (cast (ptr u16) (index ent 18))))
            (cast i64 (load (cast (ptr u16) (index ent 18))))))
 
 ;;; Copy s into allocator-owned, NUL-terminated storage (dirent name buffers
@@ -85,18 +88,19 @@
 (defn copy-str [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (len s)
         p (must-alloc [u8] a (+ n 1))]
-    (mem-copy p (slice/slice-data s) n)
-    (set! (index p n) (cast u8 0))
-    (slice/slice-new p n)))
+    (copy p (data s) n)
+    (set! (index p n) (: 0 u8))
+    (slice::new p n)))
 
 ;;; dir + "/" + name, allocator-owned. A dir of "" yields just name.
-(defn join-path [(a (dyn alloc/Allocator)) (dir (slice u8)) (name (slice u8))] (-> (slice u8))
+(defn join-path [(a (dyn alloc/Allocator)) (dir (slice u8)) (name (slice u8))]
+  (-> (slice u8))
   (let [dn (len dir)]
     (if (= dn 0)
         (copy-str a name)
         (let [nn (len name)
               p (must-alloc [u8] a (+ (+ dn nn) 1))]
-          (mem-copy p (slice/slice-data dir) dn)
+          (copy p (data dir) dn)
           (set! (index p dn) (cast u8 #\/))
-          (mem-copy (index p (+ dn 1)) (slice/slice-data name) nn)
-          (slice/slice-new p (+ (+ dn nn) 1))))))
+          (copy (index p (+ dn 1)) (data name) nn)
+          (slice::new p (+ (+ dn nn) 1))))))

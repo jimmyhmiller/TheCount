@@ -1,5 +1,4 @@
 (module thecount.engine-test)
-(import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.io" :use [write])
 (import "coil.os" :as os)
@@ -9,64 +8,59 @@
         [rb-new read-fd-into! read-into! read-into-at! ReadBuf])
 (import "thecount.walk"
         :use
-        [resolved-dirent-type
-         resolved-directory-entry-type
-         DT-UNKNOWN
-         DT-DIR
+        [resolved-dirent-type resolved-directory-entry-type DT-UNKNOWN DT-DIR
          DT-REG])
 
 ;;; A pipe reliably returns fewer bytes than the reusable file buffer holds.
 ;;; A short positive read must not discard the remaining bytes.
 (deftest short-read-continues-until-eof
-         (let [(mut fds) (zeroed (array i32 2))
-               a (alloc/malloc-allocator)]
-           (assert-eq (os/pipe (cast (ptr i32) (mut fds))) 0)
-           (assert-eq (alloc/write (load (index (mut fds) 1))
-                                   (cast (ptr i8) (slice/slice-data "abc"))
-                                   3)
-                      3)
-           (assert-eq (alloc/write (load (index (mut fds) 1))
-                                   (cast (ptr i8) (slice/slice-data "def"))
-                                   3)
-                      3)
-           (os/close (load (index (mut fds) 1)))
-           (let [rb (rb-new a)
-                 size (read-fd-into! a rb (load (index (mut fds) 0)))]
-             (assert-eq size 6)
-             (assert (= (slice/slice-new (load (field rb p)) size) "abcdef")))))
+  (let [(mut fds) (zeroed (array i32 2))
+        a (alloc/malloc-allocator)]
+    (assert-eq (os/pipe (cast (ptr i32) (mut fds))) 0)
+    (assert-eq (alloc/write (load (index (mut fds) 1))
+                            (cast (ptr i8) (data "abc"))
+                            3)
+               3)
+    (assert-eq (alloc/write (load (index (mut fds) 1))
+                            (cast (ptr i8) (data "def"))
+                            3)
+               3)
+    (os/close (load (index (mut fds) 1)))
+    (let [rb (rb-new a)
+          size (read-fd-into! a rb (load (index (mut fds) 0)))]
+      (assert-eq size 6)
+      (assert (= (slice::new (load (field rb p)) size) "abcdef")))))
 
 (deftest unknown-dirent-type-resolved
-         (let [dfd (os/open c"." 0)]
-           (assert (>= dfd 0))
-           (assert-eq (resolved-dirent-type dfd c"src" DT-UNKNOWN) DT-DIR)
-           (assert-eq (resolved-dirent-type dfd c"src/main.coil" DT-UNKNOWN)
-                      DT-REG)
-           (assert-eq (resolved-dirent-type dfd c"src" DT-DIR) DT-DIR)
-           (os/close dfd)))
+  (let [dfd (os/open c"." 0)]
+    (assert (>= dfd 0))
+    (assert-eq (resolved-dirent-type dfd c"src" DT-UNKNOWN) DT-DIR)
+    (assert-eq (resolved-dirent-type dfd c"src/main.coil" DT-UNKNOWN)
+               DT-REG)
+    (assert-eq (resolved-dirent-type dfd c"src" DT-DIR) DT-DIR)
+    (os/close dfd)))
 
 ;;; Opening a basename through the capability must match reading its full path.
 (deftest directory-relative-read
-         (let [a (alloc/malloc-allocator)
-               direct (rb-new a)
-               relative (rb-new a)
-               size (read-into! a direct c"src/main.coil")]
-           (assert (> size 0))
-           (match (fs/directory-open a "src")
-             (Err [_] (assert false))
-             (Ok [opened]
-                 (let [(mut directory) opened]
-                   (assert-eq (read-into-at! a
-                                             relative
-                                             (mut directory)
-                                             c"main.coil")
-                              size)
-                   (assert (= (slice/slice-new (.p direct) size)
-                              (slice/slice-new (.p relative) size)))
-                   (assert-eq (read-into-at! a
-                                             relative
-                                             (mut directory)
-                                             c"thecount-no-such-file")
-                              -1)
-                   (match (fs/directory-close! (mut directory))
-                     (Ok [_] (assert true))
-                     (Err [_] (assert false))))))))
+  (let [a (alloc/malloc-allocator)
+        direct (rb-new a)
+        relative (rb-new a)
+        size (read-into! a direct c"src/main.coil")]
+    (assert (> size 0))
+    (try (let [(mut directory)
+                 (try-or! (fs/Directory::open a "src") (assert false))]
+           (assert-eq (read-into-at! a
+                                     relative
+                                     (mut directory)
+                                     c"main.coil")
+                      size)
+           (assert (= (slice::new (.p direct) size)
+                      (slice::new (.p relative) size)))
+           (assert-eq (read-into-at! a
+                                     relative
+                                     (mut directory)
+                                     c"thecount-no-such-file")
+                      -1)
+           (match (close! (mut directory))
+             (Ok [_] (assert true))
+             (Err [_] (assert false)))))))

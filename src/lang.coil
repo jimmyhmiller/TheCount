@@ -1,10 +1,9 @@
 (module thecount.lang)
-(import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.arraylist" :as arraylist)
 (import "coil.str" :as str)
 (import "coil.os" :as os)
-(import "coil.mem" :use [mem-fill])
+(import "coil.mem" :use [fill])
 (import "thecount.util" :as util)
 
 ;;; One block-comment delimiter pair, e.g. "/*" and "*/".
@@ -32,26 +31,26 @@
 (const CLS-HOT 3)  ; byte can start a comment/string token: leave the fast path
 
 ;;; Split s on runs of spaces into freshly allocated token slices (views into s).
-(defn split-tokens [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice (slice u8)))
-  (let [pieces (str/str-split a s " ")
+(defn split-tokens [(a (dyn alloc/Allocator)) (s (slice u8))]
+  (-> (slice (slice u8)))
+  (let [pieces (str/split a s " ")
         n (len pieces)
         (mut count) 0]
-    (for piece
-      (iter pieces)
+    (for piece (iter pieces)
       (when (> (len piece) 0)
         (set! (mut count) (+ count 1))))
     (let [out (util/must-alloc [(slice u8)] a count)
           (mut w) 0]
-      (for piece
-        (iter pieces)
+      (for piece (iter pieces)
         (when (> (len piece) 0)
           (set! (index out w) piece)
           (set! (mut w) (+ w 1))))
-      (slice/slice-new out count))))
+      (slice::new out count))))
 
 ;;; Parse "START END START END ..." into block pairs. An odd trailing token is
 ;;; a configuration error and aborts with a message.
-(defn parse-blocks [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice BlockPair))
+(defn parse-blocks [(a (dyn alloc/Allocator)) (s (slice u8))]
+  (-> (slice BlockPair))
   (let [toks (split-tokens a s)
         n (len toks)]
     (when (!= (% n 2) 0)
@@ -63,9 +62,10 @@
           out (util/must-alloc [BlockPair] a np)]
       (for [k 0 np]
         (set! (index out k)
-              (BlockPair :bstart (get toks (* k 2))
+              (BlockPair
+                :bstart (get toks (* k 2))
                 :bend (get toks (+ (* k 2) 1)))))
-      (slice/slice-new out np))))
+      (slice::new out np))))
 
 ;;; Build a LangSpec from space-separated token strings — the exact same
 ;;; format the user config file and `thecount add-lang` use.
@@ -98,30 +98,26 @@
 ;;; whenever line-comments/blocks/quotes/multi-quotes change.
 (defn rebuild-classes! [(a (dyn alloc/Allocator)) (l (mut LangSpec))] (-> i64)
   (let [t (util/must-alloc [u8] a 256)]
-    (mem-fill t (cast u8 CLS-PLAIN) 256)
+    (fill t (cast u8 CLS-PLAIN) 256)
     (set! (index t #\space) (cast u8 CLS-WS))
     (set! (index t #\tab) (cast u8 CLS-WS))
     (set! (index t #\return) (cast u8 CLS-WS))
     (set! (index t 11) (cast u8 CLS-WS))  ; vertical tab
     (set! (index t 12) (cast u8 CLS-WS))  ; form feed
     (let [lcs (.line-comments (mut l))]
-      (for lc
-        (iter lcs)
+      (for lc (iter lcs)
         (set! (index t (cast i64 (get lc 0))) (cast u8 CLS-HOT))))
     (let [bls (.blocks (mut l))]
-      (for block
-        (iter bls)
+      (for block (iter bls)
         (let [(mut b) block]
           (set! (index t
                        (cast i64 (get (load (field (mut b) bstart)) 0)))
                 (cast u8 CLS-HOT)))))
     (let [mqs (.multi-quotes (mut l))]
-      (for mq
-        (iter mqs)
+      (for mq (iter mqs)
         (set! (index t (cast i64 (get mq 0))) (cast u8 CLS-HOT))))
     (let [qs (.quotes (mut l))]
-      (for q
-        (iter qs)
+      (for q (iter qs)
         (set! (index t (cast i64 q)) (cast u8 CLS-HOT))))
     (when (= (.shell-heredocs (mut l)) true)
       (set! (index t #\<) (cast u8 CLS-HOT))

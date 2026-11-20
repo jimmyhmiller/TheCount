@@ -10,7 +10,6 @@
 ;; tallies. The sources deliberately hit the edges: delimiters split across the
 ;; end of the buffer, escaped and unterminated strings, block comments that never
 ;; close, docstrings, and comment tokens inside strings.
-(import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.str" :as str)
 (import "thecount.lang" :as lang)
@@ -64,227 +63,227 @@
     (for [k 0 n] (set! (index p k) (cast u8 #\space)))
     (for [k 0 (len suffix)]
       (set! (index p (+ n k)) (get suffix k)))
-    (slice/slice-new p total)))
+    (slice::new p total)))
 
 (deftest c-hot-token-around-64-byte-boundary
-         (for [n 62 67]
-           (same? "C" (spaces-then n "// comment\nint x;\n"))))
+  (for [n 62 67]
+    (same? "C" (spaces-then n "// comment\nint x;\n"))))
 
 ;; --- C: one line comment, one block pair, two quote chars -------------------
 (deftest c-matches-interpreter
-         (same? "C"
-                "int main() {\n  // a comment\n  return 0; // trailing\n\n  /* block\n     more block */\n}\n"))
+  (same? "C"
+         "int main() {\n  // a comment\n  return 0; // trailing\n\n  /* block\n     more block */\n}\n"))
 
 (deftest c-comment-token-in-string
-         (same? "C"
-                "char *s = \"http://x\";\n/* real */\nint y = 1; /* tail */ int z;\n"))
+  (same? "C"
+         "char *s = \"http://x\";\n/* real */\nint y = 1; /* tail */ int z;\n"))
 
 (deftest c-escaped-quote
-         (same? "C" "char *s = \"a\\\"b // not a comment\";\nint x;\n"))
+  (same? "C" "char *s = \"a\\\"b // not a comment\";\nint x;\n"))
 
 (deftest c-unterminated-string
-         (same? "C" "char *s = \"open\nint x = 1;\n"))
+  (same? "C" "char *s = \"open\nint x = 1;\n"))
 
 (deftest c-unclosed-block
-         (same? "C" "int x;\n/* never closed\nstill inside\n"))
+  (same? "C" "int x;\n/* never closed\nstill inside\n"))
 
 ;; A '/' as the very last byte: the block-start match must bounds-check against
 ;; the whole buffer, exactly as match-at does, and not read past the end.
 (deftest c-delimiter-truncated-at-eof
-         (same? "C" "int x = a /"))
+  (same? "C" "int x = a /"))
 
 (deftest c-block-open-at-eof
-         (same? "C" "int x;\n/*"))
+  (same? "C" "int x;\n/*"))
 
 (deftest c-empty
-         (same? "C" ""))
+  (same? "C" ""))
 
 (deftest c-blank-lines-only
-         (same? "C" "\n   \n\t\n\n"))
+  (same? "C" "\n   \n\t\n\n"))
 
 (deftest c-no-trailing-newline
-         (same? "C" "int x; // c"))
+  (same? "C" "int x; // c"))
 
 ;; --- Rust: three line-comment tokens, nested block comments -----------------
 (deftest rust-doc-comments
-         (same? "Rust" "//! crate doc\n/// item doc\n// plain\nfn main() {}\n"))
+  (same? "Rust" "//! crate doc\n/// item doc\n// plain\nfn main() {}\n"))
 
 (deftest rust-nested-blocks
-         (same? "Rust"
-                "fn f() {\n/* outer /* inner */ still outer */\nlet x = 1;\n}\n"))
+  (same? "Rust"
+         "fn f() {\n/* outer /* inner */ still outer */\nlet x = 1;\n}\n"))
 
 (deftest rust-nested-unclosed
-         (same? "Rust" "/* a /* b\nstill in\n"))
+  (same? "Rust" "/* a /* b\nstill in\n"))
 
 (deftest rust-block-markers-in-string
-         (same? "Rust" "let s = \"/* not a comment */\";\nlet t = 1;\n"))
+  (same? "Rust" "let s = \"/* not a comment */\";\nlet t = 1;\n"))
 
 (deftest rust-character-literals-and-multiline-string
-         (same? "Rust"
-                "let c = '\"';\nlet s = \"one\n/// string data\ntwo\";\n// comment\n"))
+  (same? "Rust"
+         "let c = '\"';\nlet s = \"one\n/// string data\ntwo\";\n// comment\n"))
 
 ;; --- Python: no block comments, two multiline-string delimiters -------------
 (deftest python-docstring
-         (same? "Python"
-                "def f():\n    \"\"\"doc\n    more doc\n    \"\"\"\n    return 1\n"))
+  (same? "Python"
+         "def f():\n    \"\"\"doc\n    more doc\n    \"\"\"\n    return 1\n"))
 
 (deftest python-single-quote-docstring
-         (same? "Python" "'''module doc\nline two'''\nx = 1  # trailing\n"))
+  (same? "Python" "'''module doc\nline two'''\nx = 1  # trailing\n"))
 
 ;; A multiline string that OPENS after code is a string, not a docstring — the
 ;; generated code has to keep that distinction to classify the closing lines.
 (deftest python-assigned-multiline-string
-         (same? "Python"
-                "x = \"\"\"not a docstring\nsecond line\"\"\"\ny = 2\n"))
+  (same? "Python"
+         "x = \"\"\"not a docstring\nsecond line\"\"\"\ny = 2\n"))
 
 (deftest python-hash-in-string
-         (same? "Python" "s = \"# not a comment\"\nt = '# also not'\n# real\n"))
+  (same? "Python" "s = \"# not a comment\"\nt = '# also not'\n# real\n"))
 
 (deftest python-unterminated-docstring
-         (same? "Python" "\"\"\"opens\nand never closes\n"))
+  (same? "Python" "\"\"\"opens\nand never closes\n"))
 
 ;; --- Ruby: a word-shaped block pair (=begin/=end) ---------------------------
 (deftest ruby-block-comment
-         (same? "Ruby" "x = 1\n=begin\ndoc text\n=end\ny = 2\n"))
+  (same? "Ruby" "x = 1\n=begin\ndoc text\n=end\ny = 2\n"))
 
 ;; --- Swift / Kotlin: nested blocks AND a multiline string -------------------
 (deftest swift-nested-and-multiline
-         (same? "Swift"
-                "let s = \"\"\"\ntext\n\"\"\"\n/* a /* b */ c */\nlet x = 1\n"))
+  (same? "Swift"
+         "let s = \"\"\"\ntext\n\"\"\"\n/* a /* b */ c */\nlet x = 1\n"))
 
 (deftest kotlin-mixed
-         (same? "Kotlin"
-                "val s = \"\"\"raw \"quoted\" text\"\"\"\n// line\n/* /* nested */ */\nval y = 2\n"))
+  (same? "Kotlin"
+         "val s = \"\"\"raw \"quoted\" text\"\"\"\n// line\n/* /* nested */ */\nval y = 2\n"))
 
 ;; --- Lua / SQL: multi-byte and shared-prefix delimiters ----------------------
 
 ;; "--" opens a line comment and "--[[" opens a block; the generated dispatch
 ;; checks the block start FIRST, same as count-bytes.
 (deftest lua-block-vs-line
-         (same? "Lua"
-                "local x = 1 -- line\n--[[ block\nstill block ]]\nlocal y = 2\n"))
+  (same? "Lua"
+         "local x = 1 -- line\n--[[ block\nstill block ]]\nlocal y = 2\n"))
 
 (deftest sql-line-comment
-         (same? "SQL"
-                "SELECT 1; -- note\n/* block */\nSELECT 'a -- not a comment';\n"))
+  (same? "SQL"
+         "SELECT 1; -- note\n/* block */\nSELECT 'a -- not a comment';\n"))
 
 ;; --- HTML / CSS: no line comments at all ------------------------------------
 (deftest html-comment
-         (same? "HTML" "<p>hi</p>\n<!-- a\n  comment -->\n<div></div>\n"))
+  (same? "HTML" "<p>hi</p>\n<!-- a\n  comment -->\n<div></div>\n"))
 
 (deftest css-comment
-         (same? "CSS"
-                "a { color: red }\n/* note\n   more */\nb { content: \"/*\" }\n"))
+  (same? "CSS"
+         "a { color: red }\n/* note\n   more */\nb { content: \"/*\" }\n"))
 
 ;; --- JSON: quotes but no comments -------------------------------------------
 (deftest json-strings
-         (same? "JSON" "{\n  \"k\": \"v // not a comment\",\n\n  \"n\": 1\n}\n"))
+  (same? "JSON" "{\n  \"k\": \"v // not a comment\",\n\n  \"n\": 1\n}\n"))
 
 ;; --- Markdown / Plain Text: no delimiters at all, the collapsed scanner ------
 (deftest markdown-blank-vs-code
-         (same? "Markdown" "# Title\n\nSome text\n   \n\ttabbed\n"))
+  (same? "Markdown" "# Title\n\nSome text\n   \n\ttabbed\n"))
 
 (deftest text-trailing-spaces
-         (same? "Plain Text" "hello   \n   \n\n  world\n"))
+  (same? "Plain Text" "hello   \n   \n\n  world\n"))
 
 (deftest markdown-empty
-         (same? "Markdown" ""))
+  (same? "Markdown" ""))
 
 ;; --- JavaScript: three quote characters -------------------------------------
 (deftest js-template-literal
-         (same? "JavaScript"
-                "const a = `back // tick`;\nconst b = 'sq';\n// real\nconst c = \"dq /* x */\";\n"))
+  (same? "JavaScript"
+         "const a = `back // tick`;\nconst b = 'sq';\n// real\nconst c = \"dq /* x */\";\n"))
 
 ;; --- long lines: the 16-byte chunk path -------------------------------------
 ;; Everything above uses short lines, which fall straight through to the scalar
 ;; remainder loop. These are long enough that the SIMD scan does the work, and
 ;; they place delimiters before, on, and after a chunk boundary.
 (deftest c-long-code-line-trailing-comment
-         (same? "C"
-                "int alpha = beta + gamma + delta + epsilon; // trailing comment here\nint z;\n"))
+  (same? "C"
+         "int alpha = beta + gamma + delta + epsilon; // trailing comment here\nint z;\n"))
 
 ;; the quote sits at exactly byte 16 — the first chunk boundary
 (deftest c-delimiter-on-chunk-boundary
-         (same? "C" "0123456789abcdef\"a string value\"; int x = 1;\n"))
+  (same? "C" "0123456789abcdef\"a string value\"; int x = 1;\n"))
 
 ;; delimiter in the second chunk, after a full clean chunk
 (deftest c-delimiter-in-second-chunk
-         (same? "C"
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/* block starts late */ int y;\n"))
+  (same? "C"
+         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/* block starts late */ int y;\n"))
 
 ;; a line that is an exact multiple of 16 bytes, with no delimiter at all
 (deftest c-line-exactly-two-chunks
-         (same? "C" "abcdefghijklmnopqrstuvwxyz012345\nint x;\n"))
+  (same? "C" "abcdefghijklmnopqrstuvwxyz012345\nint x;\n"))
 
 ;; blank lines longer than one chunk, mixed tabs and spaces
 (deftest c-long-blank-lines
-         (same? "C"
-                "int x;\n                                   \n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n   \nint y;\n"))
+  (same? "C"
+         "int x;\n                                   \n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n   \nint y;\n"))
 
 ;; CRLF: the carriage return is whitespace, so these lines are still blank
 (deftest c-crlf-blank-and-code
-         (same? "C" "int x = 1;\r\n\r\n                    \r\nint y = 2;\r\n"))
+  (same? "C" "int x = 1;\r\n\r\n                    \r\nint y = 2;\r\n"))
 
 ;; a long line entirely inside a string literal, so the scan runs in ST-STRING
 (deftest c-long-string-line
-         (same? "C"
-                "char *s = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa // not a comment\";\nint x;\n"))
+  (same? "C"
+         "char *s = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa // not a comment\";\nint x;\n"))
 
 ;; long lines inside a block comment, where saw-comment must survive the chunks
 (deftest c-long-block-comment-lines
-         (same? "C"
-                "/* aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n   bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n   cccccccccccccccccccccc */ int x;\n"))
+  (same? "C"
+         "/* aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n   bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n   cccccccccccccccccccccc */ int x;\n"))
 
 (deftest rust-long-nested-block
-         (same? "Rust"
-                "/* aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /* bbbbbbbbbbbbbbbbbbbbbbbbbbbb */ cccccccccccccccccccccccccccc */\nfn f() {}\n"))
+  (same? "Rust"
+         "/* aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /* bbbbbbbbbbbbbbbbbbbbbbbbbbbb */ cccccccccccccccccccccccccccc */\nfn f() {}\n"))
 
 (deftest python-long-docstring-lines
-         (same? "Python"
-                "def f():\n    \"\"\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n    \"\"\"\n    return 1\n"))
+  (same? "Python"
+         "def f():\n    \"\"\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n    \"\"\"\n    return 1\n"))
 
 (deftest markdown-long-lines
-         (same? "Markdown"
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n                                        \n\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"))
+  (same? "Markdown"
+         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n                                        \n\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"))
 
 (deftest json-long-string-line
-         (same? "JSON"
-                "{\n  \"key\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n\n  \"n\": 1\n}\n"))
+  (same? "JSON"
+         "{\n  \"key\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n\n  \"n\": 1\n}\n"))
 
 ;; the specialized scanner must honor string line-continuation too
 (deftest c-string-continued-by-backslash
-         (same? "C"
-                "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"))
+  (same? "C"
+         "char *s = \"line1\\\n// not a real comment\\\nline3\";\nint x;\n"))
 
 (deftest c-string-not-continued-by-escaped-backslash
-         (same? "C" "char *s = \"a\\\\\n// real comment\nint x;\n"))
+  (same? "C" "char *s = \"a\\\\\n// real comment\nint x;\n"))
 
 ;;; Differential syntax coverage across vector boundaries and final tails.
 (deftest c-event-randomized-differential
-         (let [a (alloc/malloc-allocator)
-               p (must-alloc [u8] a 1024)
-               alphabet "abc /\"'*\\\n\r\t"
-               (mut seed) 1234567]
-           (for [trial 0 500]
-             (for [j 0 1024]
-               (set! seed (& (+ (* seed 1664525) 1013904223) 4294967295))
-               (set! (index p j)
-                     (get alphabet (% (>> seed 16) (len alphabet)))))
-             (same? "C" (slice/slice-new p (% seed 1025))))))
+  (let [a (alloc/malloc-allocator)
+        p (must-alloc [u8] a 1024)
+        alphabet "abc /\"'*\\\n\r\t"
+        (mut seed) 1234567]
+    (for [trial 0 500]
+      (for [j 0 1024]
+        (set! seed (& (+ (* seed 1664525) 1013904223) 4294967295))
+        (set! (index p j)
+              (get alphabet (% (>> seed 16) (len alphabet)))))
+      (same? "C" (slice::new p (% seed 1025))))))
 
 (deftest c-event-plain-lines-all-tails
-         (let [a (alloc/malloc-allocator)
-               p (must-alloc [u8] a 256)]
-           (for [j 0 256]
-             (set! (index p j)
-                   (cast u8
-                         (cond (= (% j 7) 0) #\newline
-                               (= (% j 5) 0) #\a
-                               :else #\space))))
-           (set! (index p 63) (cast u8 #\newline))
-           (set! (index p 127) (cast u8 #\newline))
-           (for [n 0 257] (same? "C" (slice/slice-new p n)))))
+  (let [a (alloc/malloc-allocator)
+        p (must-alloc [u8] a 256)]
+    (for [j 0 256]
+      (set! (index p j)
+            (cast u8
+                  (cond (= (% j 7) 0) #\newline
+                        (= (% j 5) 0) #\a
+                        :else #\space))))
+    (set! (index p 63) (cast u8 #\newline))
+    (set! (index p 127) (cast u8 #\newline))
+    (for [n 0 257] (same? "C" (slice::new p n)))))
 
 (deftest c-event-comment-to-plain-line
-         (same? "C" "/* comment */\n\ncode\n /* comment */   \n\ncode\n")
-         (same? "C" (spaces-then 60 "/* */\n\n\n\n\n\n\n\nint x;\n")))
+  (same? "C" "/* comment */\n\ncode\n /* comment */   \n\ncode\n")
+  (same? "C" (spaces-then 60 "/* */\n\n\n\n\n\n\n\nint x;\n")))

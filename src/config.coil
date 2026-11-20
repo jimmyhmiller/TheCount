@@ -9,25 +9,26 @@
 (import "thecount.registry" :as registry)
 (import "thecount.util" :as util)
 
-(defn cat [(a (dyn alloc/Allocator)) (x (slice u8)) (y (slice u8))] (-> (slice u8))
-  (match (str/str-concat a x y)
+(defn cat [(a (dyn alloc/Allocator)) (x (slice u8)) (y (slice u8))]
+  (-> (slice u8))
+  (match (str/concat a x y)
     (Some [s] s)
     (None [] "")))
 
 ;;; ~/.config/thecount/languages, or $THECOUNT_LANGS when set.
 (defn config-path [(a (dyn alloc/Allocator))] (-> (slice u8))
   (let [(mut out) ""]
-    (try (let [opt (try-or! (os/env-get a "THECOUNT_LANGS") 0)]
+    (try (let [opt (try-or! (os/get-env a "THECOUNT_LANGS") 0)]
            (match opt
-             (Some [s] (do (set! (mut out) (os/owned-string-slice s)) 0))
+             (Some [s] (do (set! (mut out) (slice s)) 0))
              (None [] 0))))
     (if (> (len out) 0)
         out
-        (try (let [opt (try-or! (os/env-get a "HOME") "")]
+        (try (let [opt (try-or! (os/get-env a "HOME") "")]
                (match opt
                  (Some [h]
                        (cat a
-                            (os/owned-string-slice h)
+                            (slice h)
                             "/.config/thecount/languages"))
                  (None [] "")))))))
 
@@ -46,15 +47,15 @@
       (os/_exit 2)
       0)
     ;; best-effort mkdir -p of the two parents
-    (try (let [opt (try-or! (os/env-get a "HOME") 0)]
+    (try (let [opt (try-or! (os/get-env a "HOME") 0)]
            (match opt
              (Some [h]
-                   (let [home (os/owned-string-slice h)]
-                     (fs/make-dir (str/str->cstr a (cat a home "/.config")) 493)
-                     (fs/make-dir (str/str->cstr a
-                                                 (cat a
-                                                      home
-                                                      "/.config/thecount"))
+                   (let [home (slice h)]
+                     (fs/make-dir (str/to-cstr a (cat a home "/.config")) 493)
+                     (fs/make-dir (str/to-cstr a
+                                               (cat a
+                                                    home
+                                                    "/.config/thecount"))
                                   493)
                      0))
              (None [] 0))))
@@ -78,7 +79,7 @@
         (mut k) 0]
     (while (and (< k n) (!= (cast i64 (get line k)) #\space))
       (set! (mut k) (+ k 1)))
-    (str/str-trim (slice/subslice line k n))))
+    (str/trim (slice/subslice line k n))))
 
 ;;; Pending user-language stanza being accumulated during parsing.
 (defstruct Pending
@@ -152,11 +153,10 @@
 ;;;   multi """ '''         multiline string delimiters
 (defn load-config! [(r (ptr registry/Registry)) (src (slice u8))] (-> i64)
   (let [a (.arena r)
-        lines (str/str-split a src "\n")
+        lines (str/split a src "\n")
         pend (alloc/box! a Pending (zeroed Pending))]
-    (for raw-line
-      (iter lines)
-      (let [line (str/str-trim (strip-cr raw-line))]
+    (for raw-line (iter lines)
+      (let [line (str/trim (strip-cr raw-line))]
         (when (and (> (len line) 0)
                    (!= (cast i64 (get line 0)) #\u23))  ; '#'
           (let [toks (lang/split-tokens a line)
@@ -223,22 +223,22 @@
       (when (!= (cast i64 (get s k)) #\space)
         (set! (index p w) (get s k))
         (set! (mut w) (+ w 1))))
-    (slice/slice-new p w)))
+    (slice::new p w)))
 
 ;;; Remove the stanza for `name` (case-insensitive) from config text.
 ;;; (Some new-text) on success, (None) when no stanza matched.
 (defn remove-stanza [(a (dyn alloc/Allocator))
                      (src (slice u8))
                      (name (slice u8))] (-> (Option (slice u8)))
-  (let [lines (str/str-split a src "\n")
+  (let [lines (str/split a src "\n")
         n (len lines)
         want (registry/lower a name)
-        (mut b) (str/sb-new a)
+        (mut b) (str/StrBuf::new a)
         (mut skipping) false
         (mut found) false]
     (for [k 0 n]
       (let [line (strip-cr (get lines k))
-            trimmed (str/str-trim line)
+            trimmed (str/trim line)
             toks (lang/split-tokens a trimmed)]
         (if (and (> (len toks) 0) (= (get toks 0) "lang"))
             (if (= (registry/lower a (rest-of-line trimmed)) want)
@@ -248,17 +248,17 @@
                   0)
                 (do
                   (set! (mut skipping) false)
-                  (str/sb-push-str! (mut b) line)
-                  (str/sb-push-str! (mut b) "\n")
+                  (push-str! (mut b) line)
+                  (push-str! (mut b) "\n")
                   0))
             (when (= skipping false)
               ;; keep the line unless it is the trailing empty piece of the split
               (when (or (< k (- n 1)) (> (len line) 0))
-                (str/sb-push-str! (mut b) line)
-                (str/sb-push-str! (mut b) "\n")
+                (push-str! (mut b) line)
+                (push-str! (mut b) "\n")
                 0)
               0))))
-    (if (= found true) (Some (str/sb-str b)) (None))))
+    (if (= found true) (Some (str b)) (None))))
 
 ;;; Load user languages from the config file on top of the builtins.
 (defn load-user-langs! [(r (ptr registry/Registry))] (-> i64)

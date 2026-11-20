@@ -1,4 +1,5 @@
 (module thecount.registry)
+(import "coil.cc" :as cc)
 (import "coil.slice" :as slice)
 (import "coil.alloc" :as alloc)
 (import "coil.arraylist" :as arraylist)
@@ -17,7 +18,7 @@
 (defstruct Registry
   [(arena (dyn alloc/Allocator))
    (specs (ptr (arraylist/ArrayList lang/LangSpec)))
-   (counters (ptr (arraylist/ArrayList (fnptr c
+   (counters (ptr (arraylist/ArrayList (fnptr (cc/C)
                                               [(ptr lang/LangSpec) (slice u8)]
                                               counter/Counts))))
    (by-ext (ptr (hashmap/HashMap (slice u8) i64)))
@@ -32,19 +33,19 @@
         (if (and (>= b #\A) (<= b #\Z))
             (set! (index p k) (cast u8 (+ b 32)))
             (set! (index p k) (get s k)))))
-    (slice/slice-new p n)))
+    (slice::new p n)))
 
 (defn reg-new [(a (dyn alloc/Allocator))] (-> (ptr Registry))
   (let [r (alloc/box! a Registry (zeroed Registry))
         specs (util/new-list a lang/LangSpec)
         counters
           (util/new-list a
-                         (fnptr c
+                         (fnptr (cc/C)
                                 [(ptr lang/LangSpec) (slice u8)]
                                 counter/Counts))
-        by-ext (util/new-map a (slice u8) i64 (str/str-keyops))
-        by-name (util/new-map a (slice u8) i64 (str/str-keyops))
-        by-file (util/new-map a (slice u8) i64 (str/str-keyops))]
+        by-ext (util/new-map a (slice u8) i64 (str/keyops))
+        by-name (util/new-map a (slice u8) i64 (str/keyops))
+        by-file (util/new-map a (slice u8) i64 (str/keyops))]
     (set! (.arena r) a)
     (set! (.specs r) specs)
     (set! (.counters r) counters)
@@ -56,7 +57,8 @@
 ;;; Register a language spec under space-separated extensions.
 ;;; Re-registering an extension or name overrides the previous mapping,
 ;;; which is how user languages shadow builtins. Returns the spec index.
-(defn reg-add! [(r (ptr Registry)) (spec lang/LangSpec) (exts (slice u8))] (-> i64)
+(defn reg-add! [(r (ptr Registry)) (spec lang/LangSpec) (exts (slice u8))]
+  (-> i64)
   (let [a (.arena r)
         specs (load (field r specs))
         idx (len specs)]
@@ -64,8 +66,7 @@
     (push! (load (field r counters)) (fnptr-of counter/count-bytes))
     (set! (load (field r by-name)) (lower a (.name spec)) idx)
     (let [toks (lang/split-tokens a exts)]
-      (for tok
-        (iter toks)
+      (for tok (iter toks)
         (set! (load (field r by-ext)) (lower a tok) idx)))
     idx))
 
@@ -73,8 +74,7 @@
 (defn reg-add-ext! [(r (ptr Registry)) (idx i64) (exts (slice u8))] (-> i64)
   (let [a (.arena r)
         toks (lang/split-tokens a exts)]
-    (for tok
-      (iter toks)
+    (for tok (iter toks)
       (set! (load (field r by-ext)) (lower a tok) idx))
     0))
 
@@ -82,23 +82,22 @@
 (defn reg-add-files! [(r (ptr Registry)) (idx i64) (names (slice u8))] (-> i64)
   (let [a (.arena r)
         toks (lang/split-tokens a names)]
-    (for name
-      (iter toks)
+    (for name (iter toks)
       (set! (load (field r by-file)) name idx))
     0))
 
 (defn reg-spec [(r (ptr Registry)) (idx i64)] (-> (ptr lang/LangSpec))
-  (index (slice/slice-data (arraylist/al-slice (load (load (field r specs)))))
+  (index (data (slice (load (load (field r specs)))))
          idx))
 
 ;;; Install a compile-time-generated scanner for spec idx.
 (defn reg-set-counter! [(r (ptr Registry))
                         (idx i64)
-                        (f (fnptr c
+                        (f (fnptr (cc/C)
                                   [(ptr lang/LangSpec) (slice u8)]
                                   counter/Counts))] (-> i64)
-  (set! (index (slice/slice-data (arraylist/al-slice (load (load (field r
-                                                                        counters)))))
+  (set! (index (data (slice (load (load (field r
+                                               counters)))))
                idx)
         f)
   0)
@@ -106,7 +105,8 @@
 ;;; Count `bytes` as language idx. The one entry point the engine uses — it picks
 ;;; the generated scanner when there is one and count-bytes otherwise, so adding
 ;;; a language to thecount.specialize's table is invisible to every caller.
-(defn reg-count-bytes [(r (ptr Registry)) (idx i64) (bytes (slice u8))] (-> counter/Counts)
+(defn reg-count-bytes [(r (ptr Registry)) (idx i64) (bytes (slice u8))]
+  (-> counter/Counts)
   (call-ptr (get (load (field r counters)) idx) (reg-spec r idx) bytes))
 
 (defn reg-count [(r (ptr Registry))] (-> i64)
@@ -118,16 +118,15 @@
 (defn reg-restrict-extensions! [(r (ptr Registry)) (csv (slice u8))] (-> i64)
   (let [a (.arena r)
         old (load (field r by-ext))
-        keep (util/new-map a (slice u8) i64 (str/str-keyops))
-        pieces (str/str-split a csv ",")]
-    (for ext
-      (iter pieces)
-      (let [key (lower a (str/str-trim ext))]
+        keep (util/new-map a (slice u8) i64 (str/keyops))
+        pieces (str/split a csv ",")]
+    (for ext (iter pieces)
+      (let [key (lower a (str/trim ext))]
         (match (get (load old) key)
           (Some [idx] (set! keep key idx))
           (None [] 0))))
     (set! (.by-ext r) keep)
-    (set! (.by-file r) (util/new-map a (slice u8) i64 (str/str-keyops)))
+    (set! (.by-file r) (util/new-map a (slice u8) i64 (str/keyops)))
     0))
 
 ;;; Spec index for a language name (case-insensitive), or -1.

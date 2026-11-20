@@ -1,5 +1,4 @@
 (module thecount.cscan)
-(import "coil.slice" :as slice)
 (import "thecount.counter" :as counter)
 (import "thecount.lang" :as lang)
 (import "thecount.simd" :as simd)
@@ -9,8 +8,9 @@
 ;;; Fused physical-line and syntax traversal for non-nesting C-style languages.
 ;;; Vectors contain only candidate positions; delimiter recognition still checks
 ;;; the original bytes, including pairs split across vector boundaries.
-(defn count-c-events [(spec (ptr lang/LangSpec)) (bytes (slice u8))] (-> counter/Counts)
-  (let [data (slice/slice-data bytes)
+(defn count-c-events [(spec (ptr lang/LangSpec)) (bytes (slice u8))]
+  (-> counter/Counts)
+  (let [data (data bytes)
         len (len bytes)
         (mut pos) 0
         (mut line-start) 0
@@ -32,14 +32,14 @@
               (set! newlines (simd/v64-eq-mask (index data base) #\newline))
               (set! syntax
                     (| (simd/v64-eq-mask (index data base) #\/)
-                       (| (simd/v64-eq-mask (index data base) #\")
-                          (simd/v64-eq-mask (index data base) #\'))))
+                       (simd/v64-eq-mask (index data base) #\")
+                       (simd/v64-eq-mask (index data base) #\')))
               (set! events
                     (| newlines
-                       (| (simd/v64-eq-mask (index data base) #\/)
-                          (| (simd/v64-eq-mask (index data base) #\*)
-                             (| (simd/v64-eq-mask (index data base) #\")
-                                (simd/v64-eq-mask (index data base) #\'))))))
+                       (simd/v64-eq-mask (index data base) #\/)
+                       (simd/v64-eq-mask (index data base) #\*)
+                       (simd/v64-eq-mask (index data base) #\")
+                       (simd/v64-eq-mask (index data base) #\')))
               0)
             (for [j 0 width]
               (let [b (cast i64 (load (index data (+ base j))))]
@@ -65,13 +65,14 @@
                   stop (if (= upcoming 0) width (simd/ctz upcoming))
                   newlines
                     (& newlines
-                       (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1))))]
+                       (<< -1 start)
+                       (if (= stop 64) -1 (^ (<< -1 stop) -1)))]
               (when (= ws-ready false)
                 (set! whitespace (simd/v64-ws-mask (index data base)))
                 (set! ws-ready true))
               (let [valid
                       (& (<< -1 start) (if (= stop 64) -1 (^ (<< -1 stop) -1)))
-                    nonws (& valid (& (^ whitespace -1) (^ newlines -1)))
+                    nonws (& valid (^ whitespace -1) (^ newlines -1))
                     (mut codes) (& newlines (^ (- newlines nonws) -1))]
                 (when (!= newlines 0)
                   (let [first (& newlines (- 0 newlines))

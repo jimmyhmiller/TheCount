@@ -72,12 +72,12 @@
   (glob-rec pat s 0 0))
 
 ;;; Parse one .gitignore's content into rules (in file order).
-(defn parse-ignore [(a (dyn alloc/Allocator)) (src (slice u8))] (-> (ptr (arraylist/ArrayList IgnoreRule)))
+(defn parse-ignore [(a (dyn alloc/Allocator)) (src (slice u8))]
+  (-> (ptr (arraylist/ArrayList IgnoreRule)))
   (let [rules (util/new-list a IgnoreRule)
-        lines (str/str-split a src "\n")]
-    (for source-line
-      (iter lines)
-      (let [raw (str/str-trim source-line)]
+        lines (str/split a src "\n")]
+    (for source-line (iter lines)
+      (let [raw (str/trim source-line)]
         (when (and (> (len raw) 0)
                    (!= (cast i64 (get raw 0)) #\u23))  ; '#'
           (let [(mut p) raw
@@ -129,9 +129,9 @@
   (let [path
           (if (= (len dir) 0)
               file
-              (match (str/str-concat a dir "/")
+              (match (str/concat a dir "/")
                 (Some [d]
-                      (match (str/str-concat a d file)
+                      (match (str/concat a d file)
                         (Some [s] s)
                         (None [] file)))
                 (None [] file)))
@@ -158,7 +158,7 @@
   (let [nc (len (load ctxs))
         (mut ign) false]
     (for [c 0 nc]
-      (let [ctx (index (slice/slice-data (arraylist/al-slice (load ctxs))) c)
+      (let [ctx (index (data (slice (load ctxs))) c)
             base (.base ctx)
             bl (len base)
             rel (if (= bl 0) path (slice/subslice path (+ bl 1) (len path)))
@@ -166,7 +166,7 @@
             nr (len (load rules))]
         (for [ri 0 nr]
           (let [rule
-                  (index (slice/slice-data (arraylist/al-slice (load rules)))
+                  (index (data (slice (load rules)))
                          ri)]
             (when (or (= is-dir true) (= (.dir-only rule) false))
               (let [pat (.pat rule)
