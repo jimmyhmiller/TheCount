@@ -3,10 +3,16 @@
 (import "coil.io" :use [write])
 (import "coil.os" :as os)
 (import "coil.fs" :as fs)
+(import "coil.str" :as str)
+(import "coil.hashmap" :as hashmap)
+(import "coil.arraylist" :as arraylist)
 (import "thecount.engine"
         :use
         [rb-new read-fd-into! read-into! read-into-at! ReadBuf BINARY-SNIFF
-         READ-BINARY])
+         READ-BINARY Agg new-agg agg-file! agg-merge! walk-roots-of])
+(import "thecount.registry" :as registry)
+(import "thecount.counter" :as counter)
+(import "thecount.output" :use [Row])
 (import "coil.mem" :use [fill])
 (import "thecount.util" :use [must-alloc])
 (import "thecount.walk"
@@ -98,3 +104,65 @@
   (assert-eq (read-pattern (+ BINARY-SNIFF 4000) BINARY-SNIFF)
              (+ BINARY-SNIFF 4000))
   (assert-eq (read-pattern 100 -1) 100))
+
+(defn unknown-agg [(a (dyn alloc/Allocator)) (r (ptr registry/Registry))]
+  (-> (ptr Agg))
+  (let [roots
+          (alloc/box! a
+                      (arraylist/ArrayList (slice u8))
+                      (arraylist/ArrayList::new [(slice u8)] a))]
+    (push! roots ".")
+    (new-agg a
+             (alloc/box! a hashmap/KeyOps (load (str/keyops)))
+             (registry/reg-count r)
+             true
+             true
+             1
+             (walk-roots-of a roots)
+             true)))
+
+(defn find-row [(rows (ptr (arraylist/ArrayList Row)))
+                (label (slice u8))
+                (sub (slice u8))] (-> (ptr Row))
+  (let [(mut hit) (cast (ptr Row) 0)]
+    (for [i 0 (len (load rows))]
+      (let [rp (index (data (slice (load rows))) i)]
+        (when (and (= (.label rp) label) (= (.sub rp) sub))
+          (set! (mut hit) rp)
+          0)))
+    (when (= hit (cast (ptr Row) 0))
+      (panic "no row {s} / {s}" label sub))
+    hit))
+
+;; --unknown: every view labels a file by its extension, and the per-extension
+;; totals survive merging worker aggregates.
+(deftest unknown-breakdown-labels-every-view-by-extension
+  (let [a (alloc/malloc-allocator)
+        r (registry/reg-new a)]
+    (registry/add-builtins! r)
+    (registry/reg-only-unknown! r)
+    (let [unk (registry/reg-classify-path r "x.lock")
+          one
+            (counter/Counts
+              :lines 1
+              :blank 0
+              :comments 0
+              :code 1)
+          x (unknown-agg a r)
+          y (unknown-agg a r)]
+      (agg-file! a r x unk "c" "Cargo.LOCK" one)
+      (agg-file! a r x unk "" "LICENSE" one)
+      (agg-file! a r y unk "c" "yarn.lock" one)
+      (agg-file! a r y unk "a/b" "notes.weird" one)
+      (agg-merge! a x y)
+      (assert-eq (len (load (.ext-rows x))) 3)
+      (assert-eq (.files (find-row (.ext-rows x) ".lock" "")) 2)
+      (assert-eq (.code (.c (find-row (.ext-rows x) ".lock" ""))) 2)
+      (assert-eq (.files (find-row (.ext-rows x) "(none)" "")) 1)
+      (assert-eq (.files (find-row (.ext-rows x) ".weird" "")) 1)
+      (assert-eq (.files (find-row (.dir-rows x) "c" ".lock")) 2)
+      (assert-eq (.files (find-row (.dir-rows x) "a" ".weird")) 1)
+      (assert-eq (.files (find-row (.dir-rows x) "." "(none)")) 1)
+      (assert-eq (len (load (.file-rows x))) 4)
+      (assert-eq (.files (find-row (.file-rows x) "c/Cargo.LOCK" ".lock")) 1)
+      (assert-eq (load (index (data (.files-per x)) unk)) 4))))

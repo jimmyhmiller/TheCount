@@ -247,3 +247,32 @@
     (assert-eq (registry/reg-classify-path r "LICENSE") -1)
     (assert-eq (registry/reg-classify-path r "main.py") -1)
     (assert (>= (registry/reg-classify-path r "main.rs") 0))))
+
+;; --unknown: claimed files drop out before they are read, and only the
+;; unclaimed ones remain, still under the Unknown spec.
+(deftest only-unknown-skips-claimed-files
+  (let [r (fresh)]
+    (registry/reg-only-unknown! r)
+    (assert-eq (registry/reg-classify-path r "main.rs") -1)
+    (assert-eq (registry/reg-classify-path r "proj/Makefile") -1)
+    (let [lic (registry/reg-classify-path r "proj/LICENSE")]
+      (assert (= (.name (registry/reg-spec r lic)) "Unknown")))))
+
+(deftest ext-label-lowercases-and-names-missing-extensions
+  (let [a (alloc/malloc-allocator)]
+    (assert (= (registry/ext-label a "a/b/Thing.LOCK") ".lock"))
+    (assert (= (registry/ext-label a "x.tar.gz") ".gz"))
+    (assert (= (registry/ext-label a "proj/LICENSE") "(none)"))
+    ;; a leading dot marks a hidden file, not an extension
+    (assert (= (registry/ext-label a ".editorconfig") "(none)"))
+    (assert (= (registry/ext-label a "trailing.") "(none)"))
+    ;; dots in directory names are not extensions
+    (assert (= (registry/ext-label a "v1.2/README") "(none)"))))
+
+(deftest file-label-is-extension-only-under-unknown
+  (let [a (alloc/malloc-allocator)
+        r (fresh)
+        unk (registry/reg-classify-path r "data.weird")]
+    (assert (= (registry/reg-file-label r a unk "data.weird") "Unknown"))
+    (registry/reg-only-unknown! r)
+    (assert (= (registry/reg-file-label r a unk "data.weird") ".weird"))))

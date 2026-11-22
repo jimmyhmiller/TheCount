@@ -38,6 +38,7 @@
   (println "  --no-config    use built-in language definitions only")
   (println "  --extensions E count only comma-separated extensions (implies --no-unknown)")
   (println "  --no-unknown   skip files no language claims (default: count them as Unknown)")
+  (println "  --unknown      count only files no language claims, broken down by extension")
   (println "  --output json  print machine-readable totals (with --files: per-file rows)")
   (println "  --exclude S    skip paths containing S (repeatable)")
   (println "")
@@ -68,6 +69,8 @@
                  (json-output bool)
                  (excludes (ptr (arraylist/ArrayList (slice u8))))] (-> i64)
   (let [n-specs (registry/reg-count r)
+        by-ext (.unknown-only r)
+        sub-title (if by-ext "Extension" "Language")
         clean-roots (util/new-list a (slice u8))]
     (for root (iter (load roots))
       (push! clean-roots (strip-trailing-slashes root)))
@@ -96,7 +99,8 @@
                                    c
                                    (slice (load (load (field agg
                                                              file-rows))))
-                                   want-files))
+                                   want-files
+                                   (if by-ext "extension" "language")))
             (= want-files true)
               (output/print-table a
                                   "File"
@@ -104,6 +108,7 @@
                                                             file-rows))))
                                   false
                                   true
+                                  sub-title
                                   (fnptr-of output/row-cmp))
             (= want-dirs true)
               (do
@@ -111,6 +116,14 @@
                 (output/print-dir-tree a
                                        (slice (load (load (field agg
                                                                  dir-rows))))))
+            by-ext
+              (output/print-table a
+                                  "Extension"
+                                  (slice (load (load (field agg ext-rows))))
+                                  true
+                                  false
+                                  ""
+                                  (fnptr-of output/row-cmp))
             :else
               (let [rows (util/new-list a output/Row)
                     files-per (data (.files-per agg))
@@ -128,6 +141,7 @@
                                     (slice (load rows))
                                     true
                                     false
+                                    ""
                                     (fnptr-of output/row-cmp)))))))
 
 (defn run-langs [(a (dyn alloc/Allocator)) (r (ptr registry/Registry))] (-> i64)
@@ -283,6 +297,7 @@
         (mut json-output) false
         (mut extensions) ""
         (mut count-unknown) true
+        (mut only-unknown) false
         excludes (util/new-list a (slice u8))
         (mut mode) 0  ; 0=count 1=add-lang 2=langs 3=help 4=remove-lang
         (mut k) 1]
@@ -315,6 +330,7 @@
                   0)
               (= arg "--no-config") (do (set! (mut use-user-config) false) 0)
               (= arg "--no-unknown") (do (set! (mut count-unknown) false) 0)
+              (= arg "--unknown") (do (set! (mut only-unknown) true) 0)
               (= arg "--extensions")
                 (if (< (+ k 1) nargs)
                     (do
@@ -374,6 +390,17 @@
                 0)
               (when (= count-unknown false)
                 (registry/reg-skip-unknown! r)
+                0)
+              (when (= only-unknown true)
+                (when (= count-unknown false)
+                  (println "thecount: --unknown and --no-unknown contradict each other")
+                  (os/_exit 2)
+                  0)
+                (when (> (len extensions) 0)
+                  (println "thecount: --unknown counts only files no language claims; it cannot combine with --extensions")
+                  (os/_exit 2)
+                  0)
+                (registry/reg-only-unknown! r)
                 0)
               (cond (= mode 1) (run-add-lang a r rest)
                     (= mode 4) (run-remove-lang a r rest)

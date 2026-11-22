@@ -25,6 +25,15 @@ first 8000 bytes) are still skipped, and the reader stops after that first
 chunk, so large images and archives cost one read. `--no-unknown` restores the
 scc behavior; `--extensions` implies it.
 
+`--unknown` is the inverse: it counts only those unclaimed files and breaks them
+down by lowercased extension (`.lock`, `.idl`; `(none)` for `LICENSE`-style
+names and dotfiles), which is the list of what `add-lang --ext` could claim.
+Claimed files are skipped before they are read, so it is cheap. With `--files`
+the per-file column is the extension, with `--dirs` the tree's leaves are
+extensions instead of languages, and `--files --output json` reports each
+file's `"extension"` in place of `"language"`. It rejects `--no-unknown` and
+`--extensions`, which would leave nothing to count.
+
 None of scc's estimation extras (COCOMO, complexity scores) — just counting.
 
 ## Usage
@@ -37,6 +46,7 @@ None of scc's estimation extras (COCOMO, complexity scores) — just counting.
     thecount --no-config         use built-in language definitions only
     thecount --extensions c,py   count only these extensions (no Unknown row)
     thecount --no-unknown        skip files no language claims
+    thecount --unknown           only unclaimed files, by extension (works with --files/--dirs)
     thecount --output json       emit machine-readable totals
     thecount --files --output json  include sorted per-file counts
     thecount langs               list every known language + extensions

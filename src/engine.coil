@@ -184,7 +184,10 @@
    (dir-idx (ptr (hashmap/HashMap (slice u8) i64)))
    (want-dirs bool)
    (depth i64)
-   (roots (ptr (arraylist/ArrayList (slice u8))))])  ; walk roots, for root-relative depth
+   (roots (ptr (arraylist/ArrayList (slice u8))))  ; walk roots, for root-relative depth
+   (ext-rows (ptr (arraylist/ArrayList Row)))  ; --unknown: one row per extension
+   (ext-idx (ptr (hashmap/HashMap (slice u8) i64)))
+   (want-exts bool)])
 
 ;;; Immutable chain of .gitignore contexts, innermost first. Built during the
 ;;; walk, only ever read afterwards, so it is safe to share across workers.
@@ -231,12 +234,15 @@
                (want-files bool)
                (want-dirs bool)
                (depth i64)
-               (roots (ptr (arraylist/ArrayList (slice u8))))] (-> (ptr Agg))
+               (roots (ptr (arraylist/ArrayList (slice u8))))
+               (want-exts bool)] (-> (ptr Agg))
   (let [files-per (util/must-alloc [i64] a n-specs)
         counts-per (util/must-alloc [counter/Counts] a n-specs)
         file-rows (util/new-list a Row)
         dir-rows (util/new-list a Row)
-        dir-idx (util/new-map a (slice u8) i64 keyops)]
+        dir-idx (util/new-map a (slice u8) i64 keyops)
+        ext-rows (util/new-list a Row)
+        ext-idx (util/new-map a (slice u8) i64 keyops)]
     (zero files-per n-specs)
     (zero counts-per n-specs)
     (alloc/box! a
@@ -250,7 +256,10 @@
                   :dir-idx dir-idx
                   :want-dirs want-dirs
                   :depth depth
-                  :roots roots))))
+                  :roots roots
+                  :ext-rows ext-rows
+                  :ext-idx ext-idx
+                  :want-exts want-exts))))
 
 ;;; NUL byte in the first BINARY-SNIFF bytes = binary, skip it (same heuristic
 ;;; as scc).
@@ -333,6 +342,24 @@
     (copy (index p (+ dn 1)) (data lang) ln)
     (slice::new p total)))
 
+;;; Fold `row` into the row stored under `key`, appending it when the key is
+;;; new. The map holds each key's position in `rows`.
+(defn tally-row! [(rmap (ptr (hashmap/HashMap (slice u8) i64)))
+                  (rows (ptr (arraylist/ArrayList Row)))
+                  (key (slice u8))
+                  (row Row)] (-> i64)
+  (match (get (load rmap) key)
+    (Some [ri]
+          (let [rowp (index (data (slice (load rows))) ri)]
+            (set! (.files rowp) (+ (.files rowp) (.files row)))
+            (counter/counts-add! (field rowp c) (.c row))
+            0))
+    (None []
+          (do
+            (set! rmap key (len (load rows)))
+            (push! rows row)
+            0))))
+
 ;;; Record counted results for one file into agg.
 (defn agg-file! [(a (dyn alloc/Allocator))
                  (r (ptr registry/Registry))
@@ -344,33 +371,24 @@
   (set! (index (data (load (field agg files-per))) idx)
         (+ (load (index (data (.files-per agg)) idx)) 1))
   (counter/counts-add! (index (data (.counts-per agg)) idx) c)
-  (when (= (.want-files agg) true)
-    (push! (load (field agg file-rows))
-           (mk-row (walk/join-path a dir name)
-                   (.name (registry/reg-spec r idx))
-                   1
-                   c))
-    0)
-  (when (= (.want-dirs agg) true)
-    (let [base (dir-base-len (load (field agg roots)) dir)
-          dkey (dir-row-key a dir base (.depth agg))
-          lang (.name (registry/reg-spec r idx))
-          key (dir-lang-key a dkey lang)
-          dmap (load (field agg dir-idx))
-          drows (load (field agg dir-rows))]
-      (match (get (load dmap) key)
-        (Some [di]
-              (let [rowp
-                      (index (data (slice (load drows)))
-                             di)]
-                (set! (.files rowp) (+ (.files rowp) 1))
-                (counter/counts-add! (field rowp c) c)
-                0))
-        (None []
-              (do
-                (set! dmap key (len (load drows)))
-                (push! drows (mk-row dkey lang 1 c))
-                0)))))
+  (let [label (registry/reg-file-label r a idx name)]
+    (when (= (.want-files agg) true)
+      (push! (load (field agg file-rows))
+             (mk-row (walk/join-path a dir name) label 1 c))
+      0)
+    (when (= (.want-dirs agg) true)
+      (let [base (dir-base-len (load (field agg roots)) dir)
+            dkey (dir-row-key a dir base (.depth agg))]
+        (tally-row! (load (field agg dir-idx))
+                    (load (field agg dir-rows))
+                    (dir-lang-key a dkey label)
+                    (mk-row dkey label 1 c))))
+    (when (= (.want-exts agg) true)
+      (tally-row! (load (field agg ext-idx))
+                  (load (field agg ext-rows))
+                  label
+                  (mk-row label "" 1 c))
+      0))
   0)
 
 ;;; Count one file synchronously (used for plain-file roots on the main thread).
@@ -804,29 +822,21 @@
     (extend! (load (field dst file-rows))
              (data (slice (load srows)))
              (len (load srows))))
-  (let [sdirs (load (field src dir-rows))
-        nd (len (load sdirs))
-        dmap (load (field dst dir-idx))
-        drows (load (field dst dir-rows))]
-    (for [i 0 nd]
-      (let [srow (index (data (slice (load sdirs))) i)
-            key (dir-lang-key a (.label srow) (.sub srow))]
-        (match (get (load dmap) key)
-          (Some [di]
-                (let [rowp
-                        (index (data (slice (load drows)))
-                               di)]
-                  (set! (.files rowp)
-                        (+ (.files rowp)
-                           (.files srow)))
-                  (counter/counts-add! (field rowp c) (.c srow))
-                  0))
-          (None []
-                (do
-                  (set! dmap key (len (load drows)))
-                  (push! drows (load srow))
-                  0)))))
-    0))
+  (let [sdirs (load (field src dir-rows))]
+    (for [i 0 (len (load sdirs))]
+      (let [srow (index (data (slice (load sdirs))) i)]
+        (tally-row! (load (field dst dir-idx))
+                    (load (field dst dir-rows))
+                    (dir-lang-key a (.label srow) (.sub srow))
+                    (load srow)))))
+  (let [sexts (load (field src ext-rows))]
+    (for [i 0 (len (load sexts))]
+      (let [srow (index (data (slice (load sexts))) i)]
+        (tally-row! (load (field dst ext-idx))
+                    (load (field dst ext-rows))
+                    (.label srow)
+                    (load srow)))))
+  0)
 
 ;;; The roots as the walk sees them: "." becomes "" so its paths stay bare
 ;;; ("src/x", not "./src/x"). Read-only once counting starts, so every worker
@@ -883,7 +893,16 @@
         ;; its capability table before starting workers; creating later worker
         ;; maps must not rewrite the table used by the registry's readers.
         keyops (alloc/box! a hashmap/KeyOps (load (str/keyops)))
-        agg (new-agg a keyops n-specs want-files want-dirs depth wroots)
+        want-exts (.unknown-only r)
+        agg
+          (new-agg a
+                   keyops
+                   n-specs
+                   want-files
+                   want-dirs
+                   depth
+                   wroots
+                   want-exts)
         pool (alloc/box! a Pool (zeroed Pool))
         queue (util/new-list a DirItem)
         inflight (alloc/box! a i64 0)
@@ -980,7 +999,8 @@
                                    want-files
                                    want-dirs
                                    depth
-                                   wroots)
+                                   wroots
+                                   want-exts)
                         wa (index rargs started)]
                     (util/set-fields! wa (pool pool) (agg wagg))
                     (require-thread "spawn"

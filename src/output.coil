@@ -122,12 +122,14 @@
   (cast i32 (str/cmp (.label x) (.label y))))
 
 ;;; Totals always use the stable linebench schema. --files adds a sorted
-;;; machine-readable path manifest, including each file's classification.
+;;; machine-readable path manifest, including each file's classification under
+;;; `sub-key` ("language", or "extension" for --unknown).
 (defn print-json [(a (dyn alloc/Allocator))
                   (files i64)
                   (totals Counts)
                   (rows (slice Row))
-                  (with-files bool)] (-> i64)
+                  (with-files bool)
+                  (sub-key (slice u8))] (-> i64)
   (let [(mut b) (str/StrBuf::new a)]
     (push-str! (mut b) "{\"total\":{\"files\":")
     (push-str! (mut b) (i64->str a files))
@@ -152,7 +154,9 @@
           (when (> i 0) (push! (mut b) (cast u8 #\,)) 0)
           (push-str! (mut b) "{\"path\":")
           (push-json-string! (mut b) (.label row))
-          (push-str! (mut b) ",\"language\":")
+          (push-str! (mut b) ",\"")
+          (push-str! (mut b) sub-key)
+          (push-str! (mut b) "\":")
           (push-json-string! (mut b) (.sub row))
           (push-str! (mut b) ",\"lines\":")
           (push-str! (mut b) (i64->str a (.lines c)))
@@ -235,18 +239,19 @@
 
 (const NUM-W 10)
 
-;;; Print a full table. with-files / with-sub choose the optional columns, and
-;;; `cmp` the row order (row-cmp for the flat tables, dir-row-cmp for --dirs).
+;;; Print a full table. with-files / with-sub choose the optional columns
+;;; (`sub-title` heads the sub column), and `cmp` the row order.
 (defn print-table [(a (dyn alloc/Allocator))
                    (title (slice u8))
                    (rows (slice Row))
                    (with-files bool)
                    (with-sub bool)
+                   (sub-title (slice u8))
                    (cmp (fnptr (cc/C) [(ptr Row) (ptr Row)] i32))] (-> i64)
   (qsort (data rows) (len rows) (sizeof Row) cmp)
   (let [n (len rows)
         (mut label-w) (len title)
-        (mut sub-w) 9]
+        (mut sub-w) (if (> (len sub-title) 9) (len sub-title) 9)]
     (for [k 0 n]
       (let [r (index (data rows) k)]
         (when (> (len (.label r)) label-w)
@@ -261,7 +266,7 @@
       (let [(mut b) (str/StrBuf::new a)]
         ;; header
         (push-left! (mut b) title lw)
-        (when (= with-sub true) (push-left! (mut b) "Language" (+ sub-w 1)))
+        (when (= with-sub true) (push-left! (mut b) sub-title (+ sub-w 1)))
         (when (= with-files true) (push-right! (mut b) "Files" NUM-W))
         (push-right! (mut b) "Lines" NUM-W)
         (push-right! (mut b) "Blanks" NUM-W)

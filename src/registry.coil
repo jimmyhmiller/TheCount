@@ -25,7 +25,8 @@
    (by-ext (ptr (hashmap/HashMap (slice u8) i64)))
    (by-name (ptr (hashmap/HashMap (slice u8) i64)))
    (by-file (ptr (hashmap/HashMap (slice u8) i64)))
-   (unknown i64)])  ; spec index for files no language claims, -1 = skip them
+   (unknown i64)  ; spec index for files no language claims, -1 = skip them
+   (unknown-only bool)])  ; --unknown: count only unclaimed files, by extension
 
 (defn lower [(a (dyn alloc/Allocator)) (s (slice u8))] (-> (slice u8))
   (let [n (len s)
@@ -141,42 +142,79 @@
     (Some [v] v)
     (None [] -1)))
 
+;;; The basename of a path: everything after its last slash.
+(defn path-base [(path (slice u8))] (-> (slice u8))
+  (slice/subslice path
+                  (+ (util/bytes-last-index-of path (cast u8 #\/)) 1)
+                  (len path)))
+
+;;; The extension of a basename, without its dot: the bytes after the last dot,
+;;; or "" when there is none. A leading dot only marks a hidden file, so
+;;; ".bashrc" has no extension.
+(defn base-ext [(base (slice u8))] (-> (slice u8))
+  (let [dot (util/bytes-last-index-of base (cast u8 #\.))]
+    (if (<= dot 0) "" (slice/subslice base (+ dot 1) (len base)))))
+
 ;;; Spec index for a file path: exact basename match first, then the
 ;;; (lowercased) extension after the last dot. -1 when unknown.
 (defn reg-lookup-path [(r (ptr Registry)) (path (slice u8))] (-> i64)
-  (let [n (len path)]
-    (let [base
-            (slice/subslice path
-                            (+ (util/bytes-last-index-of path (cast u8 #\/)) 1)
-                            n)]
-      (match (if (= (len (load (load (field r by-file)))) 0)
-                 (None [i64])
-                 (get (load (load (field r by-file))) base))
-        (Some [v] v)
-        (None []
-              (let [bn (len base)
-                    dot (util/bytes-last-index-of base (cast u8 #\.))]
-                (if (<= dot 0)
-                    -1
-                    (let [ext (slice/subslice base (+ dot 1) bn)
-                          (mut upper) false]
-                      (for [k 0 (len ext)]
-                        (let [b (cast i64 (get ext k))]
-                          (when (and (>= b #\A) (<= b #\Z))
-                            (set! (mut upper) true)
-                            0)))
-                      (match (get (load (load (field r by-ext)))
-                                  (if (= upper true)
-                                      (lower (.arena r) ext)
-                                      ext))
-                        (Some [v] v)
-                        (None [] -1))))))))))
+  (let [base (path-base path)]
+    (match (if (= (len (load (load (field r by-file)))) 0)
+               (None [i64])
+               (get (load (load (field r by-file))) base))
+      (Some [v] v)
+      (None []
+            (let [ext (base-ext base)
+                  (mut upper) false]
+              (if (= (len ext) 0)
+                  -1
+                  (do
+                    (for [k 0 (len ext)]
+                      (let [b (cast i64 (get ext k))]
+                        (when (and (>= b #\A) (<= b #\Z))
+                          (set! (mut upper) true)
+                          0)))
+                    (match (get (load (load (field r by-ext)))
+                                (if (= upper true)
+                                    (lower (.arena r) ext)
+                                    ext))
+                      (Some [v] v)
+                      (None [] -1)))))))))
 
 ;;; Spec index to count a path under: its language, or the Unknown spec when no
-;;; language claims it and unknown counting is on. -1 means skip the file.
+;;; language claims it and unknown counting is on. Under --unknown, claimed
+;;; files are skipped instead. -1 means skip the file.
 (defn reg-classify-path [(r (ptr Registry)) (path (slice u8))] (-> i64)
   (let [idx (reg-lookup-path r path)]
-    (if (= idx -1) (.unknown r) idx)))
+    (cond (= idx -1) (.unknown r)
+          (.unknown-only r) -1
+          :else idx)))
+
+;;; The --unknown breakdown key for a file: its lowercased extension with the
+;;; dot (".lock"), or "(none)" when it has none. Lowercased because lookup is
+;;; case-insensitive, so ".LOCK" and ".lock" would be claimed by the same
+;;; `add-lang --ext lock`.
+(defn ext-label [(a (dyn alloc/Allocator)) (path (slice u8))] (-> (slice u8))
+  (let [ext (base-ext (path-base path))
+        n (len ext)]
+    (if (= n 0)
+        "(none)"
+        (let [low (lower a ext)
+              p (util/must-alloc [u8] a (+ n 1))]
+          (set! (index p 0) (cast u8 #\.))
+          (for [k 0 n]
+            (set! (index p (+ k 1)) (get low k)))
+          (slice::new p (+ n 1))))))
+
+;;; What a counted file is reported as: its language's name, or under
+;;; --unknown its extension label, since every file there is Unknown.
+(defn reg-file-label [(r (ptr Registry))
+                      (a (dyn alloc/Allocator))
+                      (idx i64)
+                      (path (slice u8))] (-> (slice u8))
+  (if (and (.unknown-only r) (= idx (.unknown r)))
+      (ext-label a path)
+      (.name (reg-spec r idx))))
 
 ;;; Register the Unknown spec: no comments, no strings, so every non-blank line
 ;;; is code. It reuses Plain Text's generated scanner, which has exactly those
@@ -196,6 +234,14 @@
 ;;; Stop counting files no language claims.
 (defn reg-skip-unknown! [(r (ptr Registry))] (-> i64)
   (set! (.unknown r) -1)
+  0)
+
+;;; Count only files no language claims, reported by extension. Needs the
+;;; Unknown spec: a registry without one would silently count nothing.
+(defn reg-only-unknown! [(r (ptr Registry))] (-> i64)
+  (when (= (.unknown r) -1)
+    (panic "reg-only-unknown!: unknown counting is off (no Unknown spec)"))
+  (set! (.unknown-only r) true)
   0)
 
 ;; --- builtin language table -------------------------------------------------

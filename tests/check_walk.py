@@ -46,10 +46,12 @@ def main():
         put("custom.special", b"// custom\nint custom;\n")
         put(".gitignore", b"ignored.c\nskip/\n")
         (root / ".countignore").write_bytes(b"extra/\n")
+        # Files no builtin language claims count as Unknown unless --no-unknown.
+        unclaimed = {name for name in expected if name.endswith(".unrecognized")}
+        unclaimed |= {".gitignore", ".countignore", "Foofile", "custom.special"}
         expected = {name for name in expected
-                    if not name.endswith(".unrecognized")
-                    and name not in {"binary.c", ".git/never.c", ".gitignore",
-                                     "Foofile", "custom.special"}}
+                    if name not in unclaimed
+                    and name not in {"binary.c", ".git/never.c"}}
 
         def run(path, flags, readers=None, config=None):
             env = dict(os.environ)
@@ -71,18 +73,25 @@ def main():
                 assert document["total"][field] == sum(r[field] for r in rows.values())
             return rows
 
+        claimed_only = ["--no-config", "--no-unknown"]
         cases = [
-            (["--hidden", "--no-ignore", "--no-config"], expected),
-            (["--no-ignore", "--no-config"], expected - {".hidden.c"}),
-            (["--hidden", "--no-config"], expected - {"ignored.c", "skip/sub.c"}),
+            (["--hidden", "--no-ignore", *claimed_only], expected),
+            (["--no-ignore", *claimed_only], expected - {".hidden.c"}),
+            (["--hidden", *claimed_only], expected - {"ignored.c", "skip/sub.c"}),
             (["--hidden", "--no-ignore", "--no-config", "--extensions", "c"],
              {name for name in expected if name.endswith(".c")}),
-            (["--hidden", "--no-ignore", "--no-config", "--exclude", "skip/",
+            (["--hidden", "--no-ignore", *claimed_only, "--exclude", "skip/",
               "--exclude", str(root / "keep.c")], expected - {"skip/sub.c", "keep.c"}),
-            (["--hidden", "--no-config", "--ignore-file", ".countignore"],
+            (["--hidden", *claimed_only, "--ignore-file", ".countignore"],
              expected - {"ignored.c", "skip/sub.c", "extra/x.c"}),
-            (["--hidden", "--no-ignore", "--no-config", "--ignore-file", ".countignore"],
+            (["--hidden", "--no-ignore", *claimed_only, "--ignore-file", ".countignore"],
              expected - {"extra/x.c"}),
+            (["--hidden", "--no-ignore", "--no-config"], expected | unclaimed),
+            (["--no-ignore", "--no-config"],
+             (expected | unclaimed) - {".hidden.c", ".gitignore", ".countignore"}),
+            (["--hidden", "--no-ignore", "--no-config", "--unknown"], unclaimed),
+            (["--no-config", "--unknown"],
+             unclaimed - {".gitignore", ".countignore"}),
         ]
         for flags, paths in cases:
             reference = run(root, flags, 1)
@@ -90,11 +99,28 @@ def main():
             for readers in (None, 8, 32):
                 for _ in range(3):
                     assert run(root, flags, readers) == reference, (flags, readers)
-        # Exact custom filenames and extensions must survive early selection.
+        # Default runs label unclaimed files Unknown; --unknown labels them by
+        # their lowercased extension instead.
+        everything = run(root, ["--hidden", "--no-ignore", "--no-config"])
+        assert {name for name, row in everything.items()
+                if row["language"] == "Unknown"} == unclaimed
+        by_ext = run(root, ["--hidden", "--no-ignore", "--no-config", "--unknown"])
+        assert {row["extension"] for row in by_ext.values()} == {
+            ".unrecognized", ".special", "(none)"}
+        assert by_ext["Foofile"]["extension"] == "(none)"
+        assert by_ext[".gitignore"]["extension"] == "(none)"
+        assert by_ext["wide/unknown-0.unrecognized"] == {
+            "path": by_ext["wide/unknown-0.unrecognized"]["path"],
+            "extension": ".unrecognized",
+            "lines": 1, "code": 1, "comments": 0, "blanks": 0}
+        # Exact custom filenames and extensions must survive early selection,
+        # and a claimed file never reaches --unknown.
         config = Path(temporary) / "languages"
         config.write_text("lang Custom\nlike c\next special\nfile Foofile\n")
-        custom = run(root, ["--hidden", "--no-ignore"], config=config)
+        custom = run(root, ["--hidden", "--no-ignore", "--no-unknown"], config=config)
         assert custom.keys() == expected | {"Foofile", "custom.special"}
+        assert run(root, ["--hidden", "--no-ignore", "--unknown"],
+                   config=config).keys() == unclaimed - {"Foofile", "custom.special"}
         assert custom["upper.F08"]["lines"] == 3
         assert custom["invalid-utf8.c"]["lines"] == 2
         assert run(root / "keep.c", ["--no-config"]).keys() == {"keep.c"}
@@ -103,8 +129,12 @@ def main():
         assert not run(empty, ["--no-config"])
         unknown = root / "unknown"
         unknown.mkdir()
-        (unknown / "file.unrecognized").write_text("not selected\n")
-        assert not run(unknown, ["--no-config"])
+        (unknown / "file.unrecognized").write_text("unclaimed\n")
+        assert not run(unknown, ["--no-config", "--no-unknown"])
+        assert run(unknown, ["--no-config"])["unknown/file.unrecognized"][
+            "language"] == "Unknown"
+        assert run(unknown, ["--no-config", "--unknown"])[
+            "unknown/file.unrecognized"]["extension"] == ".unrecognized"
     print("walk coverage, filters, custom registrations, and worker parity: PASS")
 
 
